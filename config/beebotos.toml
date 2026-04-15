@@ -11,7 +11,7 @@ keepalive_seconds = 75
 cors_origins = ["*"]
 
 [database]
-url = "sqlite:../../data/beebotos.db"
+url = "sqlite:data/beebotos.db"
 max_connections = 20
 min_connections = 5
 connect_timeout_seconds = 10

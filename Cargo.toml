@@ -116,6 +116,7 @@ bcrypt = "0.15"
 
 # HTTP Client
 reqwest = { version = "0.12", features = ["json"] }
+multihash = "0.19.3"
 
 # Observability
 tracing-opentelemetry = "0.25"
@@ -169,4 +170,6 @@ debug = true
 inherits = "release"
 debug = false
 
+[patch.crates-io]
+core2 = { git = "https://github.com/tianbaoluo/core2.git", branch = "fix-yank" }
 

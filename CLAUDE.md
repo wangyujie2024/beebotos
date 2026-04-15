@@ -29,7 +29,7 @@ BeeBotOS is a Web4.0 autonomous agent operating system written in Rust. It uses 
 
 ### Architecture Constraint
 
-`crates/agents` **must not** depend directly on web frameworks (e.g., `axum`, `actix-web`, `rocket`, `warp`, `tide`, `salvo`). All HTTP-related infrastructure must go through `crates/gateway-lib`. The CI architecture guard (`.github/workflows/architecture-guard.yml`) enforces this by scanning `crates/agents/Cargo.toml` and `crates/agents/src/` for forbidden imports.
+`crates/agents` **must not** depend directly on web frameworks (e.g., `axum`, `actix-web`, `rocket`, `warp`, `tide`, `salvo`). All HTTP-related infrastructure must go through `crates/gateway-lib`. This is enforced as a project convention; `crates/agents/Cargo.toml` correctly depends on `beebotos-gateway-lib` rather than raw web framework crates.
 
 Dependency direction:
 ```
@@ -181,9 +181,23 @@ just check          # fmt + clippy + test
 just dev            # cargo watch -x build -x test
 just contract-test  # forge test in contracts/
 just install        # Install CLI locally
+just fmt            # Format code
+just lint           # Run clippy only
+just doc            # Generate workspace docs (no deps)
+just clean          # cargo clean + remove target/ and dist/
+just coverage       # Generate HTML coverage report with tarpaulin
+just release        # Production release build (--locked)
 ```
 
 Make equivalents exist in `Makefile` for the same targets.
+
+### Debug / Profile Builds
+
+The workspace defines a custom profile useful for profiling release-like code with debug symbols:
+
+```bash
+cargo build --workspace --profile release-with-debug
+```
 
 ## Database
 
@@ -195,8 +209,9 @@ Make equivalents exist in `Makefile` for the same targets.
 - Common env vars referenced across the codebase: `DATABASE_URL`, `RUST_LOG`, `JWT_SECRET`, `KIMI_API_KEY`, `LARK_APP_ID`, `LARK_APP_SECRET`.
 - Gateway fixed port: `8000`. Web frontend fixed port: `8090`.
 
-## Data Directory Convention
+## File & Directory Conventions
 
+### Data files (`data/`)
 All module data files must be centralized under the `data/` directory (relative to the runtime working directory). Do not scatter data files in home directories (`~/.beebotos`) or next to source files.
 
 Expected paths:
@@ -210,6 +225,12 @@ Expected paths:
 - `data/personal_wechat_session.json` — Personal WeChat iLink session
 
 When adding new persistence or caching, default to a path under `data/`.
+
+### Configuration files (`config/`)
+All runtime configuration files must be placed under the `config/` directory. Do not place config files at the repo root or inside individual crate source trees.
+
+### Sensitive information (`.env`)
+All secrets, API keys, tokens, passwords, and private keys must be stored in a `.env` file (loaded via `dotenvy` or similar) and must never be hard-coded in source files or committed to version control. Ensure `.env` is listed in `.gitignore`.
 
 ## Notes for Agents
 
