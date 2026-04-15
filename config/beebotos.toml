@@ -52,7 +52,7 @@ chain_timeout_seconds = 30
 default_provider = "kimi"
 fallback_chain = []
 max_tokens = 4096
-system_prompt = "You are a helpful assistant."
+system_prompt = "你是 BeeBotOS 的个人 AI 助手，由 BeeBotOS 团队开发。请始终以这个身份回答用户问题。"
 
 [models.kimi]
 model = "kimi-k2.5"
