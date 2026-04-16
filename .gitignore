@@ -96,8 +96,10 @@ temp/
 *.db
 *.sqlite
 *.sqlite3
+
+# 运行时数据目录（包含 workspace、media、logs、skills 等）
+data/
 apps/gateway/data/
-data/personal_wechat_session.json
 
 # =============================================================================
 # Environment / Secrets
