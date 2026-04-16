@@ -717,6 +717,34 @@ impl WebSocketManager {
         Ok(())
     }
 
+    /// Send a raw JSON payload to all connections of a specific user.
+    ///
+    /// Unlike `send_to_user`, this method sends the JSON directly without wrapping it in a
+    /// `WsMessage` envelope, allowing callers to push arbitrary server-generated events.
+    pub async fn send_payload_to_user(
+        &self,
+        user_id: &str,
+        payload: &serde_json::Value,
+    ) -> Result<()> {
+        let json = serde_json::to_string(payload)
+            .map_err(|e| GatewayError::internal(format!("Serialization error: {}", e)))?;
+
+        let states = self.states.read().await;
+        let connections = self.connections.read().await;
+
+        for (id, state) in states.iter() {
+            if state.user_id.as_deref() == Some(user_id) {
+                if let Some(tx) = connections.get(id) {
+                    if tx.send(InternalMessage::Text(json.clone())).is_err() {
+                        warn!(connection_id = %id, "Failed to send payload to user connection");
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     /// Remove connection and cleanup
     ///
     /// Note: connection_count is decremented by the caller (handle_upgrade's on_upgrade
