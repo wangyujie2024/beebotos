@@ -653,6 +653,8 @@ impl LlmService {
     ) -> Result<String, GatewayError> {
         let start_time = std::time::Instant::now();
 
+        info!("Processing LLM request with {} messages", messages.len());
+
         let request_config = RequestConfig {
             model: self.get_default_model(),
             temperature: self.get_default_temperature(),
@@ -684,6 +686,14 @@ impl LlmService {
                 self.metrics
                     .record_success(latency_ms, input_tokens, output_tokens)
                     .await;
+
+                info!(
+                    "✅ Received LLM response: length={}, latency={}ms, tokens={}/{}",
+                    content.len(),
+                    latency_ms,
+                    input_tokens,
+                    output_tokens
+                );
 
                 Ok(content)
             }
@@ -730,6 +740,7 @@ impl LlmService {
         let metrics = self.metrics.clone();
 
         tokio::spawn(async move {
+            let mut clean_finish = false;
             while let Some(chunk) = stream_rx.recv().await {
                 for choice in &chunk.choices {
                     if let Some(content) = &choice.delta.content {
@@ -741,15 +752,21 @@ impl LlmService {
                     }
 
                     if choice.finish_reason.is_some() {
-                        let latency_ms = start_time.elapsed().as_millis() as u64;
-                        metrics.record_success(latency_ms, 0, 0).await;
-                        return;
+                        clean_finish = true;
+                        break;
                     }
+                }
+                if clean_finish {
+                    break;
                 }
             }
 
             let latency_ms = start_time.elapsed().as_millis() as u64;
-            metrics.record_success(latency_ms, 0, 0).await;
+            if clean_finish {
+                metrics.record_success(latency_ms, 0, 0).await;
+            } else {
+                metrics.record_failure();
+            }
         });
 
         info!("🔄 Started LLM streaming response for pre-built messages");
@@ -843,7 +860,8 @@ impl LlmService {
         // Spawn task to handle streaming
         tokio::spawn(async move {
             let mut full_content = String::new();
-            
+            let mut clean_finish = false;
+
             while let Some(chunk) = stream_rx.recv().await {
                 // Extract content from chunk
                 for choice in &chunk.choices {
@@ -856,19 +874,24 @@ impl LlmService {
                             return;
                         }
                     }
-                    
+
                     // Check for finish reason
                     if choice.finish_reason.is_some() {
-                        let latency_ms = start_time.elapsed().as_millis() as u64;
-                        metrics.record_success(latency_ms, 0, 0).await;
-                        return;
+                        clean_finish = true;
+                        break;
                     }
                 }
+                if clean_finish {
+                    break;
+                }
             }
-            
-            // Stream completed
+
             let latency_ms = start_time.elapsed().as_millis() as u64;
-            metrics.record_success(latency_ms, 0, 0).await;
+            if clean_finish {
+                metrics.record_success(latency_ms, 0, 0).await;
+            } else {
+                metrics.record_failure();
+            }
         });
 
         info!("🔄 Started LLM streaming response");
