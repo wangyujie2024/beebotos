@@ -215,9 +215,27 @@ impl MessageProcessor {
         // 6. 调用 LLM（注入记忆上下文）
         let llm_response = if platform == PlatformType::WebChat {
             // WebChat 流式回复
-            let mut stream_rx = self.call_llm_stream_with_context(
+            let mut stream_rx = match self.call_llm_stream_with_context(
                 &message, &history, &images, &memory_context
-            ).await?;
+            ).await {
+                Ok(rx) => rx,
+                Err(e) => {
+                    warn!("LLM stream failed for user {}: {}", user_id, e);
+                    if let Some(ref ws) = self.ws_manager {
+                        let payload = serde_json::json!({
+                            "type": "chat_stream",
+                            "session_id": db_session_id,
+                            "chunk": "",
+                            "done": true,
+                            "error": format!("流式响应失败: {}", e),
+                        });
+                        if let Err(e2) = ws.send_payload_to_user(&user_id, &payload).await {
+                            warn!("Failed to send stream error to user {}: {}", user_id, e2);
+                        }
+                    }
+                    return Err(e);
+                }
+            };
             let mut full_response = String::new();
 
             while let Some(chunk) = stream_rx.recv().await {

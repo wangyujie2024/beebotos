@@ -150,7 +150,11 @@ pub fn WebchatPage() -> impl IntoView {
                             ) {
                                 // 只处理当前选中的会话的流式消息
                                 if chat_state_clone.current_session_id.get().as_deref() == Some(session_id) {
-                                    if done {
+                                    if let Some(error) = json.get("error").and_then(|v| v.as_str()) {
+                                        chat_state_clone.set_error(Some(error.to_string()));
+                                        chat_state_clone.finish_streaming();
+                                        chat_state_clone.is_sending.set(false);
+                                    } else if done {
                                         chat_state_clone.finish_streaming();
                                         chat_state_clone.is_sending.set(false);
                                     } else {
