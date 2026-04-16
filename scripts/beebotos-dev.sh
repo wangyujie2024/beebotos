@@ -36,7 +36,7 @@ print_warn()    { echo -e "${YELLOW}[WARN]${NC} $1"; }
 SERVICES=(
     "gateway|cargo build --release -p beebotos-gateway|target/release/beebotos-gateway|8000|API Gateway"
     "web|cargo build --release -p beebotos-web --target wasm32-unknown-unknown && cargo build --release -p beebotos-web --bin web-server|target/release/web-server|8090|Web Frontend Server"
-    "beehub|cargo build --release -p beebotos-beehub|target/release/beebotos-beehub|8080|BeeHub Service"
+    "beehub|cargo build --release -p beebotos-beehub|target/release/beehub|8080|BeeHub Service"
     "cli|cargo install --path apps/cli --force|||CLI Tool (install only)"
 )
 

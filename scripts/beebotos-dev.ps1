@@ -42,7 +42,7 @@ $Services = @(
     @{
         Name = "beehub"
         BuildCmd = "cargo build --release -p beebotos-beehub"
-        Binary = "target\release\beebotos-beehub.exe"
+        Binary = "target\release\beehub.exe"
         Port = 8080
         Desc = "BeeHub Service"
     },
