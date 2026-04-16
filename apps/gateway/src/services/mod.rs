@@ -24,7 +24,7 @@ pub mod task_monitor;
 pub mod wallet_service;
 pub mod webchat_service;
 pub mod auth_service;
-pub use auth_service::{AuthService, AuthUserInfo};
+pub use auth_service::AuthService;
 
 // Re-export chain event types
 #[allow(unused_imports)]

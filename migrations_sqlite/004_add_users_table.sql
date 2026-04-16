@@ -2,7 +2,7 @@
 -- Supports local account management with role-based access control
 
 -- User accounts table
-CREATE TABLE users (
+CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
     username TEXT NOT NULL UNIQUE,
     email TEXT NOT NULL UNIQUE,
@@ -17,11 +17,11 @@ CREATE TABLE users (
     updated_at TEXT DEFAULT (datetime('now'))
 );
 
-CREATE INDEX idx_users_username ON users(username);
-CREATE INDEX idx_users_email ON users(email);
+CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 
 -- Trigger to auto-update updated_at
-CREATE TRIGGER update_users_updated_at AFTER UPDATE ON users
+CREATE TRIGGER IF NOT EXISTS update_users_updated_at AFTER UPDATE ON users
 BEGIN
     UPDATE users SET updated_at = datetime('now') WHERE id = NEW.id;
 END;

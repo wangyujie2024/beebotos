@@ -844,6 +844,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "argon2"
+version = "0.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3c3610892ee6e0cbce8ae2700349fcf8f98adb0dbfbee85aec3c9179d29cc072"
+dependencies = [
+ "base64ct",
+ "blake2",
+ "cpufeatures 0.2.17",
+ "password-hash",
+]
+
+[[package]]
 name = "ark-ff"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1950,6 +1962,7 @@ dependencies = [
  "alloy-signer-local",
  "alloy-sol-types",
  "anyhow",
+ "argon2",
  "async-trait",
  "atty",
  "axum 0.7.9",
@@ -1983,8 +1996,10 @@ dependencies = [
  "opentelemetry 0.24.0",
  "opentelemetry-otlp 0.17.0",
  "opentelemetry_sdk 0.24.1",
+ "password-hash",
  "prometheus",
  "rand 0.8.5",
+ "rand_core 0.6.4",
  "regex",
  "reqwest 0.12.28",
  "rpassword",

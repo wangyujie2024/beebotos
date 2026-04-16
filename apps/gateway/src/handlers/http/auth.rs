@@ -160,6 +160,8 @@ pub async fn refresh_token(
 ) -> Result<Json<serde_json::Value>, GatewayError> {
     let mut validation = Validation::default();
     validation.validate_exp = true;
+    validation.set_audience(&[&state.config.jwt.audience]);
+    validation.set_issuer(&[&state.config.jwt.issuer]);
     let token_data = decode::<Claims>(
         &req.refresh_token,
         &DecodingKey::from_secret(state.config.jwt.secret.expose_secret().as_bytes()),
