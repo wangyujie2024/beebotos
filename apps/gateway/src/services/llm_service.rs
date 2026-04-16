@@ -214,6 +214,11 @@ impl LlmService {
         self.metrics.get_summary()
     }
 
+    /// Get the configured system prompt
+    pub fn system_prompt(&self) -> String {
+        self.config.models.system_prompt.clone()
+    }
+
     /// Create failover provider from configuration
     async fn create_failover_provider(
         config: &BeeBotOSConfig,
@@ -632,13 +637,123 @@ impl LlmService {
             Err(e) => {
                 // Record failure metrics
                 self.metrics.record_failure();
-                
+
                 Err(GatewayError::Internal {
                     message: format!("LLM request failed: {}", e),
                     correlation_id: uuid::Uuid::new_v4().to_string(),
                 })
             }
         }
+    }
+
+    /// Process a pre-built message list (non-streaming)
+    pub async fn process_messages(
+        &self,
+        messages: Vec<LLMMessage>,
+    ) -> Result<String, GatewayError> {
+        let start_time = std::time::Instant::now();
+
+        let request_config = RequestConfig {
+            model: self.get_default_model(),
+            temperature: self.get_default_temperature(),
+            max_tokens: Some(self.config.models.max_tokens),
+            stream: Some(false),
+            ..Default::default()
+        };
+
+        let request = beebotos_agents::llm::types::LLMRequest {
+            messages,
+            config: request_config,
+        };
+
+        let result = self.failover_provider.complete(request).await;
+        let latency_ms = start_time.elapsed().as_millis() as u64;
+
+        match result {
+            Ok(response) => {
+                let content = response
+                    .choices
+                    .first()
+                    .map(|choice| choice.message.text_content())
+                    .unwrap_or_default();
+
+                let (input_tokens, output_tokens) = response.usage.as_ref().map_or((0, 0), |u| {
+                    (u.prompt_tokens, u.completion_tokens)
+                });
+
+                self.metrics
+                    .record_success(latency_ms, input_tokens, output_tokens)
+                    .await;
+
+                Ok(content)
+            }
+            Err(e) => {
+                self.metrics.record_failure();
+                Err(GatewayError::Internal {
+                    message: format!("LLM request failed: {}", e),
+                    correlation_id: uuid::Uuid::new_v4().to_string(),
+                })
+            }
+        }
+    }
+
+    /// Process a pre-built message list with streaming response
+    pub async fn process_messages_stream(
+        &self,
+        messages: Vec<LLMMessage>,
+    ) -> Result<tokio::sync::mpsc::Receiver<String>, GatewayError> {
+        let start_time = std::time::Instant::now();
+
+        let request_config = RequestConfig {
+            model: self.get_default_model(),
+            temperature: self.get_default_temperature(),
+            max_tokens: Some(self.config.models.max_tokens),
+            stream: Some(true),
+            ..Default::default()
+        };
+
+        let request = beebotos_agents::llm::types::LLMRequest {
+            messages,
+            config: request_config,
+        };
+
+        let mut stream_rx = self
+            .failover_provider
+            .complete_stream(request)
+            .await
+            .map_err(|e| GatewayError::Internal {
+                message: format!("LLM streaming request failed: {}", e),
+                correlation_id: uuid::Uuid::new_v4().to_string(),
+            })?;
+
+        let (tx, rx) = tokio::sync::mpsc::channel(100);
+        let metrics = self.metrics.clone();
+
+        tokio::spawn(async move {
+            while let Some(chunk) = stream_rx.recv().await {
+                for choice in &chunk.choices {
+                    if let Some(content) = &choice.delta.content {
+                        if tx.send(content.clone()).await.is_err() {
+                            let latency_ms = start_time.elapsed().as_millis() as u64;
+                            metrics.record_success(latency_ms, 0, 0).await;
+                            return;
+                        }
+                    }
+
+                    if choice.finish_reason.is_some() {
+                        let latency_ms = start_time.elapsed().as_millis() as u64;
+                        metrics.record_success(latency_ms, 0, 0).await;
+                        return;
+                    }
+                }
+            }
+
+            let latency_ms = start_time.elapsed().as_millis() as u64;
+            metrics.record_success(latency_ms, 0, 0).await;
+        });
+
+        info!("🔄 Started LLM streaming response for pre-built messages");
+        Ok(rx)
     }
 
     /// Process a message with streaming response
