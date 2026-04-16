@@ -6,32 +6,23 @@ use leptos::prelude::*;
 /// 会话列表组件
 #[component]
 pub fn SessionList(
-    sessions: Vec<ChatSession>,
-    #[prop(optional)] selected_id: Option<String>,
+    sessions: Signal<Vec<ChatSession>>,
+    #[prop(into)] selected_id: Signal<String>,
     #[prop(optional)] on_select: Option<std::sync::Arc<dyn Fn(String) + Send + Sync>>,
     #[prop(optional)] on_new: Option<std::sync::Arc<dyn Fn() + Send + Sync>>,
 ) -> impl IntoView {
-    // 排序：固定的在前，然后按更新时间倒序
-    let mut sorted_sessions = sessions.clone();
-    sorted_sessions.sort_by(|a, b| {
-        if a.is_pinned && !b.is_pinned {
-            std::cmp::Ordering::Less
-        } else if !a.is_pinned && b.is_pinned {
-            std::cmp::Ordering::Greater
-        } else {
-            b.updated_at.cmp(&a.updated_at)
-        }
-    });
-
     view! {
         <div class="session-list-container">
             <div class="session-list-header">
                 <h3>"Sessions"</h3>
                 <button
                     class="btn btn-primary btn-sm"
-                    on:click=move |_| {
-                        if let Some(ref cb) = on_new {
-                            cb();
+                    on:click={
+                        let on_new = on_new.clone();
+                        move |_| {
+                            if let Some(ref cb) = on_new {
+                                cb();
+                            }
                         }
                     }
                 >
@@ -40,44 +31,59 @@ pub fn SessionList(
             </div>
 
             <div class="session-list">
-                {if sorted_sessions.is_empty() {
-                    view! {
-                        <div class="empty-sessions">
-                            <p>"No sessions yet"</p>
-                            <p>"Click 'New' to start chatting"</p>
-                        </div>
-                    }.into_any()
-                } else {
-                    view! {
-                        <For
-                            each=move || sorted_sessions.clone()
-                            key=|session| session.id.clone()
-                            children=move |session: ChatSession| {
-                                let id = session.id.clone();
-                                let is_selected = selected_id.as_ref() == Some(&id);
-                                let is_active = !session.is_archived;
+                {move || {
+                    let on_select = on_select.clone();
+                    let on_new = on_new.clone();
+                    let mut sorted_sessions = sessions.get();
+                    sorted_sessions.sort_by(|a, b| {
+                        if a.is_pinned && !b.is_pinned {
+                            std::cmp::Ordering::Less
+                        } else if !a.is_pinned && b.is_pinned {
+                            std::cmp::Ordering::Greater
+                        } else {
+                            b.updated_at.cmp(&a.updated_at)
+                        }
+                    });
 
-                                {
-                                    let id_select = id.clone();
-                                    view! {
-                                        <SessionListItem
-                                            session=session
-                                            is_selected=is_selected
-                                            is_active=is_active
-                                            on_select={
-                                                let on_select = on_select.clone();
-                                                Callback::from(move || {
-                                                    if let Some(ref cb) = on_select {
-                                                        cb(id_select.clone());
-                                                    }
-                                                })
-                                            }
-                                        />
+                    if sorted_sessions.is_empty() {
+                        view! {
+                            <div class="empty-sessions">
+                                <p>"No sessions yet"</p>
+                                <p>"Click 'New' to start chatting"</p>
+                            </div>
+                        }.into_any()
+                    } else {
+                        view! {
+                            <For
+                                each=move || sorted_sessions.clone()
+                                key=|session| session.id.clone()
+                                children=move |session: ChatSession| {
+                                    let id = session.id.clone();
+                                    let is_selected = selected_id.get() == id;
+                                    let is_active = !session.is_archived;
+
+                                    {
+                                        let id_select = id.clone();
+                                        view! {
+                                            <SessionListItem
+                                                session=session
+                                                is_selected=is_selected
+                                                is_active=is_active
+                                                on_select={
+                                                    let on_select = on_select.clone();
+                                                    Callback::from(move || {
+                                                        if let Some(ref cb) = on_select {
+                                                            cb(id_select.clone());
+                                                        }
+                                                    })
+                                                }
+                                            />
+                                        }
                                     }
                                 }
-                            }
-                        />
-                    }.into_any()
+                            />
+                        }.into_any()
+                    }
                 }}
             </div>
         </div>

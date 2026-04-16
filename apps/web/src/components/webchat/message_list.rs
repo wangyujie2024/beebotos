@@ -6,7 +6,7 @@ use leptos::prelude::*;
 /// 消息列表组件
 #[component]
 pub fn MessageList(
-    messages: Vec<ChatMessage>,
+    messages: Signal<Vec<ChatMessage>>,
     #[prop(optional)] streaming_content: Option<String>,
     #[prop(optional)] is_streaming: Option<bool>,
 ) -> impl IntoView {
@@ -15,7 +15,7 @@ pub fn MessageList(
     view! {
         <div class="message-list">
             <For
-                each=move || messages.clone()
+                each=move || messages.get()
                 key=|msg| msg.id.clone()
                 children=move |message| {
                     view! {

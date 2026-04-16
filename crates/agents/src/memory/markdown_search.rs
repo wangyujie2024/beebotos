@@ -38,6 +38,7 @@ use crate::memory::{
     embedding::{EmbeddingConfig, EmbeddingProvider, EmbeddingProviderFactory},
     hybrid_search_sqlite::{HybridSearchSqlite, SearchDatabaseStats, SqliteMemoryEntry, SqliteSearchResult},
     markdown_storage::{MarkdownMemoryEntry, MarkdownStorage, MarkdownStorageConfig, MemoryFileType},
+    search::{MemorySearch, SearchConfig, SearchResult, SearchStats},
 };
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -590,6 +591,71 @@ impl UnifiedMemorySystem {
     /// Access embedding provider (for advanced use cases)
     pub fn embedding(&self) -> &Arc<dyn EmbeddingProvider> {
         &self.embedding
+    }
+}
+
+#[async_trait::async_trait]
+impl MemorySearch for UnifiedMemorySystem {
+    async fn search(&self, query: &str) -> Result<Vec<SearchResult>> {
+        let search = self.search.read().await;
+        MemorySearch::search(&*search, query).await
+    }
+
+    async fn search_with_config(
+        &self,
+        query: &str,
+        config: SearchConfig,
+    ) -> Result<Vec<SearchResult>> {
+        let search = self.search.read().await;
+        MemorySearch::search_with_config(&*search, query, config).await
+    }
+
+    async fn semantic_search(&self, query_embedding: &[f32]) -> Result<Vec<SearchResult>> {
+        let search = self.search.read().await;
+        MemorySearch::semantic_search(&*search, query_embedding).await
+    }
+
+    async fn keyword_search(&self, keywords: &[String]) -> Result<Vec<SearchResult>> {
+        let search = self.search.read().await;
+        MemorySearch::keyword_search(&*search, keywords).await
+    }
+
+    async fn add_entry(
+        &self,
+        id: Uuid,
+        content: &str,
+        metadata: HashMap<String, String>,
+    ) -> Result<()> {
+        let search = self.search.read().await;
+        MemorySearch::add_entry(&*search, id, content, metadata).await
+    }
+
+    async fn remove_entry(&self, id: Uuid) -> Result<()> {
+        let search = self.search.read().await;
+        MemorySearch::remove_entry(&*search, id).await
+    }
+
+    async fn update_entry(
+        &self,
+        id: Uuid,
+        content: &str,
+        metadata: HashMap<String, String>,
+    ) -> Result<()> {
+        let search = self.search.read().await;
+        MemorySearch::update_entry(&*search, id, content, metadata).await
+    }
+
+    fn stats(&self) -> SearchStats {
+        if let Ok(search) = self.search.try_read() {
+            MemorySearch::stats(&*search)
+        } else {
+            SearchStats::default()
+        }
+    }
+
+    async fn clear(&self) -> Result<()> {
+        let search = self.search.read().await;
+        MemorySearch::clear(&*search).await
     }
 }
 

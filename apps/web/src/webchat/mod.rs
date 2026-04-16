@@ -46,10 +46,13 @@ impl Default for MessageRole {
 /// 消息元数据
 #[derive(Clone, Debug, Serialize, Deserialize, Default, PartialEq)]
 pub struct MessageMetadata {
+    #[serde(default)]
     pub is_error: bool,
+    #[serde(default)]
     pub is_streaming: bool,
     pub model: Option<String>,
     pub latency_ms: Option<u64>,
+    #[serde(default)]
     pub edits: Vec<MessageEdit>,
 }
 
@@ -73,13 +76,25 @@ pub struct Attachment {
 }
 
 /// Token 用量
-#[derive(Clone, Debug, Serialize, Deserialize, Default, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct TokenUsage {
     pub prompt_tokens: u64,
     pub completion_tokens: u64,
     pub total_tokens: u64,
     pub estimated_cost: f64,
     pub model: String,
+}
+
+impl Default for TokenUsage {
+    fn default() -> Self {
+        Self {
+            prompt_tokens: 0,
+            completion_tokens: 0,
+            total_tokens: 0,
+            estimated_cost: 0.0,
+            model: "default".to_string(),
+        }
+    }
 }
 
 impl TokenUsage {
@@ -113,10 +128,13 @@ pub struct ChatSession {
     pub title: String,
     pub created_at: String,
     pub updated_at: String,
+    #[serde(default)]
     pub messages: Vec<ChatMessage>,
+    #[serde(default)]
     pub context: SessionContext,
     pub is_pinned: bool,
     pub is_archived: bool,
+    #[serde(default)]
     pub total_token_usage: TokenUsage,
 }
 

@@ -87,9 +87,11 @@ impl AppState {
         }
     }
 
-    /// Get API client
+    /// Get API client (自动注入当前 auth token)
     pub fn api_client(&self) -> ApiClient {
-        self.api_client.clone()
+        let client = self.api_client.clone();
+        client.set_auth_token(self.auth.get_token());
+        client
     }
 
     /// Get agent service
@@ -230,8 +232,11 @@ impl Default for AppState {
 /// This function provides both the composed AppState and individual domain states
 /// to allow components to subscribe to only the state they need.
 pub fn provide_app_state() {
-    // Provide individual domain states
-    provide_auth_state();
+    // Create a single auth state instance and provide it
+    let auth_state = AuthState::new();
+    auth_state.restore_from_storage();
+    provide_context(auth_state.clone());
+
     provide_agent_state();
     provide_dao_state();
     provide_notification_state();
@@ -239,8 +244,8 @@ pub fn provide_app_state() {
     provide_webchat_state();
     provide_gateway_state();
 
-    // Provide composed app state for convenience
-    provide_context(AppState::new());
+    // Provide composed app state using the SAME auth state instance
+    provide_context(AppState::new_with_auth(auth_state));
 }
 
 /// Setup online/offline status monitoring

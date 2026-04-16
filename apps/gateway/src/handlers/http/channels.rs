@@ -11,6 +11,7 @@ use tracing::{error, info, warn};
 
 use crate::error::GatewayError;
 use crate::AppState;
+use gateway::middleware::AuthUser;
 
 use beebotos_agents::communication::channel::{Channel, ChannelEvent, PersonalWeChatChannel};
 use beebotos_agents::communication::{Message, MessageType, PlatformType};
@@ -246,9 +247,10 @@ pub struct SendWebChatMessageRequest {
 
 pub async fn send_webchat_message(
     State(state): State<Arc<AppState>>,
+    user: AuthUser,
     Json(req): Json<SendWebChatMessageRequest>,
 ) -> Result<Json<serde_json::Value>, GatewayError> {
-    info!("Received WebChat message from user: {}", req.user_id);
+    info!("Received WebChat message from user: {}", user.user_id);
 
     let event_bus = state.channel_event_bus.as_ref()
         .ok_or_else(|| GatewayError::internal("Channel event bus not initialized"))?
@@ -258,9 +260,9 @@ pub async fn send_webchat_message(
     let thread_id = Uuid::new_v4();
 
     let mut metadata = std::collections::HashMap::new();
-    metadata.insert("sender_id".to_string(), req.user_id.clone());
+    metadata.insert("sender_id".to_string(), user.user_id.clone());
     metadata.insert("session_id".to_string(), session_id.clone());
-    metadata.insert("message_id".to_string(), format!("webchat_{}_{}", req.user_id, chrono::Utc::now().timestamp_millis()));
+    metadata.insert("message_id".to_string(), format!("webchat_{}_{}", user.user_id, chrono::Utc::now().timestamp_millis()));
 
     let message = Message {
         id: Uuid::new_v4(),

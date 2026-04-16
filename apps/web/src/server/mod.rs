@@ -8,12 +8,13 @@ pub mod proxy;
 
 use axum::{
     extract::{Request, State},
-    http::StatusCode,
+    http::{header, HeaderValue, StatusCode},
     response::IntoResponse,
     routing::get,
     Router,
 };
 use tower_http::services::ServeDir;
+use tower_http::set_header::SetResponseHeaderLayer;
 
 /// 创建应用路由
 pub fn create_app(
@@ -22,7 +23,8 @@ pub fn create_app(
 ) -> Router {
     // 静态文件服务 - 使用 fallback 返回 index.html 支持 SPA 路由
     let serve_dir = ServeDir::new(static_path)
-        .append_index_html_on_directories(true);
+        .append_index_html_on_directories(true)
+        .fallback(tower_http::services::ServeFile::new(format!("{}/index.html", static_path)));
 
     // 创建 API 路由，使用嵌套路由匹配 /api/v1/... 等多级路径
     let api_routes = Router::new()
@@ -72,6 +74,11 @@ pub async fn run(config: &config::AppConfig) -> anyhow::Result<()> {
                 .allow_methods(Any)
                 .allow_headers(Any),
         )
+        // 开发环境禁用缓存，确保浏览器加载最新 WASM
+        .layer(SetResponseHeaderLayer::overriding(
+            header::CACHE_CONTROL,
+            HeaderValue::from_static("no-cache, no-store, must-revalidate"),
+        ))
         // 添加日志追踪
         .layer(TraceLayer::new_for_http());
 

@@ -1,6 +1,6 @@
 //! 消息处理器
 //!
-//! 集成消息去重、会话管理、多模态处理和图片回传
+//! 集成消息去重、会话管理、多模态处理、Memory 协同和持久化
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -17,6 +17,7 @@ use beebotos_agents::{
 
 use crate::services::llm_service::LlmService;
 use crate::services::agent_resolver::AgentResolver;
+use crate::services::webchat_service::WebchatService;
 use crate::error::GatewayError;
 
 /// 消息处理器
@@ -31,6 +32,10 @@ pub struct MessageProcessor {
     llm_service: Arc<LlmService>,
     /// 频道注册表
     channel_registry: Arc<ChannelRegistry>,
+    /// Memory 系统
+    memory_system: Option<Arc<beebotos_agents::memory::UnifiedMemorySystem>>,
+    /// Webchat 持久化服务
+    webchat_service: Option<Arc<WebchatService>>,
 }
 
 impl MessageProcessor {
@@ -38,6 +43,8 @@ impl MessageProcessor {
     pub fn new(
         llm_service: Arc<LlmService>,
         channel_registry: Arc<ChannelRegistry>,
+        memory_system: Option<Arc<beebotos_agents::memory::UnifiedMemorySystem>>,
+        webchat_service: Option<Arc<WebchatService>>,
     ) -> Self {
         Self {
             deduplicator: Arc::new(MessageDeduplicator::default()),
@@ -45,6 +52,8 @@ impl MessageProcessor {
             multimodal_processor: MultimodalProcessor::new(),
             llm_service,
             channel_registry,
+            memory_system,
+            webchat_service,
         }
     }
 
@@ -92,12 +101,46 @@ impl MessageProcessor {
 
         info!("💬 会话 {} - 用户 {} 发送消息", session.id, user_id);
 
+        // 2.5 统一获取/创建 DB session
+        let db_session_id = if let Some(ref svc) = self.webchat_service {
+            if platform == PlatformType::WebChat {
+                // WebChat: 验证前端提供的 session_id，无效则自动创建
+                let provided_sid = message.metadata.get("session_id")
+                    .cloned()
+                    .unwrap_or_else(|| session.id.clone());
+                match svc.validate_session(&provided_sid, &user_id).await {
+                    Ok(true) => provided_sid,
+                    _ => {
+                        match svc.get_or_create_channel_session(&user_id, &platform.to_string(), &user_id).await {
+                            Ok(sid) => sid,
+                            Err(e) => {
+                                warn!("Failed to get/create webchat session: {}", e);
+                                provided_sid
+                            }
+                        }
+                    }
+                }
+            } else {
+                // 外部渠道：按 user_id + channel 查找或创建
+                let sender_id = message.metadata.get("sender_id").cloned().unwrap_or_else(|| channel_id.to_string());
+                match svc.get_or_create_channel_session(&user_id, &platform.to_string(), &sender_id).await {
+                    Ok(sid) => sid,
+                    Err(e) => {
+                        warn!("Failed to get/create channel session: {}", e);
+                        session.id.clone()
+                    }
+                }
+            }
+        } else {
+            session.id.clone()
+        };
+
         // 3. 处理多模态内容（下载图片等）
         let (content, images) = self.process_multimodal(&message).await?;
 
         // 4. 添加用户消息到会话历史
         let image_urls: Vec<String> = images.iter()
-            .map(|img| format!("data:{};base64,{}", img.mime_type, img.data))
+            .map(|img| format!("data:{};base64,{},", img.mime_type, img.data))
             .collect();
 
         self.session_manager
@@ -108,6 +151,22 @@ impl MessageProcessor {
                 correlation_id: Uuid::new_v4().to_string(),
             })?;
 
+        // 4.5 持久化用户消息
+        if let Some(ref svc) = self.webchat_service {
+            let _ = svc.save_message(
+                &db_session_id,
+                "user",
+                &content,
+                Some(serde_json::json!({
+                    "platform": platform.to_string(),
+                    "sender_id": user_id,
+                    "has_image": !images.is_empty(),
+                    "channel_id": channel_id,
+                })),
+                None,
+            ).await;
+        }
+
         // 5. 构建 LLM 上下文（包含历史消息）
         let history = self.session_manager
             .get_history_for_llm(&session.id, 20)
@@ -117,8 +176,38 @@ impl MessageProcessor {
                 correlation_id: Uuid::new_v4().to_string(),
             })?;
 
-        // 6. 调用 LLM
-        let llm_response = self.call_llm_with_context(&message, &history, &images).await?;
+        // 5.5 Memory 检索
+        let mut memory_context = String::new();
+        if let Some(ref memory) = self.memory_system {
+            match memory.search(&content, 5).await {
+                Ok(results) if !results.is_empty() => {
+                    info!("Memory search returned {} results for query '{}'", results.len(), content.chars().take(40).collect::<String>());
+                    let content_lower = content.to_lowercase();
+                    let filtered: Vec<_> = results.iter()
+                        .filter(|r| !r.entry.content.to_lowercase().contains(&content_lower))
+                        .take(5)
+                        .collect();
+                    if !filtered.is_empty() {
+                        memory_context.push_str("\n\n[系统提示：以下是该用户的历史记忆，回答时必须结合这些信息]\n");
+                        for r in filtered {
+                            memory_context.push_str(&format!("- {}\n", r.entry.content));
+                        }
+                        info!("Injecting memory context ({} chars) into LLM prompt", memory_context.len());
+                    } else {
+                        info!("All memory results were self-referential, skipping injection");
+                    }
+                }
+                Ok(_) => {
+                    info!("Memory search returned no results for query '{}'", content.chars().take(40).collect::<String>());
+                }
+                Err(e) => {
+                    warn!("Memory search failed: {}", e);
+                }
+            }
+        }
+
+        // 6. 调用 LLM（注入记忆上下文）
+        let llm_response = self.call_llm_with_context(&message, &history, &images, &memory_context).await?;
 
         // 7. 添加助手回复到会话历史
         self.session_manager
@@ -129,8 +218,70 @@ impl MessageProcessor {
                 correlation_id: Uuid::new_v4().to_string(),
             })?;
 
+        // 7.5 持久化 AI 回复
+        if let Some(ref svc) = self.webchat_service {
+            let token_usage = serde_json::json!({
+                "model": "kimi-k2.5",
+                "prompt_tokens": history.len(),
+                "completion_tokens": llm_response.len(),
+            });
+            let _ = svc.save_message(
+                &db_session_id,
+                "assistant",
+                &llm_response,
+                Some(serde_json::json!({
+                    "platform": platform.to_string(),
+                    "channel_id": channel_id,
+                })),
+                Some(token_usage),
+            ).await;
+        }
+
         // 8. 发送回复
         self.send_reply(platform, channel_id, &message, &llm_response).await?;
+
+        // 9. Memory 回写
+        if let Some(ref memory) = self.memory_system {
+            use beebotos_agents::memory::markdown_storage::{MarkdownMemoryEntry, MemoryFileType};
+
+            let user_entry = MarkdownMemoryEntry {
+                id: Uuid::new_v4(),
+                timestamp: chrono::Utc::now(),
+                title: format!("User: {}", content.chars().take(30).collect::<String>()),
+                content: content.clone(),
+                category: "conversation".to_string(),
+                importance: 0.5,
+                metadata: {
+                    let mut m = HashMap::new();
+                    m.insert("session_id".to_string(), db_session_id.clone());
+                    m.insert("user_id".to_string(), user_id.clone());
+                    m.insert("role".to_string(), "user".to_string());
+                    m.insert("channel".to_string(), platform.to_string());
+                    m
+                },
+                session_id: Some(db_session_id.clone()),
+            };
+            let _ = memory.store(MemoryFileType::Core, &user_entry, None).await;
+
+            let assistant_entry = MarkdownMemoryEntry {
+                id: Uuid::new_v4(),
+                timestamp: chrono::Utc::now(),
+                title: format!("Assistant: {}", llm_response.chars().take(30).collect::<String>()),
+                content: llm_response.clone(),
+                category: "conversation".to_string(),
+                importance: 0.5,
+                metadata: {
+                    let mut m = HashMap::new();
+                    m.insert("session_id".to_string(), db_session_id.clone());
+                    m.insert("user_id".to_string(), user_id.clone());
+                    m.insert("role".to_string(), "assistant".to_string());
+                    m.insert("channel".to_string(), platform.to_string());
+                    m
+                },
+                session_id: Some(db_session_id.clone()),
+            };
+            let _ = memory.store(MemoryFileType::Core, &assistant_entry, None).await;
+        }
 
         Ok(())
     }
@@ -168,12 +319,46 @@ impl MessageProcessor {
 
         info!("💬 会话 {} - 用户 {} 发送消息", session.id, user_id);
 
+        // 2.5 统一获取/创建 DB session
+        let db_session_id = if let Some(ref svc) = self.webchat_service {
+            if platform == PlatformType::WebChat {
+                // WebChat: 验证前端提供的 session_id，无效则自动创建
+                let provided_sid = message.metadata.get("session_id")
+                    .cloned()
+                    .unwrap_or_else(|| session.id.clone());
+                match svc.validate_session(&provided_sid, &user_id).await {
+                    Ok(true) => provided_sid,
+                    _ => {
+                        match svc.get_or_create_channel_session(&user_id, &platform.to_string(), &user_id).await {
+                            Ok(sid) => sid,
+                            Err(e) => {
+                                warn!("Failed to get/create webchat session: {}", e);
+                                provided_sid
+                            }
+                        }
+                    }
+                }
+            } else {
+                // 外部渠道：按 user_id + channel 查找或创建
+                let sender_id = message.metadata.get("sender_id").cloned().unwrap_or_else(|| channel_id.to_string());
+                match svc.get_or_create_channel_session(&user_id, &platform.to_string(), &sender_id).await {
+                    Ok(sid) => sid,
+                    Err(e) => {
+                        warn!("Failed to get/create channel session: {}", e);
+                        session.id.clone()
+                    }
+                }
+            }
+        } else {
+            session.id.clone()
+        };
+
         // 3. 处理多模态内容（下载图片等）
         let (content, images) = self.process_multimodal(&message).await?;
 
         // 4. 添加用户消息到会话历史
         let image_urls: Vec<String> = images.iter()
-            .map(|img| format!("data:{};base64,{}", img.mime_type, img.data))
+            .map(|img| format!("data:{};base64,{},", img.mime_type, img.data))
             .collect();
 
         self.session_manager
@@ -183,6 +368,22 @@ impl MessageProcessor {
                 message: format!("Failed to add message to session: {}", e),
                 correlation_id: Uuid::new_v4().to_string(),
             })?;
+
+        // 4.5 持久化用户消息
+        if let Some(ref svc) = self.webchat_service {
+            let _ = svc.save_message(
+                &db_session_id,
+                "user",
+                &content,
+                Some(serde_json::json!({
+                    "platform": platform.to_string(),
+                    "sender_id": user_id,
+                    "has_image": !images.is_empty(),
+                    "channel_id": channel_id,
+                })),
+                None,
+            ).await;
+        }
 
         // 5. 解析 agent_id
         let agent_id = resolver.resolve(platform, channel_id, &user_id).await?;
@@ -196,16 +397,47 @@ impl MessageProcessor {
                 correlation_id: Uuid::new_v4().to_string(),
             })?;
 
+        // 6.5 Memory 检索
+        let mut memory_context = String::new();
+        if let Some(ref memory) = self.memory_system {
+            match memory.search(&content, 5).await {
+                Ok(results) if !results.is_empty() => {
+                    info!("Memory search returned {} results for query '{}'", results.len(), content.chars().take(40).collect::<String>());
+                    let content_lower = content.to_lowercase();
+                    let filtered: Vec<_> = results.iter()
+                        .filter(|r| !r.entry.content.to_lowercase().contains(&content_lower))
+                        .take(5)
+                        .collect();
+                    if !filtered.is_empty() {
+                        memory_context.push_str("\n\n[系统提示：以下是该用户的历史记忆，回答时必须结合这些信息]\n");
+                        for r in filtered {
+                            memory_context.push_str(&format!("- {}\n", r.entry.content));
+                        }
+                        info!("Injecting memory context ({} chars) into agent LLM prompt", memory_context.len());
+                    } else {
+                        info!("All memory results were self-referential, skipping injection");
+                    }
+                }
+                Ok(_) => {
+                    info!("Memory search returned no results for query '{}'", content.chars().take(40).collect::<String>());
+                }
+                Err(e) => {
+                    warn!("Memory search failed: {}", e);
+                }
+            }
+        }
+
         // 7. 构造 TaskConfig 并调用 AgentRuntime
         let task_input = serde_json::json!({
             "message": content,
             "history": history.iter().map(|m| serde_json::json!({"role": m.role, "content": m.content})).collect::<Vec<_>>(),
-            "images": images.iter().map(|img| format!("data:{};base64,{}", img.mime_type, img.data)).collect::<Vec<_>>(),
+            "images": images.iter().map(|img| format!("data:{};base64,{},", img.mime_type, img.data)).collect::<Vec<_>>(),
             "platform": platform.to_string(),
             "channel_id": channel_id,
             "user_id": user_id,
             "session_id": session.id,
             "metadata": message.metadata,
+            "memory_context": memory_context,
         });
 
         let task = gateway::TaskConfig {
@@ -242,8 +474,70 @@ impl MessageProcessor {
                 correlation_id: Uuid::new_v4().to_string(),
             })?;
 
+        // 8.5 持久化 AI 回复
+        if let Some(ref svc) = self.webchat_service {
+            let token_usage = serde_json::json!({
+                "model": "kimi-k2.5",
+                "prompt_tokens": history.len(),
+                "completion_tokens": llm_response.len(),
+            });
+            let _ = svc.save_message(
+                &db_session_id,
+                "assistant",
+                &llm_response,
+                Some(serde_json::json!({
+                    "platform": platform.to_string(),
+                    "channel_id": channel_id,
+                })),
+                Some(token_usage),
+            ).await;
+        }
+
         // 9. 发送回复
         self.send_reply(platform, channel_id, &message, &llm_response).await?;
+
+        // 10. Memory 回写
+        if let Some(ref memory) = self.memory_system {
+            use beebotos_agents::memory::markdown_storage::{MarkdownMemoryEntry, MemoryFileType};
+
+            let user_entry = MarkdownMemoryEntry {
+                id: Uuid::new_v4(),
+                timestamp: chrono::Utc::now(),
+                title: format!("User: {}", content.chars().take(30).collect::<String>()),
+                content: content.clone(),
+                category: "conversation".to_string(),
+                importance: 0.5,
+                metadata: {
+                    let mut m = HashMap::new();
+                    m.insert("session_id".to_string(), db_session_id.clone());
+                    m.insert("user_id".to_string(), user_id.clone());
+                    m.insert("role".to_string(), "user".to_string());
+                    m.insert("channel".to_string(), platform.to_string());
+                    m
+                },
+                session_id: Some(db_session_id.clone()),
+            };
+            let _ = memory.store(MemoryFileType::Core, &user_entry, None).await;
+
+            let assistant_entry = MarkdownMemoryEntry {
+                id: Uuid::new_v4(),
+                timestamp: chrono::Utc::now(),
+                title: format!("Assistant: {}", llm_response.chars().take(30).collect::<String>()),
+                content: llm_response.clone(),
+                category: "conversation".to_string(),
+                importance: 0.5,
+                metadata: {
+                    let mut m = HashMap::new();
+                    m.insert("session_id".to_string(), db_session_id.clone());
+                    m.insert("user_id".to_string(), user_id.clone());
+                    m.insert("role".to_string(), "assistant".to_string());
+                    m.insert("channel".to_string(), platform.to_string());
+                    m
+                },
+                session_id: Some(db_session_id.clone()),
+            };
+            let _ = memory.store(MemoryFileType::Core, &assistant_entry, None).await;
+        }
 
         Ok(())
     }
@@ -256,14 +550,14 @@ impl MessageProcessor {
         // 检查是否有图片
         if let Some(image_key) = self.extract_image_key(&message.content) {
             info!("🖼️ 检测到图片: {}", image_key);
-            
+
             // 获取 channel 以下载图片
             if let Some(channel) = self.channel_registry
                 .get_channel_by_platform(message.platform)
-                .await 
+                .await
             {
                 let message_id = message.metadata.get("message_id").map(|s| s.as_str());
-                
+
                 // 下载图片
                 match channel.read().await.download_image(&image_key, message_id).await {
                     Ok(image_data) => {
@@ -309,13 +603,13 @@ impl MessageProcessor {
     /// 处理图片
     fn process_image(&self, data: &[u8]) -> Result<ProcessedImage, GatewayError> {
         use base64::{Engine as _, engine::general_purpose::STANDARD};
-        
+
         // 检测图片格式
         let format = self.detect_image_format(data)?;
-        
+
         // 编码为 base64
         let base64_data = STANDARD.encode(data);
-        
+
         Ok(ProcessedImage {
             data: base64_data,
             format: format.clone(),
@@ -361,10 +655,17 @@ impl MessageProcessor {
         message: &Message,
         history: &[SessionMessage],
         images: &[ProcessedImage],
+        memory_context: &str,
     ) -> Result<String, GatewayError> {
-        // 构建包含历史的提示
+        // 构建包含历史和记忆的提示
         let mut context = String::new();
-        
+
+        if !memory_context.is_empty() {
+            context.push_str("以下是与当前对话相关的历史记忆，供你参考：\n");
+            context.push_str(memory_context);
+            context.push_str("\n\n");
+        }
+
         for msg in history.iter().take(history.len().saturating_sub(1)) {
             let role = match msg.role.as_str() {
                 "user" => "用户",
@@ -413,7 +714,7 @@ impl MessageProcessor {
                         message: format!("Failed to send reply: {}", e),
                         correlation_id: Uuid::new_v4().to_string(),
                     })?;
-                
+
                 info!("✅ 回复已发送到 {:?} 频道 {}", platform, channel_id);
             }
 
@@ -431,7 +732,7 @@ impl MessageProcessor {
     ) -> Result<(), GatewayError> {
         // 提取文本和图片
         let parts = self.parse_mixed_content(response);
-        
+
         for part in parts {
             match part {
                 MessagePart::Text(text) => {
@@ -472,7 +773,7 @@ impl MessageProcessor {
         let re = IMAGE_RE.get_or_init(|| {
             regex::Regex::new(r"!\[([^\]]*)\]\(([^)]+)\)").expect("Invalid regex pattern")
         });
-        
+
         for cap in re.captures_iter(content) {
             let full_match = match cap.get(0) {
                 Some(m) => m,
@@ -480,7 +781,7 @@ impl MessageProcessor {
             };
             let start = full_match.start();
             let end = full_match.end();
-            
+
             // 添加前面的文本
             if start > last_end {
                 let text = content[last_end..start].trim();
@@ -488,7 +789,7 @@ impl MessageProcessor {
                     parts.push(MessagePart::Text(text.to_string()));
                 }
             }
-            
+
             // 添加图片
             let url = &cap[2];
             if url.starts_with("data:image") {
@@ -497,7 +798,7 @@ impl MessageProcessor {
                     parts.push(MessagePart::Image { data, mime_type });
                 }
             }
-            
+
             last_end = end;
         }
 
@@ -519,14 +820,14 @@ impl MessageProcessor {
         if !url.starts_with(prefix) {
             return None;
         }
-        
+
         let rest = &url[prefix.len()..];
         let semi_pos = rest.find(';')?;
         let comma_pos = rest.find(',')?;
-        
+
         let format = &rest[..semi_pos];
         let data = &rest[comma_pos + 1..];
-        
+
         Some((format!("image/{}", format), data.to_string()))
     }
 
@@ -541,7 +842,7 @@ impl MessageProcessor {
     ) -> Result<(), GatewayError> {
         // 解码 base64
         use base64::{Engine as _, engine::general_purpose::STANDARD};
-        
+
         let data = STANDARD.decode(image_data)
             .map_err(|e| GatewayError::Internal {
                 message: format!("Failed to decode image: {}", e),
@@ -552,7 +853,7 @@ impl MessageProcessor {
         let mut metadata = HashMap::new();
         metadata.insert("image_data".to_string(), image_data.to_string());
         metadata.insert("mime_type".to_string(), mime_type.to_string());
-        
+
         let reply = Message {
             id: Uuid::new_v4(),
             thread_id: original.thread_id,
@@ -569,7 +870,7 @@ impl MessageProcessor {
                     message: format!("Failed to send image: {}", e),
                     correlation_id: Uuid::new_v4().to_string(),
                 })?;
-            
+
             info!("✅ 图片已发送到 {:?} 频道 {}", platform, channel_id);
         }
 

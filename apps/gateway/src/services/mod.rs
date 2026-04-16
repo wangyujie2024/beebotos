@@ -22,6 +22,7 @@ pub mod multichain_config;
 pub mod state_machine_service;
 pub mod task_monitor;
 pub mod wallet_service;
+pub mod webchat_service;
 
 // Re-export chain event types
 #[allow(unused_imports)]

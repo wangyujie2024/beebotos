@@ -481,15 +481,27 @@ impl Agent {
 
             match memory.search(&query).await {
                 Ok(results) => {
-                    let memory_context: String = results.iter().take(3)
+                    info!("Agent {} memory search returned {} results for query '{}..'", self.config.id, results.len(), query.chars().take(40).collect::<String>());
+                    let input_lower = input_text.to_lowercase();
+                    let memory_context: String = results.iter()
+                        .filter(|r| {
+                            // Skip memories that are essentially the current query being repeated
+                            let is_self_referential = r.content.to_lowercase().contains(&input_lower);
+                            if is_self_referential {
+                                info!("Filtering out self-referential memory: {}", r.content.chars().take(40).collect::<String>());
+                            }
+                            !is_self_referential
+                        })
+                        .take(5)
                         .map(|r| format!("- {}", r.content))
                         .collect::<Vec<_>>()
                         .join("\n");
                     if !memory_context.is_empty() {
+                        info!("Injecting memory context ({} chars) into agent LLM prompt", memory_context.len());
                         messages.push(communication::Message::new(
                             uuid::Uuid::new_v4(),
                             communication::PlatformType::Custom,
-                            format!("以下是你记忆中的相关信息（供参考）：\n{}", memory_context),
+                            format!("[系统提示：以下是该用户的历史记忆，回答时必须结合这些信息]\n{}", memory_context),
                         ));
                     }
                 }
@@ -499,16 +511,18 @@ impl Agent {
             }
         }
 
-        // Add history messages
+        // Add history messages with role prefixes for clarity
         for (role, content) in history {
-            let platform = match role.as_str() {
-                "system" => communication::PlatformType::Custom,
-                _ => communication::PlatformType::Custom,
+            let prefix = match role.as_str() {
+                "user" => "用户",
+                "assistant" => "助手",
+                "system" => "系统",
+                _ => &role,
             };
             messages.push(communication::Message::new(
                 uuid::Uuid::new_v4(),
-                platform,
-                content,
+                communication::PlatformType::Custom,
+                format!("{}: {}", prefix, content),
             ));
         }
 
@@ -516,7 +530,7 @@ impl Agent {
         messages.push(communication::Message::with_metadata(
             uuid::Uuid::new_v4(),
             communication::PlatformType::Custom,
-            input_text,
+            format!("用户: {}", input_text),
             metadata,
         ));
 

@@ -50,27 +50,15 @@ impl LLMCallInterface for LLMClientAdapter {
         messages: Vec<CommMessage>,
         _context: Option<HashMap<String, String>>,
     ) -> AgentResult<String> {
-        // Convert messages
-        let llm_messages: Vec<LLMMessage> = messages
+        // Build a combined prompt from all messages to preserve context.
+        let prompt = messages
             .into_iter()
-            .map(Self::convert_message)
-            .collect();
+            .map(|m| m.content)
+            .collect::<Vec<_>>()
+            .join("\n\n");
 
-        // Add messages to client context
-        for _msg in llm_messages {
-            // Note: This is a simplified implementation
-            // In production, you'd manage context properly
-        }
-
-        // Get last user message
-        let last_message = self.client.get_history().await
-            .into_iter()
-            .last()
-            .map(|m| m.text_content())
-            .unwrap_or_default();
-
-        // Execute chat
-        let response = self.client.chat(&last_message).await
+        // Execute chat with the full context
+        let response = self.client.chat(&prompt).await
             .map_err(|e| crate::error::AgentError::Execution(e.to_string()))?;
 
         Ok(response)

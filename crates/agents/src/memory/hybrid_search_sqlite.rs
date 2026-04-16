@@ -491,23 +491,29 @@ impl HybridSearchSqlite {
         })?;
 
         // Convert query to FTS5 query syntax (add wildcards for prefix matching)
-        // Only add * if the word doesn't already end with *
+        // Sanitize each word to avoid FTS5 syntax errors from special characters like ?, ", *, etc.
+        // Use OR semantics for better recall in memory retrieval.
         let fts_query: String = query
             .split_whitespace()
-            .map(|word| {
-                if word.ends_with('*') {
-                    word.to_string()
+            .filter_map(|word| {
+                let sanitized: String = word
+                    .chars()
+                    .filter(|c| c.is_alphanumeric())
+                    .collect();
+                if sanitized.is_empty() {
+                    None
                 } else {
-                    format!("{}*", word)
+                    Some(format!("{}*", sanitized))
                 }
             })
             .collect::<Vec<_>>()
-            .join(" ");
+            .join(" OR ");
 
         let rows = stmt.query_map(params![fts_query, limit as i64], |row| {
             let rank: f64 = row.get(6)?;
             // BM25 rank is negative (lower is better in SQLite FTS5), normalize to 0-1
-            let score = (rank.abs() as f32 + 1.0).recip();
+            // Higher score = better match. The old formula was inverted.
+            let score = 1.0 - (rank.abs() as f32 + 1.0).recip();
             Ok((Self::row_to_entry(row)?, score))
         }).map_err(|e| {
             crate::error::AgentError::storage(format!(

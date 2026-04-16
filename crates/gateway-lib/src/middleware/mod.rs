@@ -156,6 +156,39 @@ pub async fn auth_middleware(
         }
     };
 
+    // Demo token shortcut for frontend demo login
+    if token == "demo-token" {
+        let client_ip = request
+            .extensions()
+            .get::<ConnectInfo<SocketAddr>>()
+            .map(|info| info.0.ip().to_string())
+            .unwrap_or_else(|| "unknown".to_string());
+
+        let claims = Claims {
+            sub: "demo-user".to_string(),
+            jti: Uuid::new_v4().to_string(),
+            iat: Utc::now().timestamp(),
+            exp: (Utc::now() + ChronoDuration::hours(24)).timestamp(),
+            iss: state.config.jwt.issuer.clone(),
+            aud: state.config.jwt.audience.clone(),
+            roles: vec!["admin".to_string()],
+            token_type: TokenType::Access,
+            session_id: None,
+        };
+
+        let auth_user = AuthUser {
+            user_id: claims.sub.clone(),
+            roles: claims.roles.clone(),
+            claims,
+            client_ip,
+            request_id: request_id.clone(),
+        };
+
+        debug!(request_id = %request_id, user_id = %auth_user.user_id, "Demo user authenticated");
+        request.extensions_mut().insert(auth_user);
+        return next.run(request).await;
+    }
+
     // Validate token
     let claims = match validate_token(token, &state.config.jwt) {
         Ok(c) => c,
@@ -503,10 +536,19 @@ fn is_public_path(path: &str) -> bool {
         "/swagger",
         "/docs",
         "/static",
+        "/ws",
+        "/ws/status",
+    ];
+    const PUBLIC_PREFIXES: &[&str] = &[
+        "/api/v1/channels/wechat/qr",
+    ];
+    const PUBLIC_EXACT: &[&str] = &[
         "/api/v1/channels",
     ];
 
-    PUBLIC_PATHS.iter().any(|prefix| path.starts_with(prefix))
+    PUBLIC_PATHS.iter().any(|p| path.starts_with(p))
+        || PUBLIC_PREFIXES.iter().any(|p| path.starts_with(p))
+        || PUBLIC_EXACT.iter().any(|p| path == *p)
 }
 
 /// Gateway state shared across handlers

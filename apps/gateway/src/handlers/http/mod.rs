@@ -11,6 +11,7 @@ pub mod llm_metrics;
 pub mod skills;
 pub mod state_machine;
 pub mod task_monitor;
+pub mod webchat;
 pub mod webhooks;
 
 use axum::response::IntoResponse;

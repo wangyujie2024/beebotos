@@ -62,7 +62,7 @@ anyhow = "1.0"
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 axum = { version = "0.7", features = ["macros"] }
 tower = "0.4"
-tower-http = { version = "0.5", features = ["fs", "cors", "trace"] }
+tower-http = { version = "0.5", features = ["fs", "cors", "trace", "set-header"] }
 reqwest = { version = "0.12", features = ["stream"] }
 config = "0.14"
 tracing = "0.1"

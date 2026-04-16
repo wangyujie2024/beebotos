@@ -141,31 +141,11 @@ impl RequestBuilder {
     }
 
     pub async fn send(&self) -> Result<Response, gloo_net::Error> {
-        let builder = self.build();
+        let mut builder = self.build();
         if let Some(body) = &self.body {
-            // For POST/PUT with JSON body, we need to handle this differently
-            // because gloo_net consumes the builder when calling json()
-            match self.method.as_str() {
-                "POST" => {
-                    let req = gloo_net::http::Request::post(&self.url)
-                        .header("Content-Type", "application/json")
-                        .body(body.clone())?;
-                    req.send().await
-                }
-                "PUT" => {
-                    let req = gloo_net::http::Request::put(&self.url)
-                        .header("Content-Type", "application/json")
-                        .body(body.clone())?;
-                    req.send().await
-                }
-                "PATCH" => {
-                    let req = gloo_net::http::Request::patch(&self.url)
-                        .header("Content-Type", "application/json")
-                        .body(body.clone())?;
-                    req.send().await
-                }
-                _ => builder.send().await,
-            }
+            builder = builder.header("Content-Type", "application/json");
+            let req = builder.body(body.clone())?;
+            req.send().await
         } else {
             builder.send().await
         }

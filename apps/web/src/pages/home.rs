@@ -9,9 +9,13 @@ use serde::{Deserialize, Serialize};
 pub fn Home() -> impl IntoView {
     let i18n = use_context::<I18nContext>().expect("i18n context not found");
     let i18n_stored = StoredValue::new(i18n);
+    let app_state = crate::state::use_app_state();
 
     // Use LocalResource for CSR since wasm futures are not Send
-    let stats = LocalResource::new(|| async move { fetch_dashboard_stats().await });
+    let stats = LocalResource::new(move || {
+        let client = app_state.api_client();
+        async move { fetch_dashboard_stats(client).await }
+    });
 
     view! {
         <Title text={move || i18n_stored.get_value().t("app-title")} />
@@ -226,19 +230,10 @@ struct DashboardStatsData {
     community_members: u32,
 }
 
-async fn fetch_dashboard_stats() -> Result<DashboardStatsData, ()> {
-    // Get app state for API calls - in real usage, this would be passed in
-    // For now, we use a simple approach with sequential requests
-    // Note: In a real app, you might want to use wasm_bindgen_futures::spawn_local
-    // or leptos::task::spawn_local with channels for parallel requests
-
-    // Since we can't easily access app_state in an async function outside component context,
-    // we'll create a default client for the dashboard stats
+async fn fetch_dashboard_stats(client: crate::api::ApiClient) -> Result<DashboardStatsData, ()> {
     use crate::api::AgentService;
-    use crate::api::ApiClient;
     use crate::api::DaoService;
 
-    let client = ApiClient::default_client();
     let agent_service = AgentService::new(client.clone());
     let dao_service = DaoService::new(client);
 

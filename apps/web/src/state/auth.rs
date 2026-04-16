@@ -265,6 +265,13 @@ impl AuthState {
                 }
                 Err(e) => {
                     let _ = web_sys::console::log_1(&format!("Token refresh failed: {}", e).into());
+                    // Don't logout if the backend doesn't implement refresh endpoint (404)
+                    // or if it's a demo token
+                    use crate::api::ApiError;
+                    if matches!(e, ApiError::NotFound) {
+                        let _ = web_sys::console::log_1(&"Refresh endpoint not found, keeping current session".into());
+                        return;
+                    }
                     // Clear authentication on refresh failure
                     // This forces user to re-login
                     self.logout();

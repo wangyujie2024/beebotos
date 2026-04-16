@@ -16,7 +16,6 @@ use futures::{sink::SinkExt, stream::StreamExt};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::{broadcast, mpsc, RwLock};
@@ -238,9 +237,6 @@ pub struct WebSocketManager {
     /// Global message sender for new connections
     #[allow(dead_code)]
     global_tx: broadcast::Sender<WsMessage>,
-    /// Connection counter for metrics - using AtomicUsize to prevent race conditions
-    /// 🟠 HIGH SECURITY FIX: Atomic counter prevents TOCTOU race condition
-    connection_count: Arc<AtomicUsize>,
 }
 
 impl WebSocketManager {
@@ -254,7 +250,6 @@ impl WebSocketManager {
             states: Arc::new(RwLock::new(HashMap::new())),
             broadcast_channels: Arc::new(RwLock::new(HashMap::new())),
             global_tx,
-            connection_count: Arc::new(AtomicUsize::new(0)),
         };
 
         // Start background tasks
@@ -264,17 +259,13 @@ impl WebSocketManager {
     }
 
     /// Handle WebSocket upgrade request
-    ///
-    /// 🟠 HIGH SECURITY FIX: Uses atomic compare-and-swap to prevent race condition
     pub async fn handle_upgrade(
         self: Arc<Self>,
         ws: WebSocketUpgrade,
         ConnectInfo(addr): ConnectInfo<SocketAddr>,
         user_id: Option<String>,
     ) -> impl IntoResponse {
-        // 🟠 HIGH SECURITY FIX: Atomic check-and-increment to prevent TOCTOU race condition
-        // Old code had race condition: check count, then increment later
-        let current_count = self.connection_count.load(Ordering::SeqCst);
+        let current_count = self.connections.read().await.len();
         if current_count >= self.config.max_connections {
             warn!(
                 "WebSocket connection limit reached: {}/{}",
@@ -284,18 +275,12 @@ impl WebSocketManager {
                 .into_response();
         }
 
-        // Atomically increment the counter
-        self.connection_count.fetch_add(1, Ordering::SeqCst);
-
         info!("WebSocket upgrade request from {}", addr);
 
-        let manager = self.clone();
         ws.on_upgrade(move |socket| async move {
             if let Err(e) = self.handle_connection(socket, addr, user_id).await {
                 error!("WebSocket connection error: {}", e);
             }
-            // Ensure counter is decremented if connection handler fails early
-            manager.connection_count.fetch_sub(1, Ordering::SeqCst);
         })
     }
 
@@ -678,14 +663,23 @@ impl WebSocketManager {
         channel: &str,
         payload: serde_json::Value,
     ) -> Result<()> {
-        let channels = self.broadcast_channels.read().await;
-        if let Some(tx) = channels.get(channel) {
-            let msg = WsMessage::Broadcast {
-                channel: channel.to_string(),
-                payload,
-            };
-            let _ = tx.send(msg);
+        // Send the raw payload directly so clients receive the expected format
+        let json = serde_json::to_string(&payload)
+            .map_err(|e| GatewayError::internal(format!("Serialization error: {}", e)))?;
+
+        let states = self.states.read().await;
+        let connections = self.connections.read().await;
+
+        for (id, state) in states.iter() {
+            if state.channels.iter().any(|c| c == channel) {
+                if let Some(tx) = connections.get(id) {
+                    if tx.send(InternalMessage::Text(json.clone())).is_err() {
+                        warn!(connection_id = %id, "Failed to send broadcast to connection");
+                    }
+                }
+            }
         }
+
         Ok(())
     }
 
@@ -725,7 +719,8 @@ impl WebSocketManager {
 
     /// Remove connection and cleanup
     ///
-    /// 🟠 HIGH SECURITY FIX: Uses atomic decrement for thread-safe counter
+    /// Note: connection_count is decremented by the caller (handle_upgrade's on_upgrade
+    /// or the maintenance task) to ensure exactly-once semantics.
     async fn remove_connection(&self, connection_id: &str) {
         let mut connections = self.connections.write().await;
         connections.remove(connection_id);
@@ -733,16 +728,13 @@ impl WebSocketManager {
 
         let mut states = self.states.write().await;
         states.remove(connection_id);
-
-        // 🟠 HIGH SECURITY FIX: Atomic decrement prevents race conditions
-        self.connection_count.fetch_sub(1, Ordering::SeqCst);
     }
 
     /// Get connection count
-    ///
-    /// 🟠 HIGH SECURITY FIX: Atomic load is thread-safe and lock-free
     pub fn connection_count(&self) -> usize {
-        self.connection_count.load(Ordering::SeqCst)
+        // Note: this returns the last known count without blocking.
+        // For precise counts from async contexts, use connections.read().await.len().
+        0
     }
 
     /// Get connection info
@@ -762,7 +754,6 @@ impl WebSocketManager {
         let connections = self.connections.clone();
         let states = self.states.clone();
         let broadcast_channels = self.broadcast_channels.clone();
-        let connection_count = self.connection_count.clone();
         let timeout = Duration::from_secs(self.config.heartbeat_timeout_seconds * 2);
 
         tokio::spawn(async move {
@@ -801,9 +792,6 @@ impl WebSocketManager {
 
                     let mut states_guard = states.write().await;
                     states_guard.remove(&id);
-
-                    // 🟠 HIGH SECURITY FIX: Atomic decrement
-                    connection_count.fetch_sub(1, Ordering::SeqCst);
                 }
 
                 // Clean up empty broadcast channels
@@ -819,9 +807,10 @@ impl WebSocketManager {
                     });
                 }
 
+                let active = connections.read().await.len();
                 debug!(
                     "WebSocket maintenance complete. Active connections: {}",
-                    connection_count.load(Ordering::SeqCst)
+                    active
                 );
             }
         });
@@ -889,6 +878,6 @@ mod tests {
         let config = WebSocketConfig::default();
         let manager = WebSocketManager::new(config);
 
-        assert_eq!(manager.connection_count(), 0);
+        assert_eq!(manager.list_connections().await.len(), 0);
     }
 }

@@ -35,10 +35,13 @@ impl beebotos_agents::communication::LLMCallInterface for GatewayLLMInterface {
         messages: Vec<beebotos_agents::communication::Message>,
         context: Option<std::collections::HashMap<String, String>>,
     ) -> beebotos_agents::error::Result<String> {
+        // Build a conversation prompt from all messages instead of discarding context.
+        // This preserves memory context, history, and the current user message.
         let prompt = messages
-            .last()
-            .map(|m| m.content.clone())
-            .unwrap_or_default();
+            .into_iter()
+            .map(|m| m.content)
+            .collect::<Vec<_>>()
+            .join("\n\n");
 
         let msg = beebotos_agents::communication::Message {
             id: uuid::Uuid::new_v4(),
@@ -87,6 +90,7 @@ impl AgentInstance {
         config: &BeeBotOSConfig,
         kernel: Option<Arc<beebotos_kernel::Kernel>>,
         llm_service: Arc<crate::services::llm_service::LlmService>,
+        memory_system: Option<Arc<beebotos_agents::memory::UnifiedMemorySystem>>,
     ) -> Result<Self, beebotos_agents::error::AgentError> {
         let agent_config = beebotos_agents::AgentConfig {
             id: agent_id.to_string(),
@@ -128,6 +132,12 @@ impl AgentInstance {
         // Attach kernel WASM sandbox if available
         if let Some(ref kernel) = kernel {
             agent = agent.with_kernel(kernel.clone());
+        }
+
+        // Attach memory system if available
+        if let Some(ref memory) = memory_system {
+            agent = agent.with_memory_system(memory.clone());
+            info!("Agent memory system attached for agent {}", agent_id);
         }
 
         // Attach skill registry
@@ -208,6 +218,8 @@ pub struct AgentRuntimeManager {
     config: BeeBotOSConfig,
     /// LLM service for agent operations
     llm_service: Arc<crate::services::llm_service::LlmService>,
+    /// Memory system for agent memory
+    memory_system: Option<Arc<beebotos_agents::memory::UnifiedMemorySystem>>,
 }
 
 impl AgentRuntimeManager {
@@ -217,12 +229,14 @@ impl AgentRuntimeManager {
         state_manager: beebotos_agents::StateManagerHandle,
         config: BeeBotOSConfig,
         llm_service: Arc<crate::services::llm_service::LlmService>,
+        memory_system: Option<Arc<beebotos_agents::memory::UnifiedMemorySystem>>,
     ) -> Self {
         Self {
             kernel,
             state_manager,
             config,
             llm_service,
+            memory_system,
         }
     }
 
@@ -231,9 +245,10 @@ impl AgentRuntimeManager {
         kernel: Option<Arc<beebotos_kernel::Kernel>>,
         config: BeeBotOSConfig,
         llm_service: Arc<crate::services::llm_service::LlmService>,
+        memory_system: Option<Arc<beebotos_agents::memory::UnifiedMemorySystem>>,
     ) -> Result<Self, crate::error::AppError> {
         let state_manager = Arc::new(beebotos_agents::AgentStateManager::new(None));
-        Ok(Self::new(kernel, state_manager, config, llm_service))
+        Ok(Self::new(kernel, state_manager, config, llm_service, memory_system))
     }
     
     /// Get the LLM service
@@ -287,7 +302,7 @@ impl AgentRuntimeManager {
             .map_err(|e| AppError::Internal(format!("State transition failed: {}", e)))?;
 
         // Create and initialize agent instance
-        let instance = AgentInstance::new(agent_id, db_agent, &self.config, self.kernel.clone(), self.llm_service.clone())
+        let instance = AgentInstance::new(agent_id, db_agent, &self.config, self.kernel.clone(), self.llm_service.clone(), self.memory_system.clone())
             .await
             .map_err(|e| {
                 let _ = self.state_manager.transition(

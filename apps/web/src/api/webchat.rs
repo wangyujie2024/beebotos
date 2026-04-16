@@ -6,6 +6,46 @@ use super::client::{ApiClient, ApiError};
 use crate::webchat::{ChatMessage, ChatSession, UsagePanel};
 use serde::{Deserialize, Serialize};
 
+/// 后端消息响应（用于兼容后端 JSON 格式）
+#[derive(Clone, Debug, Deserialize)]
+struct BackendMessageResponse {
+    id: String,
+    role: String,
+    content: String,
+    #[serde(alias = "created_at")]
+    timestamp: String,
+    metadata: serde_json::Value,
+    token_usage: Option<serde_json::Value>,
+}
+
+impl From<BackendMessageResponse> for ChatMessage {
+    fn from(resp: BackendMessageResponse) -> Self {
+        let role = match resp.role.as_str() {
+            "user" => crate::webchat::MessageRole::User,
+            "assistant" => crate::webchat::MessageRole::Assistant,
+            "system" => crate::webchat::MessageRole::System,
+            _ => crate::webchat::MessageRole::Assistant,
+        };
+
+        let metadata = serde_json::from_value::<crate::webchat::MessageMetadata>(resp.metadata)
+            .unwrap_or_default();
+
+        let token_usage = resp
+            .token_usage
+            .and_then(|v| serde_json::from_value::<crate::webchat::TokenUsage>(v).ok());
+
+        Self {
+            id: resp.id,
+            role,
+            content: resp.content,
+            timestamp: resp.timestamp,
+            attachments: vec![],
+            metadata,
+            token_usage,
+        }
+    }
+}
+
 /// WebChat API 服务
 #[derive(Clone)]
 pub struct WebchatApiService {
@@ -56,9 +96,10 @@ impl WebchatApiService {
 
     /// 获取会话消息
     pub async fn get_messages(&self, session_id: &str) -> Result<Vec<ChatMessage>, ApiError> {
-        self.client
+        let responses: Vec<BackendMessageResponse> = self.client
             .get(&format!("/webchat/sessions/{}/messages", session_id))
-            .await
+            .await?;
+        Ok(responses.into_iter().map(Into::into).collect())
     }
 
     /// 发送消息到 WebChat Channel
@@ -66,9 +107,10 @@ impl WebchatApiService {
         &self,
         session_id: &str,
         content: &str,
+        user_id: &str,
     ) -> Result<serde_json::Value, ApiError> {
         let request = serde_json::json!({
-            "user_id": "web_user",
+            "user_id": user_id,
             "content": content,
             "session_id": session_id,
         });

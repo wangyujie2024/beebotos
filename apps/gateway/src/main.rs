@@ -13,7 +13,7 @@ use std::time::Duration;
 
 use axum::extract::{Extension, Query, State};
 use axum::middleware::from_fn_with_state;
-use axum::routing::{delete, get, post};
+use axum::routing::{delete, get, post, put};
 use axum::Router;
 use axum_server::tls_rustls::RustlsConfig;
 // Use gateway-lib for infrastructure
@@ -147,6 +147,10 @@ pub struct AppState {
     pub agent_resolver: Option<Arc<AgentResolver>>,
     /// Channel-to-agent binding store
     pub channel_binding_store: Option<Arc<gateway::ChannelBindingStore>>,
+    /// Webchat service for chat persistence
+    pub webchat_service: Option<Arc<crate::services::webchat_service::WebchatService>>,
+    /// Memory system for agent memory coordination
+    pub memory_system: Option<Arc<beebotos_agents::memory::UnifiedMemorySystem>>,
 }
 
 impl AppState {
@@ -174,6 +178,39 @@ impl AppState {
                 .map_err(|e| anyhow::anyhow!("Failed to initialize StateStore: {}", e))?
         );
         info!("✅ StateStore (CQRS) initialized");
+
+        // Initialize Memory System
+        let memory_system = {
+            use std::path::PathBuf;
+            use beebotos_agents::memory::{UnifiedMemorySystem, UnifiedMemoryConfig, markdown_storage::MarkdownStorageConfig};
+            let memory_config = UnifiedMemoryConfig {
+                storage_config: MarkdownStorageConfig {
+                    workspace_dir: PathBuf::from("data/workspace"),
+                    ..Default::default()
+                },
+                search_db_path: PathBuf::from("data/memory_search.db"),
+                embedding_config: beebotos_agents::memory::embedding::EmbeddingConfig::mock(1536),
+                auto_index: true,
+                index_batch_size: 10,
+            };
+            match UnifiedMemorySystem::new(memory_config).await {
+                Ok(sys) => {
+                    info!("✅ UnifiedMemorySystem initialized");
+                    Some(Arc::new(sys))
+                }
+                Err(e) => {
+                    warn!("❌ Failed to initialize UnifiedMemorySystem: {}", e);
+                    None
+                }
+            }
+        };
+
+        // Initialize WebchatService
+        let webchat_service = {
+            let svc = crate::services::webchat_service::WebchatService::new(db.clone());
+            info!("✅ WebchatService initialized");
+            Some(Arc::new(svc))
+        };
 
         // Initialize LLM service first (needed by AgentRuntime)
         let llm_service = match crate::services::llm_service::LlmService::new(config.clone()).await {
@@ -209,6 +246,7 @@ impl AppState {
                 Some(kernel.clone()),
                 config.clone(),
                 llm_service.clone(),
+                memory_system.clone(),
             )
             .await
             .map_err(|e| anyhow::anyhow!("Failed to initialize AgentRuntimeManager: {}", e))?
@@ -386,6 +424,8 @@ impl AppState {
             message_processor: None,
             agent_resolver: Some(agent_resolver),
             channel_binding_store: Some(channel_binding_store),
+            webchat_service,
+            memory_system,
         })
     }
 }
@@ -524,6 +564,8 @@ async fn main() -> anyhow::Result<()> {
         app_state.message_processor = Some(Arc::new(MessageProcessor::new(
             app_state.llm_service.clone(),
             registry.clone(),
+            app_state.memory_system.clone(),
+            app_state.webchat_service.clone(),
         )));
     }
     let app_state = Arc::new(app_state);
@@ -666,6 +708,7 @@ async fn main() -> anyhow::Result<()> {
 
 /// Channel initialization configuration
 const CHANNELS: &[(&str, &str)] = &[
+    ("webchat", "webchat_default"),
     ("lark", "lark_main"),
     ("dingtalk", "dingtalk_main"),
     ("telegram", "telegram_main"),
@@ -684,23 +727,26 @@ async fn try_init_channel(
     event_bus: Option<mpsc::Sender<beebotos_agents::communication::channel::ChannelEvent>>,
 ) -> anyhow::Result<bool> {
     tracing::info!("🔍 Checking platform: {}", platform);
-    let channel_config = match platform {
-        "lark" => config.channels.lark.as_ref(),
-        "dingtalk" => config.channels.dingtalk.as_ref(),
-        "telegram" => config.channels.telegram.as_ref(),
-        "discord" => config.channels.discord.as_ref(),
-        "slack" => config.channels.slack.as_ref(),
+    let channel_config: Option<crate::config::ChannelConfig> = match platform {
+        "lark" => config.channels.lark.clone(),
+        "dingtalk" => config.channels.dingtalk.clone(),
+        "telegram" => config.channels.telegram.clone(),
+        "discord" => config.channels.discord.clone(),
+        "slack" => config.channels.slack.clone(),
         "wechat" => {
             tracing::info!("📋 wechat config: {:?}", config.channels.wechat.is_some());
-            config.channels.wechat.as_ref()
+            config.channels.wechat.clone()
         },
         "personal_wechat" => {
             tracing::info!("📋 personal_wechat config: {:?}", config.channels.personal_wechat.is_some());
-            config.channels.personal_wechat.as_ref()
+            config.channels.personal_wechat.clone()
         },
         "webchat" => {
             tracing::info!("📋 webchat config: {:?}", config.channels.webchat.is_some());
-            config.channels.webchat.as_ref()
+            config.channels.webchat.clone().or_else(|| Some(crate::config::ChannelConfig {
+                enabled: true,
+                settings: std::collections::HashMap::new(),
+            }))
         },
         _ => None,
     };
@@ -737,7 +783,7 @@ async fn try_init_channel(
                         let platform_name = platform.to_string();
                         let channel_id_name = channel_id.to_string();
                         tokio::spawn(async move {
-                            let mut guard = channel_clone.write().await;
+                            let guard = channel_clone.write().await;
                             if let Err(e) = guard.start_listener(event_bus).await {
                                 warn!("❌ Failed to start {} listener: {}", platform_name, e);
                             } else {
@@ -1043,6 +1089,14 @@ fn create_router(app_state: Arc<AppState>, gateway_state: Arc<GatewayState>) -> 
         .route("/api/v1/skills/:id/uninstall", delete(handlers::http::skills::uninstall_skill))
         .route("/api/v1/skills/:id/execute", post(handlers::http::skills::execute_skill))
         .route("/api/v1/skills/hub/health", get(handlers::http::skills::hub_health))
+        // Webchat routes
+        .route("/api/v1/webchat/sessions", get(handlers::http::webchat::list_sessions))
+        .route("/api/v1/webchat/sessions", post(handlers::http::webchat::create_session))
+        .route("/api/v1/webchat/sessions/:id", delete(handlers::http::webchat::delete_session))
+        .route("/api/v1/webchat/sessions/:id/messages", get(handlers::http::webchat::get_messages))
+        .route("/api/v1/webchat/sessions/:id/title", put(handlers::http::webchat::update_title))
+        .route("/api/v1/webchat/sessions/:id/pin", post(handlers::http::webchat::toggle_pin))
+        .route("/api/v1/webchat/sessions/:id/archive", post(handlers::http::webchat::archive_session))
         // Channel routes
         .route("/api/v1/channels", get(handlers::http::channels::list_channels))
         .route("/api/v1/channels/:id", get(handlers::http::channels::get_channel))
@@ -1120,9 +1174,12 @@ async fn start_http_server(app: Router, addr: SocketAddr) -> anyhow::Result<()> 
     let listener = tokio::net::TcpListener::bind(addr).await?;
     info!("HTTP server listening on {}", listener.local_addr()?);
 
-    axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown_signal())
-        .await?;
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .with_graceful_shutdown(shutdown_signal())
+    .await?;
 
     Ok(())
 }
