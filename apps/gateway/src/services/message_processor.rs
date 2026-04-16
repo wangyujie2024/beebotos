@@ -337,6 +337,22 @@ impl MessageProcessor {
         Ok(())
     }
 
+    /// 公共入口：根据平台选择处理路径
+    pub async fn handle_channel_message(
+        &self,
+        platform: PlatformType,
+        channel_id: &str,
+        message: Message,
+        resolver: Arc<AgentResolver>,
+        agent_runtime: Arc<dyn gateway::AgentRuntime>,
+    ) -> Result<(), GatewayError> {
+        if platform == PlatformType::WebChat {
+            self.handle_message(platform, channel_id, message).await
+        } else {
+            self.handle_message_via_agent(platform, channel_id, message, resolver, agent_runtime).await
+        }
+    }
+
     /// 处理消息（通过 AgentRuntime）
     pub async fn handle_message_via_agent(
         &self,

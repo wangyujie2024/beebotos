@@ -603,14 +603,14 @@ async fn main() -> anyhow::Result<()> {
                                     app_state_clone.message_processor.as_ref(),
                                     app_state_clone.agent_resolver.as_ref()
                                 ) {
-                                    if let Err(e) = processor.handle_message_via_agent(
+                                    if let Err(e) = processor.handle_channel_message(
                                         *platform,
                                         channel_id,
                                         message.clone(),
                                         resolver.clone(),
                                         app_state_clone.agent_runtime.clone(),
                                     ).await {
-                                        error!("❌ Agent message processing error: {}", e);
+                                        error!("❌ Message processing error: {}", e);
                                     }
                                 } else {
                                     // Fallback to direct LLM processing
