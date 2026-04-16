@@ -1,0 +1,354 @@
+# BeeBotOS 开发脚本使用与部署指南
+
+本文档说明如何使用 `scripts/beebotos-dev.sh`（Linux/macOS）和 `scripts/beebotos-dev.ps1`（Windows）进行开发、打包，以及如何在 **Ubuntu 24.04** 和 **Windows 11** 上部署运行。
+
+---
+
+## 脚本介绍
+
+| 脚本 | 适用平台 | 用途 |
+|------|----------|------|
+| `scripts/beebotos-dev.sh` | Linux / macOS | 开发管理：编译、启动、停止、打包 |
+| `scripts/beebotos-dev.ps1` | Windows | 开发管理：编译、启动、停止、打包 |
+| `scripts/beebotos-run.sh` | Linux / macOS | 生产环境启动器（随 `pack` 自动打包） |
+| `scripts/beebotos-run.ps1` | Windows | 生产环境启动器（随 `pack` 自动打包） |
+
+---
+
+## 开发命令速查
+
+### Linux / macOS
+
+```bash
+./scripts/beebotos-dev.sh [action] [service|all]
+```
+
+### Windows
+
+```powershell
+.\scripts\beebotos-dev.ps1 [action] [service|all]
+```
+
+### 支持的 action
+
+| 命令 | 说明 |
+|------|------|
+| `menu` | 交互式菜单（默认） |
+| `build` | 编译指定服务 |
+| `start` | 启动指定服务 |
+| `stop` | 停止指定服务 |
+| `restart` | 重启指定服务 |
+| `run` | 编译并启动指定服务 |
+| `status` | 查看所有服务状态 |
+| `pack` | 打包二进制和静态资源用于部署 |
+
+### 支持的服务
+
+- `gateway` — API Gateway（端口 8000）
+- `web` — Web 前端服务器（端口 8090）
+- `beehub` — BeeHub 服务（端口 8080）
+- `cli` — CLI 工具（仅安装，不启动）
+- `all` — 全部服务（默认）
+
+### 常用示例
+
+```bash
+# 编译所有服务
+./scripts/beebotos-dev.sh build all
+
+# 启动 Gateway 和 Web
+./scripts/beebotos-dev.sh start gateway
+./scripts/beebotos-dev.sh start web
+
+# 编译并启动 Web（开发调试最常用）
+./scripts/beebotos-dev.sh run web
+
+# 查看运行状态
+./scripts/beebotos-dev.sh status
+```
+
+---
+
+## 打包（Pack）
+
+### Linux 打包
+
+```bash
+./scripts/beebotos-dev.sh pack all
+```
+
+生成文件：`dist/beebotos-x86_64-unknown-linux-gnu.tar.gz`
+
+### Windows 打包
+
+```powershell
+.\scripts\beebotos-dev.ps1 pack all
+```
+
+生成文件：`dist\beebotos-x64-pc-windows-msvc.zip`
+
+### 打包内容
+
+解压后的目录结构：
+
+```
+beebotos/
+├── beebotos-gateway          # Gateway 可执行文件
+├── web-server                # Web 静态文件服务器
+├── beehub                    # BeeHub 可执行文件（如已编译）
+├── beebotos-run.sh           # Linux 生产启动脚本
+├── beebotos-run.ps1          # Windows 生产启动脚本
+├── config/
+│   ├── beebotos.toml         # Gateway 配置
+│   └── web-server.toml       # Web 服务器配置
+├── migrations_sqlite/        # 数据库迁移文件
+│   ├── 001_initial.sql
+│   ├── 002_add_a2a_tables.sql
+│   ├── 003_add_chat_tables.sql
+│   └── 004_add_users_table.sql
+└── pkg/                      # WASM 前端资源
+    ├── beebotos_web_bg.wasm
+    ├── beebotos_web.js
+    └── index.html
+```
+
+> **注意**：Web 前端依赖 `pkg/` 目录下的 WASM 文件。脚本在 `pack` 前会自动确保 `wasm-pack build` 已执行，生成最新的浏览器资源。
+
+---
+
+## Ubuntu 24.04 部署
+
+### 1. 上传并解压
+
+将 `beebotos-x86_64-unknown-linux-gnu.tar.gz` 上传到目标机器：
+
+```bash
+# 假设上传到 /opt/
+cd /opt
+sudo tar xzvf beebotos-x86_64-unknown-linux-gnu.tar.gz
+cd beebotos
+```
+
+### 2. 确保目录权限正确
+
+```bash
+sudo chmod +x beebotos-gateway web-server beehub 2>/dev/null
+sudo chmod +x beebotos-run.sh
+```
+
+### 3. 启动服务
+
+```bash
+# 启动全部服务（Gateway + Web + BeeHub）
+./beebotos-run.sh all
+
+# 或单独启动
+./beebotos-run.sh gateway
+./beebotos-run.sh web
+./beebotos-run.sh beehub
+```
+
+### 4. 验证服务
+
+```bash
+# 查看进程
+cat data/run/*.pid
+ps aux | grep beebotos
+
+# 查看日志
+tail -f data/logs/gateway.log
+tail -f data/logs/web.log
+```
+
+### 5. 防火墙放行
+
+```bash
+sudo ufw allow 8000/tcp   # Gateway
+sudo ufw allow 8090/tcp   # Web
+sudo ufw allow 8080/tcp   # BeeHub
+```
+
+### 6. 使用 systemd 持久化（推荐）
+
+创建 `/etc/systemd/system/beebotos-gateway.service`：
+
+```ini
+[Unit]
+Description=BeeBotOS Gateway
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/beebotos
+ExecStart=/opt/beebotos/beebotos-gateway
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now beebotos-gateway
+```
+
+Web 和 BeeHub 同理，分别创建 `beebotos-web.service` 和 `beebotos-beehub.service`。
+
+---
+
+## Windows 11 部署
+
+### 1. 上传并解压
+
+将 `beebotos-x64-pc-windows-msvc.zip` 上传到目标机器，解压到 `C:\BeeBotOS\`：
+
+```powershell
+Expand-Archive -Path beebotos-x64-pc-windows-msvc.zip -DestinationPath C:\
+```
+
+### 2. 启动服务
+
+以管理员身份打开 PowerShell：
+
+```powershell
+cd C:\beebotos
+.\beebotos-run.ps1 all
+```
+
+或单独启动：
+
+```powershell
+.\beebotos-run.ps1 gateway
+.\beebotos-run.ps1 web
+.\beebotos-run.ps1 beehub
+```
+
+### 3. 验证服务
+
+```powershell
+# 查看 PID 文件
+Get-Content .\data\run\gateway.pid
+Get-Content .\data\run\web.pid
+
+# 查看进程
+Get-Process beebotos-gateway
+Get-Process web-server
+
+# 查看日志
+Get-Content .\data\logs\gateway.log -Tail 20
+```
+
+### 4. 防火墙放行
+
+```powershell
+# Gateway
+New-NetFirewallRule -DisplayName "BeeBotOS Gateway" -Direction Inbound -LocalPort 8000 -Protocol TCP -Action Allow
+
+# Web
+New-NetFirewallRule -DisplayName "BeeBotOS Web" -Direction Inbound -LocalPort 8090 -Protocol TCP -Action Allow
+
+# BeeHub
+New-NetFirewallRule -DisplayName "BeeBotOS BeeHub" -Direction Inbound -LocalPort 8080 -Protocol TCP -Action Allow
+```
+
+### 5. 使用任务计划程序或 NSSM 持久化（推荐）
+
+#### 方案 A：NSSM（最方便）
+
+下载 [nssm.cc](https://nssm.cc/)，然后：
+
+```powershell
+nssm install BeeBotOS-Gateway C:\beebotos\beebotos-gateway.exe
+nssm set BeeBotOS-Gateway WorkingDirectory C:\beebotos
+nssm start BeeBotOS-Gateway
+
+nssm install BeeBotOS-Web C:\beebotos\web-server.exe
+nssm set BeeBotOS-Web WorkingDirectory C:\beebotos
+nssm start BeeBotOS-Web
+```
+
+#### 方案 B：任务计划程序
+
+创建开机启动任务，指向 `C:\beebotos\beebotos-run.ps1 all`，并设置 `"-ExecutionPolicy Bypass"`。
+
+---
+
+## 配置说明
+
+### Gateway 配置：`config/beebotos.toml`
+
+关键项示例：
+
+```toml
+[server]
+host = "0.0.0.0"
+port = 8000
+
+[database]
+url = "sqlite:data/beebotos.db"
+
+[jwt]
+secret = "your-secret-key"
+expiry_hours = 24
+refresh_expiry_hours = 168
+```
+
+> 生产环境务必修改 `jwt.secret`，不要硬编码。推荐通过环境变量注入：`BEE_JWT_SECRET=xxx`。
+
+### Web Server 配置：`config/web-server.toml`
+
+```toml
+[server]
+host = "0.0.0.0"
+port = 8090
+
+[static_file]
+path = "pkg"
+index = "index.html"
+
+[proxy]
+gateway_url = "http://localhost:8000"
+timeout_secs = 30
+```
+
+部署时如果 Gateway 和 Web 不在同一台机器，需修改 `gateway_url` 为实际地址。
+
+---
+
+## 常见问题
+
+### Q1: 打包时提示 `beehub binary not found, skipping`
+
+**原因**：BeeHub 尚未编译过。  
+**解决**：先执行 `./scripts/beebotos-dev.sh build beehub`，再重新 `pack`。
+
+### Q2: Windows 下 PowerShell 执行策略阻止运行脚本
+
+**错误**：`cannot be loaded because running scripts is disabled`
+
+**解决**：
+
+```powershell
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+```
+
+### Q3: Web 页面空白或显示旧版界面
+
+**原因**：`apps/web/pkg/` 下的 WASM 资源不是最新的。  
+**解决**：确保 `pack` 前 `wasm-pack build` 已成功执行。脚本已自动包含此步骤，但如果手动复制二进制，容易遗漏 `pkg/` 目录。
+
+### Q4: 目标机器无法启动 Gateway，报 database 错误
+
+**原因**：`migrations_sqlite/` 目录未随二进制一起复制，或缺少写权限。  
+**解决**：确保解压后的 `beebotos` 目录包含 `migrations_sqlite/`，且程序对 `data/` 目录有读写权限。
+
+---
+
+## 端口速查
+
+| 服务 | 端口 | 说明 |
+|------|------|------|
+| Gateway | 8000 | API、WebSocket、认证 |
+| Web | 8090 | Leptos WASM 前端 + 静态文件 |
+| BeeHub | 8080 | Hub 服务 |
