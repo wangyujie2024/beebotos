@@ -123,7 +123,12 @@ pub fn WebchatPage() -> impl IntoView {
         } else {
             format!("{}:{}", hostname, port)
         };
-        let ws_url = format!("{}://{}/ws", ws_protocol, ws_host);
+        let token = auth_state_for_ws.get_token().unwrap_or_default();
+        let ws_url = if token.is_empty() {
+            format!("{}://{}/ws", ws_protocol, ws_host)
+        } else {
+            format!("{}://{}/ws?token={}", ws_protocol, ws_host, token)
+        };
 
         let ws = web_sys::WebSocket::new(&ws_url).ok()?;
         ws.set_binary_type(web_sys::BinaryType::Arraybuffer);
@@ -357,8 +362,8 @@ pub fn WebchatPage() -> impl IntoView {
                     {move || view! {
                         <MessageList
                             messages=chat_state.current_messages.into()
-                            is_streaming=chat_state.is_streaming.get()
-                            streaming_content=chat_state.streaming_content.get()
+                            is_streaming=chat_state.is_streaming
+                            streaming_content=chat_state.streaming_content
                         />
                     }}
                     <MessageInput

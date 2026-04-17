@@ -1,19 +1,28 @@
 //! 消息列表组件
 
 use crate::webchat::ChatMessage;
+use leptos::html;
 use leptos::prelude::*;
 
 /// 消息列表组件
 #[component]
 pub fn MessageList(
     messages: Signal<Vec<ChatMessage>>,
-    #[prop(optional)] streaming_content: Option<String>,
-    #[prop(optional)] is_streaming: Option<bool>,
+    #[prop(into)] is_streaming: Signal<bool>,
+    #[prop(into)] streaming_content: Signal<String>,
 ) -> impl IntoView {
-    let is_streaming = is_streaming.unwrap_or(false);
+    let message_list_ref = NodeRef::<html::Div>::new();
+
+    Effect::new(move |_| {
+        messages.get();
+        streaming_content.get();
+        if let Some(div) = message_list_ref.get() {
+            div.set_scroll_top(div.scroll_height());
+        }
+    });
 
     view! {
-        <div class="message-list">
+        <div class="message-list" node_ref=message_list_ref>
             <For
                 each=move || messages.get()
                 key=|msg| msg.id.clone()
@@ -24,12 +33,14 @@ pub fn MessageList(
                 }
             />
 
-            {if is_streaming {
-                view! {
-                    <StreamingMessage content=streaming_content.unwrap_or_default() />
-                }.into_any()
-            } else {
-                view! { <div /> }.into_any()
+            {move || {
+                if is_streaming.get() {
+                    view! {
+                        <StreamingMessage content=streaming_content.clone() />
+                    }.into_any()
+                } else {
+                    view! { <div /> }.into_any()
+                }
             }}
         </div>
     }
@@ -62,11 +73,11 @@ fn MessageItem(message: ChatMessage) -> impl IntoView {
 
 /// 流式消息组件
 #[component]
-fn StreamingMessage(content: String) -> impl IntoView {
+fn StreamingMessage(content: Signal<String>) -> impl IntoView {
     view! {
         <div class="message assistant streaming">
             <div class="message-content">
-                {content}
+                {move || content.get()}
             </div>
             <div class="streaming-indicator">
                 <span class="cursor">"▋"</span>

@@ -5,12 +5,15 @@
 //! This module now delegates to gateway-lib for all WebSocket functionality,
 //! providing a unified implementation across the codebase.
 
+use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use axum::extract::{ConnectInfo, State, WebSocketUpgrade};
+use axum::extract::{ConnectInfo, Query, State, WebSocketUpgrade};
 use axum::response::IntoResponse;
-use gateway::middleware::AuthUser;
+use gateway::middleware::{AuthUser, Claims};
+use jsonwebtoken::{decode, DecodingKey, Validation};
+use secrecy::ExposeSecret;
 use tracing::info;
 
 use crate::AppState;
@@ -22,20 +25,35 @@ use crate::AppState;
 /// gateway-lib WebSocketManager for connection management.
 pub async fn ws_handler(
     ws: WebSocketUpgrade,
+    Query(params): Query<HashMap<String, String>>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     State(state): State<Arc<AppState>>,
     user: Option<AuthUser>,
 ) -> axum::response::Response {
+    let user_id = user.map(|u| u.user_id).or_else(|| {
+        params.get("token").and_then(|token| {
+            let mut validation = Validation::new(jsonwebtoken::Algorithm::HS256);
+            validation.set_issuer(&[&state.config.jwt.issuer]);
+            validation.set_audience(&[&state.config.jwt.audience]);
+            decode::<Claims>(
+                token,
+                &DecodingKey::from_secret(state.config.jwt.secret.expose_secret().as_bytes()),
+                &validation,
+            )
+            .ok()
+            .map(|td| td.claims.sub)
+        })
+    });
+
     info!(
         "WebSocket upgrade request from {} (user: {:?})",
         addr,
-        user.as_ref().map(|u| &u.user_id)
+        user_id.as_ref()
     );
 
     // Use gateway-lib's WebSocketManager if available
     match &state.ws_manager {
         Some(ws_manager) => {
-            let user_id = user.map(|u| u.user_id);
             let ws_manager = Arc::clone(ws_manager);
             ws_manager
                 .handle_upgrade(ws, ConnectInfo(addr), user_id)

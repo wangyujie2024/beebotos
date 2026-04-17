@@ -113,7 +113,7 @@ impl AuthService {
              RETURNING id, username, email, password_hash, avatar, wallet_address, roles, permissions"
         )
         .bind(username)
-        .bind(email)
+        .bind(email.unwrap_or(""))
         .bind(password_hash)
         .bind(DEFAULT_ROLES)
         .bind(DEFAULT_PERMISSIONS)
@@ -123,14 +123,24 @@ impl AuthService {
         match result {
             Ok(row) => Ok(row.to_auth_user_info()),
             Err(sqlx::Error::Database(db_err)) => {
-                let field = db_err.constraint()
-                    .and_then(|c| if c.contains("email") { Some("email") } else { Some("username") })
-                    .unwrap_or("username");
-                Err(AppError::Validation(vec![crate::error::ValidationError {
-                    field: field.to_string(),
-                    message: format!("{} already exists", field),
-                    code: "ALREADY_EXISTS".to_string(),
-                }]))
+                let msg = db_err.message().to_lowercase();
+                if msg.contains("unique constraint failed") {
+                    let field = if msg.contains("email") { "email" } else { "username" };
+                    Err(AppError::Validation(vec![crate::error::ValidationError {
+                        field: field.to_string(),
+                        message: format!("{} already exists", field),
+                        code: "ALREADY_EXISTS".to_string(),
+                    }]))
+                } else if msg.contains("not null constraint failed") {
+                    let field = if msg.contains("email") { "email" } else { "username" };
+                    Err(AppError::Validation(vec![crate::error::ValidationError {
+                        field: field.to_string(),
+                        message: format!("{} is required", field),
+                        code: "REQUIRED".to_string(),
+                    }]))
+                } else {
+                    Err(AppError::database(sqlx::Error::Database(db_err)))
+                }
             }
             Err(e) => Err(AppError::database(e)),
         }
@@ -203,7 +213,7 @@ mod tests {
             "CREATE TABLE IF NOT EXISTS users (
                 id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
                 username TEXT UNIQUE NOT NULL,
-                email TEXT UNIQUE,
+                email TEXT NOT NULL UNIQUE,
                 password_hash TEXT NOT NULL,
                 avatar TEXT,
                 wallet_address TEXT,
@@ -239,18 +249,43 @@ mod tests {
         let service = AuthService::new(pool);
 
         service
-            .register("bob", None, "password123")
+            .register("bob", Some("bob@example.com"), "password123")
             .await
             .unwrap();
 
         let err = service
-            .register("bob", None, "password123")
+            .register("bob", Some("bob2@example.com"), "password123")
             .await
             .expect_err("duplicate username should fail");
 
         match err {
             AppError::Validation(errors) => {
                 assert_eq!(errors[0].field, "username");
+                assert!(errors[0].message.contains("already exists"));
+            }
+            _ => panic!("Expected validation error, got {:?}", err),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_register_duplicate_email() {
+        let pool = create_test_db().await;
+        run_migrations(&pool).await;
+        let service = AuthService::new(pool);
+
+        service
+            .register("bob", Some("bob@example.com"), "password123")
+            .await
+            .unwrap();
+
+        let err = service
+            .register("alice", Some("bob@example.com"), "password123")
+            .await
+            .expect_err("duplicate email should fail");
+
+        match err {
+            AppError::Validation(errors) => {
+                assert_eq!(errors[0].field, "email");
                 assert!(errors[0].message.contains("already exists"));
             }
             _ => panic!("Expected validation error, got {:?}", err),
