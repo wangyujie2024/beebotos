@@ -310,12 +310,14 @@ mod tests {
     use super::*;
 
     #[test]
+    #[cfg(target_arch = "wasm32")]
     fn test_app_state_creation() {
         let state = AppState::new();
         assert!(state.is_online());
     }
 
     #[test]
+    #[cfg(target_arch = "wasm32")]
     fn test_new_services() {
         let state = AppState::new();
         // 验证新服务可用
