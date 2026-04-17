@@ -290,13 +290,22 @@ impl From<crate::api::ApiError> for AppError {
             crate::api::ApiError::NotFound => {
                 AppError::new(ErrorCode::UserResourceNotFound, "Resource not found")
             }
-            crate::api::ApiError::ServerError(code) => {
-                AppError::new(ErrorCode::ServerInternal, format!("Server error: {}", code))
+            crate::api::ApiError::ServerError(code, msg) => {
+                let message = if msg.is_empty() {
+                    format!("Server error: {}", code)
+                } else {
+                    msg.clone()
+                };
+                AppError::new(ErrorCode::ServerInternal, message)
             }
-            crate::api::ApiError::ClientError(code) => AppError::new(
-                ErrorCode::UserInvalidInput,
-                format!("Invalid request: {}", code),
-            ),
+            crate::api::ApiError::ClientError(code, msg) => {
+                let message = if msg.is_empty() {
+                    format!("Invalid request: {}", code)
+                } else {
+                    msg.clone()
+                };
+                AppError::new(ErrorCode::UserInvalidInput, message)
+            }
             _ => AppError::new(ErrorCode::ClientUnknown, "An unexpected error occurred"),
         }
     }
