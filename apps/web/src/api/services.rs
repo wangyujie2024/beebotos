@@ -223,15 +223,11 @@ impl AuthService {
     }
 
     pub async fn login(&self, username: &str, password: &str) -> Result<LoginResponse, ApiError> {
-        self.client
-            .post(
-                "/auth/login",
-                &serde_json::json!({
-                    "username": username,
-                    "password": password
-                }),
-            )
-            .await
+        let req = LoginRequest {
+            username: username.to_string(),
+            password: password.to_string(),
+        };
+        self.client.post("/auth/login", &req).await
     }
 
     pub async fn register(
@@ -240,16 +236,12 @@ impl AuthService {
         email: &str,
         password: &str,
     ) -> Result<LoginResponse, ApiError> {
-        self.client
-            .post(
-                "/auth/register",
-                &serde_json::json!({
-                    "username": username,
-                    "email": email,
-                    "password": password
-                }),
-            )
-            .await
+        let req = RegisterRequest {
+            username: username.to_string(),
+            email: Some(email.to_string()),
+            password: password.to_string(),
+        };
+        self.client.post("/auth/register", &req).await
     }
 
     pub async fn logout(&self) -> Result<(), ApiError> {
@@ -511,6 +503,19 @@ pub enum Theme {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct LoginRequest {
+    pub username: String,
+    pub password: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RegisterRequest {
+    pub username: String,
+    pub email: Option<String>,
+    pub password: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct LoginResponse {
     pub access_token: String,
     pub refresh_token: String,
@@ -539,30 +544,43 @@ pub struct UserInfo {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{LoginRequest, RegisterRequest};
 
     #[test]
     fn test_login_request_serialization() {
-        let req = serde_json::json!({
-            "username": "alice",
-            "password": "secret"
-        });
-        let s = req.to_string();
-        assert!(s.contains("alice"));
-        assert!(s.contains("secret"));
+        let req = LoginRequest {
+            username: "alice".to_string(),
+            password: "secret".to_string(),
+        };
+        let json = serde_json::to_value(&req).unwrap();
+        assert_eq!(json["username"], "alice");
+        assert_eq!(json["password"], "secret");
     }
 
     #[test]
     fn test_register_request_serialization() {
-        let req = serde_json::json!({
-            "username": "bob",
-            "email": "bob@example.com",
-            "password": "password123"
-        });
-        let s = req.to_string();
-        assert!(s.contains("bob"));
-        assert!(s.contains("bob@example.com"));
-        assert!(s.contains("password123"));
+        let req = RegisterRequest {
+            username: "bob".to_string(),
+            email: Some("bob@example.com".to_string()),
+            password: "password123".to_string(),
+        };
+        let json = serde_json::to_value(&req).unwrap();
+        assert_eq!(json["username"], "bob");
+        assert_eq!(json["email"], "bob@example.com");
+        assert_eq!(json["password"], "password123");
+    }
+
+    #[test]
+    fn test_register_request_without_email() {
+        let req = RegisterRequest {
+            username: "bob".to_string(),
+            email: None,
+            password: "password123".to_string(),
+        };
+        let json = serde_json::to_value(&req).unwrap();
+        assert_eq!(json["username"], "bob");
+        assert!(json["email"].is_null());
+        assert_eq!(json["password"], "password123");
     }
 }
 
