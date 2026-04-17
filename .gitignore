@@ -106,6 +106,7 @@ generated/
 # Documentation Build
 doc/
 target/doc/
+docs/superpowers/
 
 # Backup / Archives
 *.bak

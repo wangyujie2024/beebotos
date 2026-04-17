@@ -92,22 +92,24 @@ impl WebchatState {
 
     /// 结束流式接收
     pub fn finish_streaming(&self) {
-        self.is_streaming.set(false);
-        // 将流式内容转为正式消息
-        let content = self.streaming_content.get();
-        if !content.is_empty() {
-            let message = ChatMessage {
-                id: uuid::Uuid::new_v4().to_string(),
-                role: crate::webchat::MessageRole::Assistant,
-                content,
-                timestamp: chrono::Utc::now().to_rfc3339(),
-                attachments: vec![],
-                metadata: Default::default(),
-                token_usage: None,
-            };
-            self.add_message(message);
-        }
-        self.streaming_content.set(String::new());
+        leptos::prelude::batch(|| {
+            self.is_streaming.set(false);
+            // 将流式内容转为正式消息
+            let content = self.streaming_content.get();
+            if !content.is_empty() {
+                let message = ChatMessage {
+                    id: uuid::Uuid::new_v4().to_string(),
+                    role: crate::webchat::MessageRole::Assistant,
+                    content,
+                    timestamp: chrono::Utc::now().to_rfc3339(),
+                    attachments: vec![],
+                    metadata: Default::default(),
+                    token_usage: None,
+                };
+                self.add_message(message);
+            }
+            self.streaming_content.set(String::new());
+        });
     }
 
     /// 设置错误

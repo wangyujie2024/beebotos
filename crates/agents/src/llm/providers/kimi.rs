@@ -8,7 +8,7 @@ use reqwest::header::{self, HeaderMap, HeaderValue};
 use serde::{Deserialize, Serialize};
 
 use tokio::sync::mpsc;
-use tracing::{debug, error, info, trace};
+use tracing::{debug, error, info, trace, warn};
 
 use crate::llm::http_client::{LLMHttpClient, OpenAIRequestBuilder, ProviderConfig};
 use crate::llm::traits::*;
@@ -254,13 +254,13 @@ impl LLMProvider for KimiProvider {
                 match chunk_result {
                     Ok(bytes) => {
                         let text = String::from_utf8_lossy(&bytes);
-                        
+
                         for line in text.lines() {
                             if line.starts_with("data: ") {
                                 let data = &line[6..];
-                                
+
                                 if data == "[DONE]" {
-                                    break;
+                                    return;
                                 }
 
                                 match serde_json::from_str::<StreamChunk>(data) {
@@ -270,7 +270,7 @@ impl LLMProvider for KimiProvider {
                                         }
                                     }
                                     Err(e) => {
-                                        trace!("Failed to parse chunk: {}", e);
+                                        warn!("Failed to parse Kimi chunk: {} | data: {}", e, &data[..data.len().min(200)]);
                                     }
                                 }
                             }

@@ -133,13 +133,41 @@ pub fn WebchatPage() -> impl IntoView {
             if let Ok(text) = e.data().dyn_into::<js_sys::JsString>() {
                 let text_str = text.as_string().unwrap_or_default();
                 if let Ok(json) = serde_json::from_str::<serde_json::Value>(&text_str) {
-                    if json.get("type").and_then(|v| v.as_str()) == Some("chat_message") {
-                        if let Some(msg_json) = json.get("message") {
-                            if let Ok(message) = serde_json::from_value::<ChatMessage>(msg_json.clone()) {
-                                chat_state_clone.add_message(message);
-                                chat_state_clone.is_sending.set(false);
+                    match json.get("type").and_then(|v| v.as_str()) {
+                        Some("chat_message") => {
+                            if let Some(msg_json) = json.get("message") {
+                                if let Ok(message) = serde_json::from_value::<ChatMessage>(msg_json.clone()) {
+                                    chat_state_clone.add_message(message);
+                                    chat_state_clone.is_sending.set(false);
+                                }
                             }
                         }
+                        Some("chat_stream") => {
+                            if let (Some(session_id), Some(chunk), Some(done)) = (
+                                json.get("session_id").and_then(|v| v.as_str()),
+                                json.get("chunk").and_then(|v| v.as_str()),
+                                json.get("done").and_then(|v| v.as_bool()),
+                            ) {
+                                // 只处理当前选中的会话的流式消息
+                                if chat_state_clone.current_session_id.get().as_deref() == Some(session_id) {
+                                    if let Some(error) = json.get("error").and_then(|v| v.as_str()) {
+                                        chat_state_clone.set_error(Some(error.to_string()));
+                                        chat_state_clone.finish_streaming();
+                                        chat_state_clone.is_sending.set(false);
+                                    } else if done {
+                                        chat_state_clone.finish_streaming();
+                                        chat_state_clone.is_sending.set(false);
+                                    } else {
+                                        chat_state_clone.append_streaming_content(chunk);
+                                    }
+                                }
+                            } else {
+                                let _ = web_sys::console::error_1(
+                                    &"[webchat] Malformed chat_stream payload".into()
+                                );
+                            }
+                        }
+                        _ => {}
                     }
                 }
             }
@@ -201,6 +229,7 @@ pub fn WebchatPage() -> impl IntoView {
         };
         chat_state_for_send.add_message(user_message);
         chat_state_for_send.is_sending.set(true);
+        chat_state_for_send.start_streaming();
         chat_state_for_send.set_error(None);
 
         // 异步发送到后端
@@ -213,15 +242,8 @@ pub fn WebchatPage() -> impl IntoView {
             let user_id = auth_state_send.user.get().as_ref().map(|u| u.id.clone()).unwrap_or_default();
             match service.send_message(&session_id, &content, &user_id).await {
                 Ok(_) => {
-                    // HTTP 发送成功，但保持 is_sending=true 等待 WebSocket 回复
-                    // 如果 WebSocket 长时间无响应，允许 30 秒后自动解除锁定
-                    let chat_state_send = chat_state_send.clone();
-                    wasm_bindgen_futures::spawn_local(async move {
-                        gloo_timers::future::TimeoutFuture::new(30_000).await;
-                        if chat_state_send.is_sending.get() {
-                            chat_state_send.is_sending.set(false);
-                        }
-                    });
+                    // HTTP 发送成功，保持 is_sending=true 等待 WebSocket 流式回复
+                    // 由 chat_stream.done=true 负责解除锁定
                 }
                 Err(e) => {
                     chat_state_send.set_error(Some(format!("Failed to send: {}", e)));
@@ -241,6 +263,8 @@ pub fn WebchatPage() -> impl IntoView {
         move |id: String| {
             let chat_state = chat_state.clone();
             let auth_state = auth_state_select.clone();
+            chat_state.is_sending.set(false);
+            chat_state.finish_streaming();
             store_session_id(&id);
             chat_state.current_session_id.set(Some(id.clone()));
             chat_state.current_messages.set(Vec::new());

@@ -15,6 +15,8 @@ use beebotos_agents::{
     media::multimodal::MultimodalProcessor,
 };
 
+use gateway::websocket::WebSocketManager;
+
 use crate::services::llm_service::LlmService;
 use crate::services::agent_resolver::AgentResolver;
 use crate::services::webchat_service::WebchatService;
@@ -36,6 +38,8 @@ pub struct MessageProcessor {
     memory_system: Option<Arc<beebotos_agents::memory::UnifiedMemorySystem>>,
     /// Webchat 持久化服务
     webchat_service: Option<Arc<WebchatService>>,
+    /// WebSocket 管理器
+    ws_manager: Option<Arc<WebSocketManager>>,
 }
 
 impl MessageProcessor {
@@ -45,6 +49,7 @@ impl MessageProcessor {
         channel_registry: Arc<ChannelRegistry>,
         memory_system: Option<Arc<beebotos_agents::memory::UnifiedMemorySystem>>,
         webchat_service: Option<Arc<WebchatService>>,
+        ws_manager: Option<Arc<WebSocketManager>>,
     ) -> Self {
         Self {
             deduplicator: Arc::new(MessageDeduplicator::default()),
@@ -54,6 +59,7 @@ impl MessageProcessor {
             channel_registry,
             memory_system,
             webchat_service,
+            ws_manager,
         }
     }
 
@@ -207,7 +213,68 @@ impl MessageProcessor {
         }
 
         // 6. 调用 LLM（注入记忆上下文）
-        let llm_response = self.call_llm_with_context(&message, &history, &images, &memory_context).await?;
+        let llm_response = if platform == PlatformType::WebChat {
+            // WebChat 流式回复
+            let mut stream_rx = match self.call_llm_stream_with_context(
+                &message, &history, &images, &memory_context
+            ).await {
+                Ok(rx) => rx,
+                Err(e) => {
+                    warn!("LLM stream failed for user {}: {}", user_id, e);
+                    if let Some(ref ws) = self.ws_manager {
+                        let payload = serde_json::json!({
+                            "type": "chat_stream",
+                            "session_id": db_session_id,
+                            "chunk": "",
+                            "done": true,
+                            "error": format!("流式响应失败: {}", e),
+                        });
+                        if let Err(e2) = ws.send_payload_to_user(&user_id, &payload).await {
+                            warn!("Failed to send stream error to user {}: {}", user_id, e2);
+                        }
+                    }
+                    return Err(e);
+                }
+            };
+            let mut full_response = String::new();
+
+            while let Some(chunk) = stream_rx.recv().await {
+                full_response.push_str(&chunk);
+                if let Some(ref ws) = self.ws_manager {
+                    let payload = serde_json::json!({
+                        "type": "chat_stream",
+                        "session_id": db_session_id,
+                        "chunk": chunk,
+                        "done": false,
+                    });
+                    if let Err(e) = ws.send_payload_to_user(&user_id, &payload).await {
+                        warn!("Failed to send stream chunk to user {}: {}", user_id, e);
+                    }
+                }
+            }
+
+            if full_response.is_empty() {
+                warn!("LLM stream returned empty response for user {}", user_id);
+            }
+
+            // 发送完成标记
+            if let Some(ref ws) = self.ws_manager {
+                let payload = serde_json::json!({
+                    "type": "chat_stream",
+                    "session_id": db_session_id,
+                    "chunk": "",
+                    "done": true,
+                });
+                if let Err(e) = ws.send_payload_to_user(&user_id, &payload).await {
+                    warn!("Failed to send stream done marker to user {}: {}", user_id, e);
+                }
+            }
+
+            full_response
+        } else {
+            self.call_llm_with_context(&message, &history, &images, &memory_context
+            ).await?
+        };
 
         // 7. 添加助手回复到会话历史
         self.session_manager
@@ -237,8 +304,10 @@ impl MessageProcessor {
             ).await;
         }
 
-        // 8. 发送回复
-        self.send_reply(platform, channel_id, &message, &llm_response).await?;
+        // 8. 发送回复（WebChat 流式路径已在前面推送完毕，不再发送整段消息）
+        if platform != PlatformType::WebChat {
+            self.send_reply(platform, channel_id, &message, &llm_response).await?;
+        }
 
         // 9. Memory 回写
         if let Some(ref memory) = self.memory_system {
@@ -284,6 +353,22 @@ impl MessageProcessor {
         }
 
         Ok(())
+    }
+
+    /// 公共入口：根据平台选择处理路径
+    pub async fn handle_channel_message(
+        &self,
+        platform: PlatformType,
+        channel_id: &str,
+        message: Message,
+        resolver: Arc<AgentResolver>,
+        agent_runtime: Arc<dyn gateway::AgentRuntime>,
+    ) -> Result<(), GatewayError> {
+        if platform == PlatformType::WebChat {
+            self.handle_message(platform, channel_id, message).await
+        } else {
+            self.handle_message_via_agent(platform, channel_id, message, resolver, agent_runtime).await
+        }
     }
 
     /// 处理消息（通过 AgentRuntime）
@@ -649,7 +734,59 @@ impl MessageProcessor {
         })
     }
 
-    /// 调用 LLM 并传入上下文
+    fn build_llm_messages(
+        &self,
+        message: &Message,
+        history: &[SessionMessage],
+        images: &[ProcessedImage],
+        memory_context: &str,
+    ) -> Vec<beebotos_agents::llm::Message> {
+        use beebotos_agents::llm::{Content, Message as LLMMessage, Role};
+        use beebotos_agents::llm::types::ImageUrlContent;
+
+        let mut messages: Vec<LLMMessage> = Vec::new();
+
+        if !self.llm_service.system_prompt().is_empty() {
+            messages.push(LLMMessage::system(&self.llm_service.system_prompt()));
+        }
+
+        if !memory_context.is_empty() {
+            messages.push(LLMMessage::system(
+                &format!(
+                    "以下是与当前对话相关的历史记忆，供你参考：\n{}",
+                    memory_context
+                ),
+            ));
+        }
+
+        for msg in history.iter().take(history.len().saturating_sub(1)) {
+            match msg.role.as_str() {
+                "user" => messages.push(LLMMessage::user(&msg.content)),
+                "assistant" => messages.push(LLMMessage::assistant(&msg.content)),
+                _ => {}
+            }
+        }
+
+        if images.is_empty() {
+            messages.push(LLMMessage::user(&message.content));
+        } else {
+            let mut contents: Vec<Content> = vec![Content::Text {
+                text: message.content.clone(),
+            }];
+            for image in images {
+                contents.push(Content::ImageUrl {
+                    image_url: ImageUrlContent {
+                        url: format!("data:{};base64,{}", image.mime_type, image.data),
+                        detail: Some("auto".to_string()),
+                    },
+                });
+            }
+            messages.push(LLMMessage::multimodal(Role::User, contents));
+        }
+
+        messages
+    }
+
     async fn call_llm_with_context(
         &self,
         message: &Message,
@@ -657,31 +794,21 @@ impl MessageProcessor {
         images: &[ProcessedImage],
         memory_context: &str,
     ) -> Result<String, GatewayError> {
-        // 构建包含历史和记忆的提示
-        let mut context = String::new();
+        let messages = self.build_llm_messages(message, history, images, memory_context);
+        info!("🤖 调用 LLM，消息数: {}", messages.len());
+        self.llm_service.process_messages(messages).await
+    }
 
-        if !memory_context.is_empty() {
-            context.push_str("以下是与当前对话相关的历史记忆，供你参考：\n");
-            context.push_str(memory_context);
-            context.push_str("\n\n");
-        }
-
-        for msg in history.iter().take(history.len().saturating_sub(1)) {
-            let role = match msg.role.as_str() {
-                "user" => "用户",
-                "assistant" => "助手",
-                _ => &msg.role,
-            };
-            context.push_str(&format!("{}: {}\n", role, msg.content));
-        }
-
-        // 当前消息
-        context.push_str(&format!("用户: {}\n", message.content));
-
-        info!("🤖 调用 LLM，上下文长度: {} 字符", context.len());
-
-        // 调用 LLM 服务
-        self.llm_service.process_message(message).await
+    async fn call_llm_stream_with_context(
+        &self,
+        message: &Message,
+        history: &[SessionMessage],
+        images: &[ProcessedImage],
+        memory_context: &str,
+    ) -> Result<tokio::sync::mpsc::Receiver<String>, GatewayError> {
+        let messages = self.build_llm_messages(message, history, images, memory_context);
+        info!("🤖 调用 LLM 流式接口，消息数: {}", messages.len());
+        self.llm_service.process_messages_stream(messages).await
     }
 
     /// 发送回复
