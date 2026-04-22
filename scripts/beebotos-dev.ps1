@@ -182,9 +182,21 @@ function Start-Service($name) {
     # web-server needs correct static-path and gateway-url to work properly
     $startArgs = @{}
     if ($name -eq "web") {
-        $webStaticPath = Join-Path $ProjectRoot "apps\web"
-        $startArgs["ArgumentList"] = "`"--static-path`" `"$webStaticPath`" `"--gateway-url`" http://localhost:8000"
-        Print-Info "Static path: $webStaticPath"
+        # 准备临时静态目录，解决 CSS/favicon 占位符问题
+        $tempStaticDir = Join-Path $ProjectRoot "data\temp-web-static"
+        if (Test-Path $tempStaticDir) { Remove-Item -Recurse -Force $tempStaticDir }
+        New-Item -ItemType Directory -Force -Path $tempStaticDir | Out-Null
+        Copy-Item (Join-Path $ProjectRoot "apps\web\index.html") $tempStaticDir
+        Copy-Item -Recurse (Join-Path $ProjectRoot "apps\web\pkg") $tempStaticDir
+        Copy-Item -Recurse (Join-Path $ProjectRoot "apps\web\style") $tempStaticDir
+        Copy-Item (Join-Path $ProjectRoot "apps\web\style\main.css") (Join-Path $tempStaticDir "style.css")
+        Copy-Item (Join-Path $ProjectRoot "apps\web\style\components.css") (Join-Path $tempStaticDir "components.css")
+        $realFavicon = Join-Path $ProjectRoot "apps\web\public\favicon.svg"
+        if (Test-Path $realFavicon) {
+            Copy-Item $realFavicon (Join-Path $tempStaticDir "favicon.svg")
+        }
+        $startArgs["ArgumentList"] = "`"--static-path`" `"$tempStaticDir`" `"--gateway-url`" http://localhost:8000"
+        Print-Info "Static path: $tempStaticDir"
         Print-Info "Gateway URL: http://localhost:8000"
     }
 
@@ -266,12 +278,14 @@ function Pack-Release($target = "all") {
         Get-ChildItem -Path $pkgSource | ForEach-Object {
             Copy-Item -Path $_.FullName -Destination $pkgDest -Recurse -Force
         }
-        # Copy static web assets (index.html, CSS, favicon)
-        foreach ($asset in @("index.html","favicon.svg")) {
-            $src = Join-Path $ProjectRoot "apps\web\$asset"
-            if (Test-Path $src) {
-                Copy-Item $src $outDir
-            }
+        # Copy static web assets (favicon.svg 在 apps/web/ 下是占位符，从 public/ 复制真实文件)
+        $src = Join-Path $ProjectRoot "apps\web\index.html"
+        if (Test-Path $src) {
+            Copy-Item $src $outDir
+        }
+        $realFavicon = Join-Path $ProjectRoot "apps\web\public\favicon.svg"
+        if (Test-Path $realFavicon) {
+            Copy-Item $realFavicon (Join-Path $outDir "favicon.svg")
         }
         # Copy real CSS from style/ directory (root CSS files are redirects)
         $styleDir = Join-Path $ProjectRoot "apps\web\style"
@@ -293,6 +307,11 @@ function Pack-Release($target = "all") {
 
     if (Test-Path (Join-Path $ProjectRoot "config")) {
         Copy-Item -Recurse (Join-Path $ProjectRoot "config") $outDir
+        # 调整 web-server 生产配置：静态文件路径指向当前目录
+        $prodConfig = Join-Path $outDir "config\web-server.toml"
+        if (Test-Path $prodConfig) {
+            (Get-Content $prodConfig) -replace 'path = "apps/web"', 'path = "."' | Set-Content $prodConfig -Encoding UTF8
+        }
     }
 
     Copy-Item (Join-Path $ProjectRoot "scripts\beebotos-run.ps1") $outDir

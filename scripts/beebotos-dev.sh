@@ -140,7 +140,25 @@ start_service() {
     print_info "Binary: $binary"
     print_info "Port: $port"
 
-    nohup "$binary" > "${PID_DIR}/${svc}.log" 2>&1 &
+    if [[ "$svc" == "web" ]]; then
+        # 准备临时静态目录，解决 CSS/favicon 软链接问题
+        local temp_static_dir="${PROJECT_ROOT}/data/run/web-static"
+        rm -rf "$temp_static_dir"
+        mkdir -p "$temp_static_dir"
+        cp -L "${PROJECT_ROOT}/apps/web/index.html" "$temp_static_dir/"
+        cp -rL "${PROJECT_ROOT}/apps/web/pkg" "$temp_static_dir/"
+        cp -rL "${PROJECT_ROOT}/apps/web/style" "$temp_static_dir/"
+        cp -L "${PROJECT_ROOT}/apps/web/style/main.css" "$temp_static_dir/style.css"
+        cp -L "${PROJECT_ROOT}/apps/web/style/components.css" "$temp_static_dir/components.css"
+        if [[ -f "${PROJECT_ROOT}/apps/web/public/favicon.svg" ]]; then
+            cp -L "${PROJECT_ROOT}/apps/web/public/favicon.svg" "$temp_static_dir/favicon.svg"
+        fi
+        print_info "Static path: $temp_static_dir"
+        print_info "Gateway URL: http://localhost:8000"
+        nohup "$binary" --static-path "$temp_static_dir" --gateway-url http://localhost:8000 > "${PID_DIR}/${svc}.log" 2>&1 &
+    else
+        nohup "$binary" > "${PID_DIR}/${svc}.log" 2>&1 &
+    fi
     local pid=$!
     echo $pid > "$pid_file"
 
@@ -221,6 +239,18 @@ pack_release() {
         fi
         cp "${PROJECT_ROOT}/target/release/web-server" "${out_dir}/"
         cp -r "${PROJECT_ROOT}/apps/web/pkg/." "${out_dir}/pkg/"
+
+        # 复制 web 入口页面和静态资源
+        cp "${PROJECT_ROOT}/apps/web/index.html" "${out_dir}/"
+        cp -rL "${PROJECT_ROOT}/apps/web/style" "${out_dir}/"
+        cp -r "${PROJECT_ROOT}/apps/web/public" "${out_dir}/"
+
+        # 复制根目录下的软链接文件（style.css -> style/main.css 等）
+        for link_file in style.css components.css favicon.svg; do
+            if [[ -L "${PROJECT_ROOT}/apps/web/${link_file}" ]]; then
+                cp -L "${PROJECT_ROOT}/apps/web/${link_file}" "${out_dir}/${link_file}"
+            fi
+        done
     fi
     if [[ "$target" == "all" || "$target" == "beehub" ]]; then
         if [[ -f "${PROJECT_ROOT}/target/release/beehub" ]]; then

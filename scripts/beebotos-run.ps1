@@ -1,6 +1,6 @@
 #!/usr/bin/env pwsh
 # BeeBotOS Production Runner (Windows)
-# Usage: .\beebotos-run.ps1 [gateway|web|beehub|all]
+# Usage: .\beebotos-run.ps1 [start|stop|restart|status] [gateway|web|beehub|all]
 
 $ErrorActionPreference = "Stop"
 
@@ -60,13 +60,17 @@ function Start-ServiceByName($name) {
     $logFile = Join-Path $LogDir "$name.log"
     $errFile = Join-Path $LogDir "$name.err"
     $pidFile = Join-Path $RunDir "$name.pid"
-    $procArgs = @()
-    if ($name -eq "web") {
-        $procArgs = @("--static-path", ".")
+    $procParams = @{
+        FilePath               = $binaryPath
+        RedirectStandardOutput = $logFile
+        RedirectStandardError  = $errFile
+        PassThru               = $true
+        WindowStyle            = "Hidden"
     }
-    $proc = Start-Process -FilePath $binaryPath -ArgumentList $procArgs `
-        -RedirectStandardOutput $logFile -RedirectStandardError $errFile `
-        -PassThru -WindowStyle Hidden
+    if ($name -eq "web") {
+        $procParams.ArgumentList = @("--config", "config\web-server.toml", "--static-path", ".")
+    }
+    $proc = Start-Process @procParams
     $proc.Id | Set-Content $pidFile -NoNewline
     Start-Sleep -Seconds 1
     try {
