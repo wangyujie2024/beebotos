@@ -700,11 +700,6 @@ pub enum Theme {
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct LlmGlobalConfig {
     pub default_provider: String,
-    pub fallback_chain: Vec<String>,
-    pub cost_optimization: bool,
-    pub max_tokens: u32,
-    pub system_prompt: String,
-    pub request_timeout: u64,
     pub providers: Vec<LlmProviderConfig>,
 }
 
@@ -715,8 +710,7 @@ pub struct LlmProviderConfig {
     pub api_key_masked: String,
     pub model: String,
     pub base_url: String,
-    pub temperature: f32,
-    pub context_window: Option<u32>,
+    pub protocol: String,
 }
 
 /// LLM Metrics Response

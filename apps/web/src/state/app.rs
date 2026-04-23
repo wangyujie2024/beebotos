@@ -12,6 +12,7 @@ use crate::api::{
     AgentService, ApiClient, AuthService, BrowserApiService, DaoService, LlmConfigService,
     SettingsService, SkillService, TreasuryService, WebchatApiService,
 };
+use crate::api::llm_provider_service::LlmProviderService;
 use crate::state::{
     agent::{provide_agent_state, AgentState},
     auth::{AuthState},
@@ -163,6 +164,11 @@ impl AppState {
     /// Get LLM config service
     pub fn llm_config_service(&self) -> LlmConfigService {
         LlmConfigService::new(self.api_client())
+    }
+
+    /// Get LLM provider admin service
+    pub fn llm_provider_service(&self) -> LlmProviderService {
+        LlmProviderService::new(self.api_client())
     }
 
     /// Set online status

@@ -73,6 +73,8 @@ pub fn init_i18n() -> I18nContext {
     zh.insert("nav-skill-instances", "实例管理");
     zh.insert("nav-channels", "频道管理");
     zh.insert("nav-settings", "设置");
+    zh.insert("nav-models", "模型");
+    zh.insert("nav-llm-config", "LLM 配置");
     zh.insert("nav-chat", "聊天");
     zh.insert("nav-browser", "浏览器");
     zh.insert("action-get-started", "开始使用");
@@ -262,6 +264,8 @@ pub fn init_i18n() -> I18nContext {
     en.insert("nav-skill-instances", "Instances");
     en.insert("nav-channels", "Channels");
     en.insert("nav-settings", "Settings");
+    en.insert("nav-models", "Models");
+    en.insert("nav-llm-config", "LLM Config");
     en.insert("nav-chat", "Chat");
     en.insert("nav-browser", "Browser");
     en.insert("action-get-started", "Get Started");

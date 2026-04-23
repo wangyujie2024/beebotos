@@ -9,6 +9,7 @@
 pub mod browser;
 pub mod client;
 pub mod gateway;
+pub mod llm_provider_service;
 pub mod services;
 pub mod webchat;
 

@@ -124,6 +124,12 @@ pub fn Sidebar() -> impl IntoView {
                     </div>
                     <div class="nav-group-items">
                         <NavItem
+                            href="/models"
+                            icon="🧠"
+                            label=move || i18n_stored.get_value().t("nav-models")
+                            current_path=current_path
+                        />
+                        <NavItem
                             href="/settings"
                             icon="⚙️"
                             label=move || i18n_stored.get_value().t("nav-settings")

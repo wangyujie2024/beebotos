@@ -131,14 +131,6 @@ pub fn LlmConfigPage() -> impl IntoView {
                                 <h2>"Global Configuration"</h2>
                                 <div class="info-grid">
                                     <InfoItem class="info-row" label="Default Provider" value=cfg.default_provider />
-                                    <InfoItem class="info-row" label="Max Tokens" value=cfg.max_tokens.to_string() />
-                                    <InfoItem class="info-row" label="Request Timeout" value=format!("{}s", cfg.request_timeout) />
-                                    <InfoItem class="info-row" label="Cost Optimization" value=if cfg.cost_optimization { "Enabled" } else { "Disabled" }.to_string() />
-                                    <InfoItem class="info-row" label="Fallback Chain" value=cfg.fallback_chain.join(", ") />
-                                </div>
-                                <div class="form-group">
-                                    <label>"System Prompt"</label>
-                                    <textarea readonly class="system-prompt">{cfg.system_prompt}</textarea>
                                 </div>
                             </section>
                         })}
@@ -165,8 +157,7 @@ pub fn LlmConfigPage() -> impl IntoView {
                                                     <InfoItem class="info-row" label="Model" value=p.model />
                                                     <InfoItem class="info-row" label="Base URL" value=p.base_url />
                                                     <InfoItem class="info-row" label="API Key" value=p.api_key_masked />
-                                                    <InfoItem class="info-row" label="Temperature" value=format!("{:.2}", p.temperature) />
-                                                    <InfoItem class="info-row" label="Context Window" value=p.context_window.map(|c| c.to_string()).unwrap_or_else(|| "Default".to_string()) />
+                                                    <InfoItem class="info-row" label="Protocol" value=p.protocol />
                                                 </div>
                                             </div>
                                         }
