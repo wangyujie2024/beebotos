@@ -176,6 +176,8 @@ pub struct AppState {
     pub auth_service: Option<Arc<crate::services::AuthService>>,
     /// Config manager for hot-reload
     pub config_manager: Option<Arc<crate::config_center_integration::GatewayConfigManager>>,
+    /// Encryption service for sensitive data
+    pub encryption_service: Arc<crate::services::encryption_service::EncryptionService>,
 }
 
 impl AppState {
@@ -251,8 +253,18 @@ impl AppState {
             Some(Arc::new(mgr))
         };
 
+        // Initialize encryption service
+        let encryption_service = Arc::new(
+            crate::services::encryption_service::EncryptionService::from_env()
+                .map_err(|e| anyhow::anyhow!("Failed to initialize encryption service: {}", e))?
+        );
+        info!("✅ Encryption service initialized");
+
         // Initialize LLM service first (needed by AgentRuntime)
-        let llm_service = match crate::services::llm_service::LlmService::new(config.clone()).await {
+        let llm_service = match crate::services::llm_service::LlmService::new(
+            Arc::new(db.clone()),
+            encryption_service.clone(),
+        ).await {
             Ok(service) => {
                 info!("✅ LLM Service initialized with beebotos_agents::llm");
                 Arc::new(service)
@@ -488,6 +500,7 @@ impl AppState {
             memory_system,
             auth_service,
             config_manager,
+            encryption_service,
         })
     }
 }
@@ -1308,6 +1321,15 @@ fn create_router(app_state: Arc<AppState>, gateway_state: Arc<GatewayState>) -> 
         .route("/api/v1/llm/metrics", get(handlers::http::llm_metrics::get_llm_metrics))
         .route("/api/v1/llm/config", get(handlers::http::llm_config::get_llm_global_config))
         .route("/api/v1/llm/health", get(handlers::http::llm_metrics::get_llm_health))
+        // LLM Provider Admin API
+        .route("/api/v1/admin/llm/providers", get(handlers::http::llm_admin::list_providers))
+        .route("/api/v1/admin/llm/providers", post(handlers::http::llm_admin::create_provider))
+        .route("/api/v1/admin/llm/providers/:id", put(handlers::http::llm_admin::update_provider))
+        .route("/api/v1/admin/llm/providers/:id", delete(handlers::http::llm_admin::delete_provider))
+        .route("/api/v1/admin/llm/providers/:id/models", post(handlers::http::llm_admin::add_model))
+        .route("/api/v1/admin/llm/providers/:id/models/:model_id", delete(handlers::http::llm_admin::delete_model))
+        .route("/api/v1/admin/llm/providers/:id/default", put(handlers::http::llm_admin::set_default_provider))
+        .route("/api/v1/admin/llm/providers/:id/models/:model_id/default", put(handlers::http::llm_admin::set_default_model))
         // Skills API
         .route("/api/v1/skills", get(handlers::http::skills::list_skills))
         .route("/api/v1/skills/install", post(handlers::http::skills::install_skill))
