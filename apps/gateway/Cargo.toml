@@ -15,6 +15,7 @@ beebotos-core = { workspace = true }
 beebotos-kernel = { workspace = true }
 beebotos-agents = { workspace = true }
 beebotos-chain = { workspace = true }
+beebotos-crypto = { workspace = true }
 beebotos-message-bus = { workspace = true, features = ["memory"] }
 beebotos-telemetry = { workspace = true, features = ["metrics"] }
 

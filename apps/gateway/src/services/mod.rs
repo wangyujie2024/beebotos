@@ -15,6 +15,7 @@ pub mod chain_transaction;
 pub mod dao_service;
 pub mod identity_cache;
 pub mod identity_service;
+pub mod encryption_service;
 pub mod llm_service;
 pub use llm_service::{LlmMetrics, MetricsSummary};
 pub mod message_processor;
