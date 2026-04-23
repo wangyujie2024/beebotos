@@ -222,7 +222,7 @@ pub fn SkillsPage() -> impl IntoView {
                                     .collect();
 
                                 if filtered.is_empty() {
-                                    view! { <SkillsEmpty/> }.into_any()
+                                    view! { <SkillsEmpty hub=selected_hub.get() search=active_search.get()/> }.into_any()
                                 } else {
                                     view! {
                                         <SkillsGrid skills=filtered reload=reload_skills.clone() selected_hub=selected_hub.clone() on_show_details=move |s| show_details.set(Some(s))/>
@@ -419,55 +419,123 @@ fn SkillCard(
                             </button>
                         }.into_any()
                     } else {
-                        let app_state = app_state.clone();
-                        let skill = skill_sig.get();
-                        let reload = reload.clone();
-                        view! {
-                            <button
-                                class="btn btn-primary btn-sm"
-                                disabled=move || is_installing.get()
-                                on:click=move |_| {
-                                    is_installing.set(true);
-                                    let service = app_state.skill_service();
-                                    let app_state = app_state.clone();
-                                    let skill_name = skill.name.clone();
-                                    let skill_id = skill.id.clone();
-                                    let reload = reload.clone();
-                                    leptos::task::spawn_local(async move {
-                                        let req = InstallSkillRequest {
-                                            source: skill_id.clone(),
-                                            agent_id: None,
-                                            version: None,
-                                            hub: selected_hub.get().filter(|h| !h.is_empty()),
-                                        };
-                                        match service.install(req).await {
-                                            Ok(resp) => {
-                                                app_state.notify(
-                                                    crate::state::notification::NotificationType::Success,
-                                                    "Skill Installed",
-                                                    format!("{} installed successfully", resp.name),
-                                                );
-                                                reload();
-                                            }
-                                            Err(e) => {
-                                                app_state.notify(
-                                                    crate::state::notification::NotificationType::Error,
-                                                    "Install Failed",
-                                                    format!("Failed to install {}: {}", skill_name, e),
-                                                );
-                                            }
+                        let hub = selected_hub.get();
+                        if hub.as_deref() == Some("clawhub") || hub.as_deref() == Some("beehub") {
+                            let skill_id = skill_sig.get().id.clone();
+                            let hub_url = match hub.as_deref() {
+                                Some("clawhub") => format!("https://clawhub.ai/skills/{}", skill_id),
+                                Some("beehub") => format!("https://beehub.io/skills/{}", skill_id),
+                                _ => String::new(),
+                            };
+                            let app_state = app_state.clone();
+                            let skill = skill_sig.get();
+                            let reload = reload.clone();
+                            view! {
+                                <>
+                                    <a
+                                        class="btn btn-primary btn-sm"
+                                        href=hub_url
+                                        target="_blank"
+                                    >
+                                        "View on Hub"
+                                    </a>
+                                    <button
+                                        class="btn btn-success btn-sm"
+                                        disabled=move || is_installing.get()
+                                        on:click=move |_| {
+                                            is_installing.set(true);
+                                            let service = app_state.skill_service();
+                                            let app_state = app_state.clone();
+                                            let skill_name = skill.name.clone();
+                                            let skill_id = skill.id.clone();
+                                            let reload = reload.clone();
+                                            leptos::task::spawn_local(async move {
+                                                let req = InstallSkillRequest {
+                                                    source: skill_id.clone(),
+                                                    agent_id: None,
+                                                    version: None,
+                                                    hub: selected_hub.get().filter(|h| !h.is_empty()),
+                                                };
+                                                match service.install(req).await {
+                                                    Ok(resp) => {
+                                                        app_state.notify(
+                                                            crate::state::notification::NotificationType::Success,
+                                                            "Skill Installed",
+                                                            format!("{} installed successfully", resp.name),
+                                                        );
+                                                        reload();
+                                                    }
+                                                    Err(e) => {
+                                                        app_state.notify(
+                                                            crate::state::notification::NotificationType::Error,
+                                                            "Install Failed",
+                                                            format!("Failed to install {}: {}", skill_name, e),
+                                                        );
+                                                    }
+                                                }
+                                                is_installing.set(false);
+                                            });
                                         }
-                                        is_installing.set(false);
-                                    });
-                                }
-                            >
-                                {move || if is_installing.get() {
-                                    "Installing..."
-                                } else {
-                                    "Install"
-                                }}
-                            </button>
-                        }.into_any()
+                                    >
+                                        {move || if is_installing.get() {
+                                            "Installing..."
+                                        } else {
+                                            "Install"
+                                        }}
+                                    </button>
+                                </>
+                            }.into_any()
+                        } else {
+                            let app_state = app_state.clone();
+                            let skill = skill_sig.get();
+                            let reload = reload.clone();
+                            view! {
+                                <button
+                                    class="btn btn-primary btn-sm"
+                                    disabled=move || is_installing.get()
+                                    on:click=move |_| {
+                                        is_installing.set(true);
+                                        let service = app_state.skill_service();
+                                        let app_state = app_state.clone();
+                                        let skill_name = skill.name.clone();
+                                        let skill_id = skill.id.clone();
+                                        let reload = reload.clone();
+                                        leptos::task::spawn_local(async move {
+                                            let req = InstallSkillRequest {
+                                                source: skill_id.clone(),
+                                                agent_id: None,
+                                                version: None,
+                                                hub: selected_hub.get().filter(|h| !h.is_empty()),
+                                            };
+                                            match service.install(req).await {
+                                                Ok(resp) => {
+                                                    app_state.notify(
+                                                        crate::state::notification::NotificationType::Success,
+                                                        "Skill Installed",
+                                                        format!("{} installed successfully", resp.name),
+                                                    );
+                                                    reload();
+                                                }
+                                                Err(e) => {
+                                                    app_state.notify(
+                                                        crate::state::notification::NotificationType::Error,
+                                                        "Install Failed",
+                                                        format!("Failed to install {}: {}", skill_name, e),
+                                                    );
+                                                }
+                                            }
+                                            is_installing.set(false);
+                                        });
+                                    }
+                                >
+                                    {move || if is_installing.get() {
+                                        "Installing..."
+                                    } else {
+                                        "Install"
+                                    }}
+                                </button>
+                            }.into_any()
+                        }
                     }}
                 </div>
             </div>
@@ -566,26 +634,60 @@ fn SkillsLoading() -> impl IntoView {
 }
 
 #[component]
-fn SkillsEmpty() -> impl IntoView {
+fn SkillsEmpty(
+    #[prop(default = None)] hub: Option<String>,
+    #[prop(default = String::new())] search: String,
+) -> impl IntoView {
     view! {
         <div class="empty-state">
             <div class="empty-icon">"📦"</div>
-            <h3>"No skills found"</h3>
-            <p>"Try adjusting your search or filters"</p>
+            {match hub {
+                Some(ref h) if search.is_empty() => view! {
+                    <>
+                        <h3>{format!("Search {}", h)}</h3>
+                        <p>"Enter a keyword above to search for skills on this hub."</p>
+                    </>
+                }.into_any(),
+                Some(ref h) => view! {
+                    <>
+                        <h3>{format!("No results on {}", h)}</h3>
+                        <p>"Try a different search term or switch to Local skills."</p>
+                    </>
+                }.into_any(),
+                None => view! {
+                    <>
+                        <h3>"No skills found"</h3>
+                        <p>"Try adjusting your search or filters"</p>
+                    </>
+                }.into_any(),
+            }}
         </div>
     }
 }
 
 #[component]
 fn SkillsError(#[prop(into)] message: String) -> impl IntoView {
+    let is_hub_unavailable = message.contains("502") || message.contains("503") || message.contains("unavailable");
     view! {
         <div class="error-state">
             <div class="error-icon">"⚠️"</div>
             <h3>"Failed to load skills"</h3>
-            <p>{message}</p>
+            {if is_hub_unavailable {
+                view! {
+                    <>
+                        <p>"The skill hub is currently unreachable."</p>
+                        <p class="text-muted">"Please switch to Local skills or check Gateway network configuration."</p>
+                    </>
+                }.into_any()
+            } else {
+                view! { <p>{message}</p> }.into_any()
+            }}
             <button
                 class="btn btn-primary"
-                on:click=move |_| { let _ = window().location().reload(); }
+                on:click=move |_| {
+                    let window = web_sys::window().expect("window not available");
+                    let _ = window.location().reload();
+                }
             >
                 "Retry"
             </button>

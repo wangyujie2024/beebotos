@@ -76,4 +76,6 @@ pub enum HubError {
     DownloadFailed(String),
     #[error("Authentication failed: {0}")]
     AuthFailed(String),
+    #[error("Direct download not supported by this hub")]
+    DownloadNotSupported,
 }

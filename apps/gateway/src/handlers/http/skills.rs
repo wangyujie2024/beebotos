@@ -196,9 +196,9 @@ pub async fn install_skill(
         }));
     }
     
-    // Download skill package
+    // Download skill package (may be optional for metadata-only hubs)
     info!("Downloading skill package for {}", metadata.id);
-    let package_bytes = match hub_type {
+    let download_result = match hub_type {
         HubType::ClawHub => {
             let client = ClawHubClient::new()
                 .map_err(|e| GatewayError::Internal {
@@ -206,12 +206,7 @@ pub async fn install_skill(
                     correlation_id: uuid::Uuid::new_v4().to_string(),
                 })?;
             
-            client.download_skill(&req.source, req.version.as_deref())
-                .await
-                .map_err(|e| GatewayError::Internal {
-                    message: format!("Failed to download skill: {}", e),
-                    correlation_id: uuid::Uuid::new_v4().to_string(),
-                })?
+            client.download_skill(&req.source, req.version.as_deref()).await
         }
         HubType::BeeHub => {
             let client = BeeHubClient::new()
@@ -220,22 +215,41 @@ pub async fn install_skill(
                     correlation_id: uuid::Uuid::new_v4().to_string(),
                 })?;
             
-            client.download_skill(&req.source, req.version.as_deref())
-                .await
-                .map_err(|e| GatewayError::Internal {
-                    message: format!("Failed to download skill: {}", e),
-                    correlation_id: uuid::Uuid::new_v4().to_string(),
-                })?
+            client.download_skill(&req.source, req.version.as_deref()).await
         }
     };
     
-    // Extract and install skill
-    install_skill_package(&metadata, &package_bytes)
-        .await
-        .map_err(|e| GatewayError::Internal {
-            message: format!("Failed to install skill package: {}", e),
-            correlation_id: uuid::Uuid::new_v4().to_string(),
-        })?;
+    match download_result {
+        Ok(package_bytes) => {
+            // Extract and install skill package
+            install_skill_package(&metadata, &package_bytes)
+                .await
+                .map_err(|e| GatewayError::Internal {
+                    message: format!("Failed to install skill package: {}", e),
+                    correlation_id: uuid::Uuid::new_v4().to_string(),
+                })?;
+        }
+        Err(crate::clients::HubError::DownloadNotSupported) => {
+            // Hub does not support direct downloads — install metadata-only stub
+            info!("Hub does not support downloads for {}; installing metadata-only stub", metadata.id);
+            let hub_label = match hub_type {
+                HubType::ClawHub => "clawhub",
+                HubType::BeeHub => "beehub",
+            };
+            install_skill_metadata_only(&metadata, hub_label)
+                .await
+                .map_err(|e| GatewayError::Internal {
+                    message: format!("Failed to install skill metadata: {}", e),
+                    correlation_id: uuid::Uuid::new_v4().to_string(),
+                })?;
+        }
+        Err(e) => {
+            return Err(GatewayError::Internal {
+                message: format!("Failed to download skill: {}", e),
+                correlation_id: uuid::Uuid::new_v4().to_string(),
+            });
+        }
+    }
     
     // Load and register to SkillRegistry if available
     if let Some(ref registry) = state.skill_registry {
@@ -275,36 +289,39 @@ pub async fn list_skills(
     
     // If hub is specified, search from remote hub
     if let Some(hub) = hub_type {
+        let search_query = query.search.as_deref().unwrap_or("");
+        
         let skills = match hub {
             HubType::ClawHub => {
                 let client = ClawHubClient::new()
-                    .map_err(|e| GatewayError::Internal {
-                        message: format!("Failed to create ClawHub client: {}", e),
-                        correlation_id: uuid::Uuid::new_v4().to_string(),
-                    })?;
+                    .map_err(|e| GatewayError::service_unavailable(
+                        "ClawHub",
+                        format!("ClawHub client initialization failed: {}", e),
+                    ))?;
                 
-                let search_query = query.search.as_deref().unwrap_or("");
-                client.search_skills(search_query)
-                    .await
-                    .map_err(|e| GatewayError::Internal {
-                        message: format!("Failed to search skills: {}", e),
-                        correlation_id: uuid::Uuid::new_v4().to_string(),
-                    })?
+                match client.search_skills(search_query).await {
+                    Ok(s) => s,
+                    Err(e) => {
+                        tracing::warn!("ClawHub search failed (query='{}'): {}", search_query, e);
+                        // Return empty list with a warning header instead of hard error
+                        return Ok(Json(vec![]));
+                    }
+                }
             }
             HubType::BeeHub => {
                 let client = BeeHubClient::new()
-                    .map_err(|e| GatewayError::Internal {
-                        message: format!("Failed to create BeeHub client: {}", e),
-                        correlation_id: uuid::Uuid::new_v4().to_string(),
-                    })?;
+                    .map_err(|e| GatewayError::service_unavailable(
+                        "BeeHub",
+                        format!("BeeHub client initialization failed: {}", e),
+                    ))?;
                 
-                let search_query = query.search.as_deref().unwrap_or("");
-                client.search_skills(search_query)
-                    .await
-                    .map_err(|e| GatewayError::Internal {
-                        message: format!("Failed to list skills: {}", e),
-                        correlation_id: uuid::Uuid::new_v4().to_string(),
-                    })?
+                match client.search_skills(search_query).await {
+                    Ok(s) => s,
+                    Err(e) => {
+                        tracing::warn!("BeeHub search failed (query='{}'): {}", search_query, e);
+                        return Ok(Json(vec![]));
+                    }
+                }
             }
         };
         
@@ -801,7 +818,7 @@ pub async fn hub_health() -> Result<Json<serde_json::Value>, GatewayError> {
     Ok(Json(serde_json::json!({
         "clawhub": {
             "status": if clawhub_healthy { "healthy" } else { "unhealthy" },
-            "url": std::env::var("CLAWHUB_URL").unwrap_or_else(|_| "https://hub.claw.dev/v1".to_string()),
+            "url": std::env::var("CLAWHUB_URL").unwrap_or_else(|_| "https://clawhub.ai/api/v1".to_string()),
         },
         "beehub": {
             "status": if beehub_healthy { "healthy" } else { "unhealthy" },
@@ -827,6 +844,37 @@ pub fn get_skills_base_dir() -> std::path::PathBuf {
 /// Check if skill is installed
 fn is_skill_installed(skill_id: &str) -> bool {
     get_skill_install_path(skill_id).exists()
+}
+
+/// Install skill metadata-only stub (no WASM package available from hub)
+async fn install_skill_metadata_only(
+    metadata: &SkillMetadata,
+    hub_label: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let skill_dir = get_skill_install_path(&metadata.id);
+    
+    // Create directory
+    tokio::fs::create_dir_all(&skill_dir).await?;
+    
+    // Write skill.yaml manifest
+    let manifest_path = skill_dir.join("skill.yaml");
+    let manifest = serde_yaml::to_string(&serde_json::json!({
+        "id": metadata.id,
+        "name": metadata.name,
+        "version": metadata.version,
+        "description": metadata.description,
+        "author": metadata.author,
+        "license": metadata.license,
+        "capabilities": metadata.capabilities,
+        "tags": metadata.tags,
+        "source_hub": hub_label,
+        "entry_point": null,
+    }))?;
+    
+    tokio::fs::write(&manifest_path, manifest).await?;
+    
+    info!("Installed metadata-only skill stub to {:?}", skill_dir);
+    Ok(())
 }
 
 /// Install skill package to disk
