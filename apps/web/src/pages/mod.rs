@@ -13,6 +13,7 @@ pub mod login;
 pub mod not_found;
 pub mod register;
 pub mod settings;
+pub mod setup;
 pub mod skill_instances;
 pub mod skills;
 pub mod treasury;
@@ -29,9 +30,10 @@ pub use login::LoginPage;
 pub use not_found::NotFound;
 pub use register::RegisterPage;
 pub use settings::SettingsPage;
+pub use setup::SetupPage;
 pub use skill_instances::SkillInstancesPage;
 pub use skills::SkillsPage;
-pub use treasury::TreasuryPage;
+pub use treasury::{TreasuryPage, TreasuryTransactionsPage};
 pub use webchat::WebchatPage;
 
 #[cfg(test)]

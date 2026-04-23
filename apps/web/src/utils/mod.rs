@@ -1,8 +1,11 @@
 use gloo_storage::{LocalStorage, Storage};
 
+pub mod dom;
 pub mod security;
 pub mod theme;
 pub mod validation;
+
+pub use dom::{download_file, event_target_checked, event_target_value};
 
 pub use security::{
     contains_dangerous_html, escape_html, escape_html_attribute, sanitize_filename, sanitize_url,

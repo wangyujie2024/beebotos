@@ -3,11 +3,13 @@
 //! Displays global LLM configuration and real-time metrics from Gateway.
 
 use crate::api::{LlmConfigService, LlmGlobalConfig, LlmMetricsResponse, LlmHealthResponse};
-use crate::components::InlineLoading;
+use crate::components::{BarChart, InlineLoading, InfoItem, PieChart};
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 use leptos::view;
 use leptos_meta::*;
+use wasm_bindgen::prelude::*;
+use wasm_bindgen::JsCast;
 
 #[component]
 pub fn LlmConfigPage() -> impl IntoView {
@@ -56,10 +58,39 @@ pub fn LlmConfigPage() -> impl IntoView {
     });
 
     // Auto-refresh metrics every 10s
+    let should_poll = RwSignal::new(true);
+
     Effect::new(move |_| {
+        let should_poll = should_poll;
+
+        // Sync polling state with document visibility
+        if let Some(document) = web_sys::window().and_then(|w| w.document()) {
+            let hidden = document.hidden();
+            should_poll.set(!hidden);
+
+            let doc_for_handler = document.clone();
+            let visibility_handler = Closure::wrap(Box::new(move || {
+                let hidden = doc_for_handler.hidden();
+                should_poll.set(!hidden);
+            }) as Box<dyn FnMut()>);
+            let _ = document.add_event_listener_with_callback(
+                "visibilitychange",
+                visibility_handler.as_ref().unchecked_ref(),
+            );
+            visibility_handler.forget();
+        }
+
+        // Stop polling when component unmounts
+        on_cleanup(move || {
+            should_poll.set(false);
+        });
+
         spawn_local(async move {
             loop {
                 gloo_timers::future::TimeoutFuture::new(10_000).await;
+                if !should_poll.get() {
+                    break;
+                }
                 let service = service_stored.get_value();
                 if let Ok(m) = service.get_metrics().await {
                     metrics.set(Some(m));
@@ -99,11 +130,11 @@ pub fn LlmConfigPage() -> impl IntoView {
                             <section class="card llm-section">
                                 <h2>"Global Configuration"</h2>
                                 <div class="info-grid">
-                                    <InfoRow label="Default Provider" value=cfg.default_provider />
-                                    <InfoRow label="Max Tokens" value=cfg.max_tokens.to_string() />
-                                    <InfoRow label="Request Timeout" value=format!("{}s", cfg.request_timeout) />
-                                    <InfoRow label="Cost Optimization" value=if cfg.cost_optimization { "Enabled" } else { "Disabled" }.to_string() />
-                                    <InfoRow label="Fallback Chain" value=cfg.fallback_chain.join(", ") />
+                                    <InfoItem class="info-row" label="Default Provider" value=cfg.default_provider />
+                                    <InfoItem class="info-row" label="Max Tokens" value=cfg.max_tokens.to_string() />
+                                    <InfoItem class="info-row" label="Request Timeout" value=format!("{}s", cfg.request_timeout) />
+                                    <InfoItem class="info-row" label="Cost Optimization" value=if cfg.cost_optimization { "Enabled" } else { "Disabled" }.to_string() />
+                                    <InfoItem class="info-row" label="Fallback Chain" value=cfg.fallback_chain.join(", ") />
                                 </div>
                                 <div class="form-group">
                                     <label>"System Prompt"</label>
@@ -131,11 +162,11 @@ pub fn LlmConfigPage() -> impl IntoView {
                                                     })}
                                                 </div>
                                                 <div class="info-grid">
-                                                    <InfoRow label="Model" value=p.model />
-                                                    <InfoRow label="Base URL" value=p.base_url />
-                                                    <InfoRow label="API Key" value=p.api_key_masked />
-                                                    <InfoRow label="Temperature" value=format!("{:.2}", p.temperature) />
-                                                    <InfoRow label="Context Window" value=p.context_window.map(|c| c.to_string()).unwrap_or_else(|| "Default".to_string()) />
+                                                    <InfoItem class="info-row" label="Model" value=p.model />
+                                                    <InfoItem class="info-row" label="Base URL" value=p.base_url />
+                                                    <InfoItem class="info-row" label="API Key" value=p.api_key_masked />
+                                                    <InfoItem class="info-row" label="Temperature" value=format!("{:.2}", p.temperature) />
+                                                    <InfoItem class="info-row" label="Context Window" value=p.context_window.map(|c| c.to_string()).unwrap_or_else(|| "Default".to_string()) />
                                                 </div>
                                             </div>
                                         }
@@ -178,21 +209,30 @@ pub fn LlmConfigPage() -> impl IntoView {
                                     <LatencyBar label="P95" value=m.latency.p95_ms max=1000.0 />
                                     <LatencyBar label="P99" value=m.latency.p99_ms max=1000.0 />
                                 </div>
+
+                                <h3>"Visual Overview"</h3>
+                                <div class="charts-grid">
+                                    <PieChart
+                                        title="Request Distribution"
+                                        labels=vec!["Success".to_string(), "Failed".to_string()]
+                                        values=vec![m.summary.successful_requests as f64, m.summary.failed_requests as f64]
+                                    />
+                                    <PieChart
+                                        title="Token Usage"
+                                        labels=vec!["Input".to_string(), "Output".to_string()]
+                                        values=vec![m.tokens.input_tokens as f64, m.tokens.output_tokens as f64]
+                                    />
+                                    <BarChart
+                                        title="Latency Percentiles (ms)"
+                                        labels=vec!["Avg".to_string(), "P50".to_string(), "P95".to_string(), "P99".to_string()]
+                                        values=vec![m.latency.average_ms, m.latency.p50_ms, m.latency.p95_ms, m.latency.p99_ms]
+                                    />
+                                </div>
                             </section>
                         })}
                     </div>
                 }.into_any()
             }}
-        </div>
-    }
-}
-
-#[component]
-fn InfoRow(#[prop(into)] label: String, #[prop(into)] value: String) -> impl IntoView {
-    view! {
-        <div class="info-row">
-            <span class="info-label">{label}</span>
-            <span class="info-value">{value}</span>
         </div>
     }
 }

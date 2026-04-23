@@ -33,7 +33,6 @@ pub fn SessionList(
             <div class="session-list">
                 {move || {
                     let on_select = on_select.clone();
-                    let on_new = on_new.clone();
                     let mut sorted_sessions = sessions.get();
                     sorted_sessions.sort_by(|a, b| {
                         if a.is_pinned && !b.is_pinned {

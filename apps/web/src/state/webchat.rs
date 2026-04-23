@@ -25,6 +25,8 @@ pub struct WebchatState {
     /// 侧边提问列表
     pub side_questions: RwSignal<Vec<SideQuestion>>
     ,
+    /// 消息缓存（按会话 ID）
+    pub message_cache: RwSignal<std::collections::HashMap<String, Vec<ChatMessage>>>,
     /// 当前错误
     pub error: RwSignal<Option<String>>,
 }
@@ -46,6 +48,7 @@ impl WebchatState {
                 limit_status: Default::default(),
             }),
             side_questions: RwSignal::new(Vec::new()),
+            message_cache: RwSignal::new(std::collections::HashMap::new()),
             error: RwSignal::new(None),
         }
     }
@@ -74,7 +77,12 @@ impl WebchatState {
 
     /// 添加消息
     pub fn add_message(&self, message: ChatMessage) {
-        self.current_messages.update(|msgs| msgs.push(message));
+        self.current_messages.update(|msgs| msgs.push(message.clone()));
+        if let Some(session_id) = self.current_session_id.get() {
+            self.message_cache.update(|cache| {
+                cache.entry(session_id).or_default().push(message);
+            });
+        }
     }
 
     /// 开始流式接收

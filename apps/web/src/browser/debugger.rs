@@ -490,11 +490,11 @@ impl BrowserDebugger {
 
         error_map
             .into_iter()
-            .map(|(msg, entries)| {
-                let first = entries.first().unwrap();
-                let last = entries.last().unwrap();
+            .filter_map(|(msg, entries)| {
+                let first = entries.first()?;
+                let last = entries.last()?;
 
-                ErrorSummary {
+                Some(ErrorSummary {
                     error_type: "RuntimeError".to_string(),
                     count: entries.len(),
                     first_occurrence: first.timestamp.clone(),
@@ -504,7 +504,7 @@ impl BrowserDebugger {
                         "检查选择器是否正确".to_string(),
                         "确认页面是否已加载".to_string(),
                     ],
-                }
+                })
             })
             .collect()
     }
@@ -594,32 +594,32 @@ impl ScreenshotRequest {
     }
 }
 
+use std::sync::OnceLock;
+use parking_lot::Mutex;
+
 /// 全局调试日志记录器
-pub static mut GLOBAL_DEBUGGER: Option<BrowserDebugger> = None;
+pub static GLOBAL_DEBUGGER: OnceLock<Mutex<BrowserDebugger>> = OnceLock::new();
 
 /// 初始化全局调试器
 pub fn init_global_debugger(config: DebuggerConfig) {
-    unsafe {
-        GLOBAL_DEBUGGER = Some(BrowserDebugger::new(config));
-    }
+    let _ = GLOBAL_DEBUGGER.set(Mutex::new(BrowserDebugger::new(config)));
 }
 
 /// 获取全局调试器
-#[allow(static_mut_refs)]
-pub fn global_debugger() -> Option<&'static mut BrowserDebugger> {
-    unsafe { GLOBAL_DEBUGGER.as_mut() }
+pub fn global_debugger() -> Option<&'static Mutex<BrowserDebugger>> {
+    GLOBAL_DEBUGGER.get()
 }
 
 /// 便捷日志函数
 pub fn log_info(source: LogSource, message: impl Into<String>) {
     if let Some(debugger) = global_debugger() {
-        debugger.info(source, message);
+        debugger.lock().info(source, message);
     }
 }
 
 pub fn log_error(source: LogSource, message: impl Into<String>) {
     if let Some(debugger) = global_debugger() {
-        debugger.error(source, message, None);
+        debugger.lock().error(source, message, None);
     }
 }
 

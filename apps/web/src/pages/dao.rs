@@ -1,4 +1,5 @@
 use crate::api::{CreateProposalRequest, DaoSummary, ProposalInfo, ProposalStatus};
+use crate::components::Modal;
 use crate::state::notification::NotificationType;
 use crate::state::use_app_state;
 use leptos::prelude::*;
@@ -94,66 +95,63 @@ pub fn DaoPage() -> impl IntoView {
                 </div>
 
                 // Create Proposal Modal
-                {move || if create_open.get() {
+                {move || {
+                    let on_create = on_create.clone();
+                    if create_open.get() {
                     view! {
-                        <div class="modal-overlay" on:click=move |_| create_open.set(false)>
-                            <div class="modal" on:click=move |e| e.stop_propagation()>
-                                <div class="modal-header">
-                                    <h3>"Create Proposal"</h3>
-                                    <button class="close-btn" on:click=move |_| create_open.set(false)>"✕"</button>
+                        <Modal title="Create Proposal" on_close=move || create_open.set(false)>
+                            <div class="modal-body">
+                                {move || create_error.get().map(|msg| view! {
+                                    <div class="alert alert-error">{msg}</div>
+                                })}
+                                <div class="form-group">
+                                    <label>"Title"</label>
+                                    <input
+                                        type="text"
+                                        prop:value=create_title
+                                        on:input=move |e| create_title.set(event_target_value(&e))
+                                        placeholder="Proposal title"
+                                    />
                                 </div>
-                                <div class="modal-body">
-                                    {move || create_error.get().map(|msg| view! {
-                                        <div class="alert alert-error">{msg}</div>
-                                    })}
-                                    <div class="form-group">
-                                        <label>"Title"</label>
-                                        <input
-                                            type="text"
-                                            prop:value=create_title
-                                            on:input=move |e| create_title.set(event_target_value(&e))
-                                            placeholder="Proposal title"
-                                        />
-                                    </div>
-                                    <div class="form-group">
-                                        <label>"Description"</label>
-                                        <textarea
-                                            prop:value=create_desc
-                                            on:input=move |e| create_desc.set(event_target_value(&e))
-                                            placeholder="Describe your proposal..."
-                                        />
-                                    </div>
-                                    <div class="form-group">
-                                        <label>"Type"</label>
-                                        <select
-                                            prop:value=create_type
-                                            on:change=move |e| create_type.set(event_target_value(&e))
-                                        >
-                                            <option value="general">"General"</option>
-                                            <option value="funding">"Funding"</option>
-                                            <option value="upgrade">"Upgrade"</option>
-                                            <option value="parameter">"Parameter"</option>
-                                        </select>
-                                    </div>
+                                <div class="form-group">
+                                    <label>"Description"</label>
+                                    <textarea
+                                        prop:value=create_desc
+                                        on:input=move |e| create_desc.set(event_target_value(&e))
+                                        placeholder="Describe your proposal..."
+                                    />
                                 </div>
-                                <div class="modal-footer">
-                                    <button class="btn btn-secondary" on:click=move |_| create_open.set(false)>"Cancel"</button>
-                                    <button
-                                        class="btn btn-primary"
-                                        on:click={
-                                            let on_create = on_create.clone();
-                                            move |_| on_create()
-                                        }
-                                        disabled=create_saving
+                                <div class="form-group">
+                                    <label>"Type"</label>
+                                    <select
+                                        prop:value=create_type
+                                        on:change=move |e| create_type.set(event_target_value(&e))
                                     >
-                                        {move || if create_saving.get() { "Creating..." } else { "Create Proposal" }}
-                                    </button>
+                                        <option value="general">"General"</option>
+                                        <option value="funding">"Funding"</option>
+                                        <option value="upgrade">"Upgrade"</option>
+                                        <option value="parameter">"Parameter"</option>
+                                    </select>
                                 </div>
                             </div>
-                        </div>
+                            <div class="modal-footer">
+                                <button class="btn btn-secondary" on:click=move |_| create_open.set(false)>"Cancel"</button>
+                                <button
+                                    class="btn btn-primary"
+                                    on:click={
+                                        let on_create = on_create.clone();
+                                        move |_| on_create()
+                                    }
+                                    disabled=create_saving
+                                >
+                                    {move || if create_saving.get() { "Creating..." } else { "Create Proposal" }}
+                                </button>
+                            </div>
+                        </Modal>
                     }.into_any()
                 } else {
                     ().into_any()
+                }
                 }}
 
                 <Suspense fallback=|| view! { <ProposalsLoading/> }>

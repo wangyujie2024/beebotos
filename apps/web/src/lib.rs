@@ -54,8 +54,9 @@ use components::{AuthGuard, ContentSecurityPolicy, GlobalErrorHandler, Sidebar};
 use i18n::{init_i18n, I18nContext};
 use leptos_router::hooks::use_location;
 use pages::{
-    AgentDetail, AgentsPage, ChannelsPage, DaoPage, Home, LlmConfigPage, LoginPage, NotFound, RegisterPage, SettingsPage, SkillInstancesPage, SkillsPage, TreasuryPage,
+    AgentDetail, AgentsPage, ChannelsPage, DaoPage, Home, LlmConfigPage, LoginPage, NotFound, RegisterPage, SettingsPage, SetupPage, SkillInstancesPage, SkillsPage, TreasuryPage, TreasuryTransactionsPage,
 };
+use components::AccessDenied;
 use state::provide_app_state;
 use utils::provide_theme;
 
@@ -201,6 +202,14 @@ pub fn App() -> impl IntoView {
                                         </AuthGuard>
                                     }
                                 />
+                                <Route
+                                    path=(StaticSegment("dao"), StaticSegment("treasury"), StaticSegment("transactions"))
+                                    view=move || view! {
+                                        <AuthGuard>
+                                            <TreasuryTransactionsPage />
+                                        </AuthGuard>
+                                    }
+                                />
 
                                 // 技能市场
                                 <Route
@@ -239,6 +248,19 @@ pub fn App() -> impl IntoView {
                                         </AuthGuard>
                                     }
                                 />
+                                <Route
+                                    path=(StaticSegment("settings"), StaticSegment("wizard"))
+                                    view=move || view! {
+                                        <AuthGuard>
+                                            <SetupPage />
+                                        </AuthGuard>
+                                    }
+                                />
+                                // Gateway 首次部署向导
+                                <Route
+                                    path=StaticSegment("setup")
+                                    view=SetupPage
+                                />
                                 // LLM 配置监控
                                 <Route
                                     path=StaticSegment("llm-config")
@@ -268,6 +290,9 @@ pub fn App() -> impl IntoView {
                                         </AuthGuard>
                                     }
                                 />
+
+                                // 权限不足页面
+                                <Route path=StaticSegment("unauthorized") view=AccessDenied />
                             </Routes>
                         </div>
                     </main>

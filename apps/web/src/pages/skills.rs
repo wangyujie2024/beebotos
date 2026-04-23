@@ -3,6 +3,7 @@
 //! Browse, install, and manage WASM skills from ClawHub/BeeHub or local registry.
 
 use crate::api::{InstallSkillRequest, SkillCategory, SkillInfo};
+use crate::components::{Modal, StarRating};
 use crate::state::use_app_state;
 use leptos::prelude::*;
 use leptos::view;
@@ -325,20 +326,6 @@ fn SkillCard(
         }
     };
 
-    // Star rating display
-    let rating_stars = {
-        let skill = skill_sig.get();
-        let rating = skill.rating;
-        let full = rating.floor() as usize;
-        let half = if rating - rating.floor() >= 0.5 { 1 } else { 0 };
-        let empty = 5usize.saturating_sub(full + half);
-        let mut stars = String::new();
-        stars.push_str(&"★".repeat(full));
-        if half > 0 { stars.push('⯪'); }
-        stars.push_str(&"☆".repeat(empty));
-        stars
-    };
-
     view! {
         <div class="card skill-card">
             <div class="skill-header">
@@ -352,7 +339,7 @@ fn SkillCard(
                             if s.downloads > 0 || s.rating > 0.0 {
                                 view! {
                                     <span class="skill-popularity">
-                                        {format!("{} downloads · {} {}  ", s.downloads, rating_stars.clone(), s.rating)}
+                                        {format!("{} downloads · ", s.downloads)}<StarRating rating=s.rating />{format!(" {}  ", s.rating)}
                                     </span>
                                 }.into_any()
                             } else {
@@ -494,27 +481,9 @@ fn SkillDetailModal(
     #[prop(into)] skill: SkillInfo,
     on_close: impl Fn() + Clone + Send + Sync + 'static,
 ) -> impl IntoView {
-    let rating_stars = {
-        let rating = skill.rating;
-        let full = rating.floor() as usize;
-        let half = if rating - rating.floor() >= 0.5 { 1 } else { 0 };
-        let empty = 5usize.saturating_sub(full + half);
-        let mut stars = String::new();
-        stars.push_str(&"★".repeat(full));
-        if half > 0 { stars.push('⯪'); }
-        stars.push_str(&"☆".repeat(empty));
-        stars
-    };
-
-    let on_close_clone = on_close.clone();
     view! {
-        <div class="modal-overlay" on:click=move |_| on_close()>
-            <div class="modal-content" on:click=move |e| e.stop_propagation()>
-                <div class="modal-header">
-                    <h2>{skill.name.clone()}</h2>
-                    <button class="modal-close" on:click=move |_| on_close_clone()>"✕"</button>
-                </div>
-                <div class="modal-body">
+        <Modal title=skill.name.clone() on_close=move || on_close()>
+            <div class="modal-body">
                     <div class="detail-row">
                         <span class="detail-label">"Version:"</span>
                         <span class="detail-value">{format!("v{}", skill.version)}</span>
@@ -533,7 +502,7 @@ fn SkillDetailModal(
                     </div>
                     <div class="detail-row">
                         <span class="detail-label">"Rating:"</span>
-                        <span class="detail-value">{format!("{} {}  ", rating_stars, skill.rating)}</span>
+                        <span class="detail-value"><StarRating rating=skill.rating />{format!(" {}  ", skill.rating)}</span>
                     </div>
                     <div class="detail-section">
                         <span class="detail-label">"Description:"</span>
@@ -563,9 +532,8 @@ fn SkillDetailModal(
                             }}
                         </div>
                     </div>
-                </div>
             </div>
-        </div>
+        </Modal>
     }
 }
 

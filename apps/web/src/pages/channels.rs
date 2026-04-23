@@ -10,35 +10,6 @@ use leptos::prelude::*;
 use leptos::task::spawn_local;
 use leptos::view;
 
-/// Available channel types with their metadata
-const CHANNEL_TYPES: &[(&str, &str, &str, &str)] = &[
-    ("wechat", "微信", "WeChat", "💬"),
-    ("dingtalk", "钉钉", "DingTalk", "💼"),
-    ("feishu", "飞书", "Lark", "🚀"),
-    ("qq", "QQ", "Tencent QQ", "🐧"),
-    ("discord", "Discord", "Discord Bot", "🎮"),
-    ("telegram", "Telegram", "Telegram Bot", "✈️"),
-];
-
-fn get_demo_channels() -> Vec<ChannelInfo> {
-    CHANNEL_TYPES.iter().map(|(id, name, desc, icon)| ChannelInfo {
-        id: id.to_string(),
-        name: name.to_string(),
-        description: desc.to_string(),
-        icon: icon.to_string(),
-        enabled: id == &"wechat",
-        status: if id == &"wechat" {
-            ChannelStatus::Connected
-        } else {
-            ChannelStatus::Disabled
-        },
-        config: None,
-        last_error: None,
-        created_at: None,
-        updated_at: None,
-    }).collect::<Vec<_>>()
-}
-
 #[component]
 pub fn ChannelsPage() -> impl IntoView {
     let i18n = use_context::<I18nContext>().expect("i18n context not found");
@@ -53,7 +24,7 @@ pub fn ChannelsPage() -> impl IntoView {
     let channels = LocalResource::new(move || {
         let service = service_stored.get_value();
         async move {
-            service.list().await.unwrap_or_else(|_| get_demo_channels())
+            service.list().await.unwrap_or_default()
         }
     });
 

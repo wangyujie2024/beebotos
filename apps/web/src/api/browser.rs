@@ -43,7 +43,7 @@ impl BrowserApiService {
     /// 删除浏览器配置
     pub async fn delete_profile(&self, id: &str) -> Result<(), ApiError> {
         self.client
-            .delete(&format!("/browser/profiles/{}", id))
+            .delete(&format!("/browser/profiles/{}", js_sys::encode_uri_component(id)))
             .await
     }
 
@@ -145,13 +145,13 @@ impl BrowserApiService {
 
     /// 删除沙箱
     pub async fn delete_sandbox(&self, id: &str) -> Result<(), ApiError> {
-        self.client.delete(&format!("/browser/sandboxes/{}", id)).await
+        self.client.delete(&format!("/browser/sandboxes/{}", js_sys::encode_uri_component(id))).await
     }
 
     /// 获取沙箱统计
     pub async fn get_sandbox_stats(&self, id: &str) -> Result<SandboxStats, ApiError> {
         self.client
-            .get(&format!("/browser/sandboxes/{}/stats", id))
+            .get(&format!("/browser/sandboxes/{}/stats", js_sys::encode_uri_component(id)))
             .await
     }
 
@@ -161,7 +161,7 @@ impl BrowserApiService {
         instance_id: &str,
     ) -> Result<BrowserProfileStatus, ApiError> {
         self.client
-            .get(&format!("/browser/instances/{}/status", instance_id))
+            .get(&format!("/browser/instances/{}/status", js_sys::encode_uri_component(instance_id)))
             .await
     }
 }

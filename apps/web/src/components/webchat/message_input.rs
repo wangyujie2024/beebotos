@@ -1,5 +1,6 @@
 //! 消息输入组件
 
+use crate::utils::event_target_value;
 use leptos::prelude::*;
 
 /// 消息输入组件
@@ -97,10 +98,4 @@ pub fn MessageInput(
     }
 }
 
-fn event_target_value(ev: &leptos::ev::Event) -> String {
-    use wasm_bindgen::JsCast;
-    ev.target()
-        .and_then(|t| t.dyn_into::<web_sys::HtmlTextAreaElement>().ok())
-        .map(|e| e.value())
-        .unwrap_or_default()
-}
+

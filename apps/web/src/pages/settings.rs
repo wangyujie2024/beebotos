@@ -1,6 +1,7 @@
 use crate::api::{Settings as ApiSettings, SettingsService, Theme};
 use crate::state::use_app_state;
-use crate::utils::{use_theme, FormValidator, StringValidators};
+use crate::utils::{event_target_checked, event_target_value, use_theme, FormValidator, StringValidators};
+use gloo_storage::Storage;
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 use leptos::view;
@@ -15,9 +16,9 @@ pub fn SettingsPage() -> impl IntoView {
     let save_message = RwSignal::new(None::<String>);
     let validator = RwSignal::new(FormValidator::new());
     let error_message = RwSignal::new(None::<String>);
-    let loading = RwSignal::new(true);
+    let loading = RwSignal::new(false);
 
-    // Form signals
+    // Form signals — local frontend-only settings
     let theme = RwSignal::new(Theme::Dark);
     let language = RwSignal::new("en".to_string());
     let notifications_enabled = RwSignal::new(true);
@@ -25,47 +26,41 @@ pub fn SettingsPage() -> impl IntoView {
     let api_endpoint = RwSignal::new(String::new());
     let wallet_address = RwSignal::new(String::new());
 
-    // Fetch settings from backend on mount
-    let client = crate::api::create_client();
-    let settings_service = SettingsService::new(client);
-    let service_stored = StoredValue::new(settings_service);
-
-    let fetch_settings = move || {
+    // Load from backend or localStorage fallback
+    let app_state_for_load = app_state.clone();
+    Effect::new(move |_| {
+        let app_state = app_state_for_load.clone();
         loading.set(true);
-        error_message.set(None);
-        let service = service_stored.get_value();
         spawn_local(async move {
+            let service = SettingsService::new(app_state.api_client());
             match service.get().await {
                 Ok(s) => {
-                    theme.set(s.theme.clone());
-                    language.set(s.language.clone());
-                    notifications_enabled.set(s.notifications_enabled);
-                    auto_update.set(s.auto_update);
-                    api_endpoint.set(s.api_endpoint.clone().unwrap_or_default());
-                    wallet_address.set(s.wallet_address.clone().unwrap_or_default());
-                    settings.set(s);
+                    app_state.settings.set(s);
+                    loading.set(false);
                 }
-                Err(e) => {
-                    error_message.set(Some(format!("Failed to load settings: {}", e)));
-                    // Fall back to local settings
-                    let s = settings.get();
-                    theme.set(s.theme.clone());
-                    language.set(s.language.clone());
-                    notifications_enabled.set(s.notifications_enabled);
-                    auto_update.set(s.auto_update);
-                    api_endpoint.set(s.api_endpoint.unwrap_or_default());
-                    wallet_address.set(s.wallet_address.unwrap_or_default());
+                Err(_) => {
+                    // Fallback to localStorage
+                    let result: Result<String, _> = gloo_storage::LocalStorage::get("beebotos_settings");
+                    if let Ok(stored) = result {
+                        if let Ok(parsed) = serde_json::from_str::<ApiSettings>(&stored) {
+                            app_state.settings.set(parsed);
+                        }
+                    }
+                    loading.set(false);
                 }
             }
-            loading.set(false);
         });
-    };
+    });
 
-    let fetch_stored = StoredValue::new(fetch_settings);
-
-    // Initial fetch
+    // Sync form signals from app state
     Effect::new(move |_| {
-        fetch_stored.get_value()();
+        let s = settings.get();
+        theme.set(s.theme.clone());
+        language.set(s.language.clone());
+        notifications_enabled.set(s.notifications_enabled);
+        auto_update.set(s.auto_update);
+        api_endpoint.set(s.api_endpoint.clone().unwrap_or_default());
+        wallet_address.set(s.wallet_address.clone().unwrap_or_default());
     });
 
     // Apply theme when changed
@@ -120,24 +115,38 @@ pub fn SettingsPage() -> impl IntoView {
         save_message.set(None);
         error_message.set(None);
 
-        let service = service_stored.get_value();
-        let settings_signal = app_state.settings();
+        // Save to backend and localStorage
+        let app_state = app_state.clone();
+        let settings_for_storage = new_settings.clone();
         spawn_local(async move {
-            match service.update(&new_settings).await {
+            let service = SettingsService::new(app_state.api_client());
+            match service.update(&settings_for_storage).await {
                 Ok(_) => {
-                    settings_signal.set(new_settings);
+                    app_state.settings.set(settings_for_storage.clone());
+                    let _ = gloo_storage::LocalStorage::set(
+                        "beebotos_settings",
+                        serde_json::to_string(&settings_for_storage).unwrap_or_default(),
+                    );
                     saving.set(false);
                     save_message.set(Some("Settings saved successfully".to_string()));
-
-                    // Clear message after 3 seconds
-                    gloo_timers::future::TimeoutFuture::new(3000).await;
-                    save_message.set(None);
                 }
                 Err(e) => {
+                    // Fallback: save to localStorage
+                    let _ = gloo_storage::LocalStorage::set(
+                        "beebotos_settings",
+                        serde_json::to_string(&settings_for_storage).unwrap_or_default(),
+                    );
+                    app_state.settings.set(settings_for_storage);
                     saving.set(false);
-                    error_message.set(Some(format!("Failed to save: {}", e)));
+                    save_message.set(Some(format!("Saved locally (backend: {})", e)));
                 }
             }
+        });
+
+        // Clear message after 3 seconds
+        spawn_local(async move {
+            gloo_timers::future::TimeoutFuture::new(3000).await;
+            save_message.set(None);
         });
     };
     let on_save_stored = StoredValue::new(on_save);
@@ -292,6 +301,34 @@ pub fn SettingsPage() -> impl IntoView {
                             </section>
 
                             <section class="card settings-section">
+                                <h2>"AI Configuration"</h2>
+                                <p class="form-help">"View global LLM provider settings and metrics"</p>
+                                <button
+                                    class="btn btn-secondary"
+                                    on:click=move |_| {
+                                        let navigate = leptos_router::hooks::use_navigate();
+                                        navigate("/llm-config", Default::default());
+                                    }
+                                >
+                                    "Open LLM Configuration →"
+                                </button>
+                            </section>
+
+                            <section class="card settings-section">
+                                <h2>"Gateway Setup"</h2>
+                                <p class="form-help">"Run the configuration wizard to setup or reconfigure Gateway"</p>
+                                <button
+                                    class="btn btn-secondary"
+                                    on:click=move |_| {
+                                        let navigate = leptos_router::hooks::use_navigate();
+                                        navigate("/settings/wizard", Default::default());
+                                    }
+                                >
+                                    "Configuration Wizard →"
+                                </button>
+                            </section>
+
+                            <section class="card settings-section">
                                 <h2>"System"</h2>
 
                                 <div class="system-info">
@@ -385,11 +422,4 @@ fn ThemeOption(
     }
 }
 
-use wasm_bindgen::JsCast;
 
-fn event_target_checked(ev: &leptos::ev::Event) -> bool {
-    ev.target()
-        .and_then(|t| t.dyn_into::<web_sys::HtmlInputElement>().ok())
-        .map(|i| i.checked())
-        .unwrap_or(false)
-}

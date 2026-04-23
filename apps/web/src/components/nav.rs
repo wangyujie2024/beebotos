@@ -166,23 +166,32 @@ fn LogoutButton(app_state: StoredValue<crate::state::AppState>, i18n: I18nContex
                 spawn_local(async move {
                     // Call logout API
                     let auth_service = app_state.auth_service();
-                    let _ = auth_service.logout().await;
+                    match auth_service.logout().await {
+                        Ok(_) => {
+                            // Clear local auth state
+                            app_state.auth.logout();
 
-                    // Clear local auth state
-                    app_state.auth.logout();
+                            // Clear any session storage items
+                            let _ = gloo_storage::SessionStorage::raw().remove_item("redirect_after_login");
 
-                    // Clear any session storage items
-                    let _ = gloo_storage::SessionStorage::raw().remove_item("redirect_after_login");
+                            // Navigate to home page
+                            navigate("/", Default::default());
 
-                    // Navigate to home page
-                    navigate("/", Default::default());
-
-                    // Show logout notification
-                    app_state.notify(
-                        crate::state::notification::NotificationType::Info,
-                        &i18n.t("notification-info"),
-                        &i18n.t("logout-success")
-                    );
+                            // Show logout notification
+                            app_state.notify(
+                                crate::state::notification::NotificationType::Info,
+                                &i18n.t("notification-info"),
+                                &i18n.t("logout-success")
+                            );
+                        }
+                        Err(e) => {
+                            app_state.notify(
+                                crate::state::notification::NotificationType::Error,
+                                &i18n.t("notification-error"),
+                                &format!("Logout failed: {}", e)
+                            );
+                        }
+                    }
                 });
             }
         >

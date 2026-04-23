@@ -1,5 +1,6 @@
 //! 侧边提问面板组件
 
+use crate::utils::event_target_value;
 use crate::webchat::SideQuestion;
 use leptos::prelude::*;
 
@@ -119,10 +120,4 @@ fn SideQuestionItem(question: SideQuestion) -> impl IntoView {
     }
 }
 
-fn event_target_value(ev: &leptos::ev::Event) -> String {
-    use wasm_bindgen::JsCast;
-    ev.target()
-        .and_then(|t| t.dyn_into::<web_sys::HtmlInputElement>().ok())
-        .map(|e| e.value())
-        .unwrap_or_default()
-}
+

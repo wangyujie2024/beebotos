@@ -204,7 +204,9 @@ pub fn LoadMoreTrigger(
                 let observer = web_sys::IntersectionObserver::new(
                     &wasm_bindgen::closure::Closure::wrap(Box::new(
                         move |entries: wasm_bindgen::JsValue| {
-                            let entries: js_sys::Array = entries.dyn_into().unwrap();
+                            let Ok(entries) = entries.dyn_into::<js_sys::Array>() else {
+                                return;
+                            };
                             if let Some(entry) = entries
                                 .get(0)
                                 .dyn_into::<web_sys::IntersectionObserverEntry>()

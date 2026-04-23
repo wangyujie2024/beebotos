@@ -30,11 +30,11 @@ impl AgentService {
     }
 
     pub async fn get(&self, id: &str) -> Result<AgentInfo, ApiError> {
-        self.client.get(&format!("{}{}", ApiEndpoints::AGENT_DETAIL, id)).await
+        self.client.get(&format!("{}{}", ApiEndpoints::AGENT_DETAIL, js_sys::encode_uri_component(id))).await
     }
 
     pub async fn get_logs(&self, id: &str) -> Result<Vec<AgentLogEntry>, ApiError> {
-        self.client.get(&format!("{}{}/logs", ApiEndpoints::AGENT_DETAIL, id)).await
+        self.client.get(&format!("{}{}/logs", ApiEndpoints::AGENT_DETAIL, js_sys::encode_uri_component(id))).await
     }
 
     pub async fn create(&self, req: CreateAgentRequest) -> Result<AgentInfo, ApiError> {
@@ -42,11 +42,11 @@ impl AgentService {
     }
 
     pub async fn update(&self, id: &str, req: UpdateAgentRequest) -> Result<AgentInfo, ApiError> {
-        self.client.put(&format!("{}{}", ApiEndpoints::AGENT_DETAIL, id), &req).await
+        self.client.put(&format!("{}{}", ApiEndpoints::AGENT_DETAIL, js_sys::encode_uri_component(id)), &req).await
     }
 
     pub async fn delete(&self, id: &str) -> Result<(), ApiError> {
-        self.client.delete(&format!("{}{}", ApiEndpoints::AGENT_DETAIL, id)).await
+        self.client.delete(&format!("{}{}", ApiEndpoints::AGENT_DETAIL, js_sys::encode_uri_component(id))).await
     }
 
     pub async fn start(&self, id: &str) -> Result<serde_json::Value, ApiError> {
@@ -68,7 +68,7 @@ impl AgentService {
 
     /// Invalidate specific agent cache
     pub fn invalidate_agent_cache(&self, id: &str) {
-        self.client.invalidate_cache(&format!("GET:{}{}", ApiEndpoints::AGENT_DETAIL, id));
+        self.client.invalidate_cache(&format!("GET:{}{}", ApiEndpoints::AGENT_DETAIL, js_sys::encode_uri_component(id)));
     }
 }
 
@@ -125,7 +125,7 @@ impl SkillService {
     }
 
     pub async fn get_instance(&self, instance_id: &str) -> Result<InstanceInfo, ApiError> {
-        self.client.get(&format!("{}{}", ApiEndpoints::INSTANCE_DETAIL, instance_id)).await
+        self.client.get(&format!("{}{}", ApiEndpoints::INSTANCE_DETAIL, js_sys::encode_uri_component(instance_id))).await
     }
 
     pub async fn create_instance(&self, req: CreateInstanceRequest) -> Result<InstanceInfo, ApiError> {
@@ -133,7 +133,7 @@ impl SkillService {
     }
 
     pub async fn delete_instance(&self, instance_id: &str) -> Result<(), ApiError> {
-        self.client.delete(&format!("{}{}", ApiEndpoints::INSTANCE_DETAIL, instance_id)).await
+        self.client.delete(&format!("{}{}", ApiEndpoints::INSTANCE_DETAIL, js_sys::encode_uri_component(instance_id))).await
     }
 
     pub async fn execute_instance(&self, instance_id: &str) -> Result<ExecuteSkillResponse, ApiError> {
@@ -167,7 +167,7 @@ impl DaoService {
     }
 
     pub async fn get_proposal(&self, id: &str) -> Result<ProposalInfo, ApiError> {
-        self.client.get(&format!("/chain/dao/proposals/{}", id)).await
+        self.client.get(&format!("/chain/dao/proposals/{}", js_sys::encode_uri_component(id))).await
     }
 
     pub async fn vote(
@@ -178,7 +178,7 @@ impl DaoService {
     ) -> Result<serde_json::Value, ApiError> {
         self.client
             .post(
-                &format!("/chain/dao/proposals/{}/vote", proposal_id),
+                &format!("/chain/dao/proposals/{}/vote", js_sys::encode_uri_component(proposal_id)),
                 &serde_json::json!({
                     "vote": if vote_for { "for" } else { "against" },
                 }),
@@ -351,25 +351,25 @@ impl ChannelService {
 
     /// Get channel by ID
     pub async fn get(&self, id: &str) -> Result<ChannelInfo, ApiError> {
-        self.client.get(&format!("/channels/{}", id)).await
+        self.client.get(&format!("/channels/{}", js_sys::encode_uri_component(id))).await
     }
 
     /// Update channel configuration
     pub async fn update(&self, id: &str, config: ChannelConfig) -> Result<serde_json::Value, ApiError> {
-        self.client.put(&format!("/channels/{}", id), &config).await
+        self.client.put(&format!("/channels/{}", js_sys::encode_uri_component(id)), &config).await
     }
 
     /// Enable/disable channel
     pub async fn set_enabled(&self, id: &str, enabled: bool) -> Result<serde_json::Value, ApiError> {
         self.client
-            .post(&format!("/channels/{}/enable", id), &serde_json::json!({ "enabled": enabled }))
+            .post(&format!("/channels/{}/enable", js_sys::encode_uri_component(id)), &serde_json::json!({ "enabled": enabled }))
             .await
     }
 
     /// Test channel connection
     pub async fn test_connection(&self, id: &str) -> Result<TestConnectionResponse, ApiError> {
         self.client
-            .post(&format!("/channels/{}/test", id), &serde_json::json!({}))
+            .post(&format!("/channels/{}/test", js_sys::encode_uri_component(id)), &serde_json::json!({}))
             .await
     }
 

@@ -47,14 +47,8 @@ pub fn ContentSecurityPolicy() -> impl IntoView {
         // Note: These should ideally be HTTP headers, but meta tags provide some protection
         <Meta http_equiv="X-Content-Type-Options" content="nosniff" />
         <Meta http_equiv="X-Frame-Options" content="DENY" />
-        <Meta http_equiv="X-XSS-Protection" content="1; mode=block" />
         <Meta http_equiv="Referrer-Policy" content="strict-origin-when-cross-origin" />
         <Meta name="viewport" content="width=device-width, initial-scale=1.0" />
-
-        // Store nonce for use by scripts
-        <script nonce=nonce.clone()>
-            {format!("window.__CSP_NONCE__ = '{}';", nonce)}
-        </script>
     }
 }
 
@@ -154,10 +148,8 @@ pub fn SecureImage(
 /// Sanitized text component - escapes HTML in content
 #[component]
 pub fn SanitizedText(#[prop(into)] content: String) -> impl IntoView {
-    let escaped = crate::utils::escape_html(&content);
-
     view! {
-        <span inner_html=escaped />
+        <span>{content}</span>
     }
 }
 

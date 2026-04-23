@@ -1,6 +1,7 @@
 //! 调试控制台组件
 
 use crate::browser::debugger::{BrowserLogEntry, LogLevel};
+use crate::utils::event_target_value;
 use leptos::prelude::*;
 
 /// 调试控制台组件
@@ -138,10 +139,4 @@ pub fn LogLevelFilter(
     }
 }
 
-fn event_target_value(ev: &leptos::ev::Event) -> String {
-    use wasm_bindgen::JsCast;
-    ev.target()
-        .and_then(|t| t.dyn_into::<web_sys::HtmlSelectElement>().ok())
-        .map(|e| e.value())
-        .unwrap_or_default()
-}
+

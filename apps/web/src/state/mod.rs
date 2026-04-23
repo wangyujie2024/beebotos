@@ -24,6 +24,7 @@ pub mod dao;
 pub mod gateway;
 pub mod notification;
 pub mod webchat;
+pub mod wizard;
 
 // Re-export 常用项
 pub use auth::{

@@ -9,8 +9,8 @@
 //! - Gateway 连接服务
 
 use crate::api::{
-    AgentService, ApiClient, AuthService, BrowserApiService, DaoService, SettingsService,
-    SkillService, TreasuryService, WebchatApiService,
+    AgentService, ApiClient, AuthService, BrowserApiService, DaoService, LlmConfigService,
+    SettingsService, SkillService, TreasuryService, WebchatApiService,
 };
 use crate::state::{
     agent::{provide_agent_state, AgentState},
@@ -45,6 +45,12 @@ pub struct AppState {
     pub gateway: GatewayConnectionState,
     /// Online status
     pub is_online: RwSignal<bool>,
+    /// Settings signal
+    pub settings: RwSignal<crate::api::Settings>,
+    /// Skills loading state
+    pub skills_loading: RwSignal<bool>,
+    /// Settings loading state
+    pub settings_loading: RwSignal<bool>,
     /// API Client
     api_client: ApiClient,
 }
@@ -66,6 +72,16 @@ impl AppState {
             webchat: WebchatState::new(),
             gateway: GatewayConnectionState::new(),
             is_online: RwSignal::new(true),
+            settings: RwSignal::new(crate::api::Settings {
+                theme: crate::api::Theme::Dark,
+                language: "en".to_string(),
+                notifications_enabled: true,
+                auto_update: true,
+                api_endpoint: None,
+                wallet_address: None,
+            }),
+            skills_loading: RwSignal::new(false),
+            settings_loading: RwSignal::new(false),
             api_client: api_client.clone(),
         }
     }
@@ -83,6 +99,16 @@ impl AppState {
             webchat: WebchatState::new(),
             gateway: GatewayConnectionState::new(),
             is_online: RwSignal::new(true),
+            settings: RwSignal::new(crate::api::Settings {
+                theme: crate::api::Theme::Dark,
+                language: "en".to_string(),
+                notifications_enabled: true,
+                auto_update: true,
+                api_endpoint: None,
+                wallet_address: None,
+            }),
+            skills_loading: RwSignal::new(false),
+            settings_loading: RwSignal::new(false),
             api_client: api_client.clone(),
         }
     }
@@ -134,6 +160,11 @@ impl AppState {
         WebchatApiService::new(self.api_client())
     }
 
+    /// Get LLM config service
+    pub fn llm_config_service(&self) -> LlmConfigService {
+        LlmConfigService::new(self.api_client())
+    }
+
     /// Set online status
     pub fn set_online(&self, online: bool) {
         self.is_online.set(online);
@@ -177,10 +208,10 @@ impl AppState {
     pub fn loading(&self) -> LoadingCompat {
         LoadingCompat {
             agents: self.agent.is_list_loading,
-            skills: RwSignal::new(false),
+            skills: self.skills_loading,
             dao: self.dao.is_summary_loading,
             treasury: self.dao.is_summary_loading,
-            settings: RwSignal::new(false),
+            settings: self.settings_loading,
             browser: self.browser.is_loading,
             webchat: self.webchat.is_sending,
         }
@@ -188,14 +219,7 @@ impl AppState {
 
     /// Get settings signal (compatibility)
     pub fn settings(&self) -> RwSignal<crate::api::Settings> {
-        RwSignal::new(crate::api::Settings {
-            theme: crate::api::Theme::Dark,
-            language: "en".to_string(),
-            notifications_enabled: true,
-            auto_update: true,
-            api_endpoint: None,
-            wallet_address: None,
-        })
+        self.settings
     }
 
     /// Get browser connection status (OpenClaw V2026.3.13 新增)
@@ -246,9 +270,14 @@ pub fn provide_app_state() {
 
     // Provide composed app state using the SAME auth state instance
     provide_context(AppState::new_with_auth(auth_state));
+
+    // Setup online/offline status monitoring
+    #[cfg(target_arch = "wasm32")]
+    setup_online_status_monitoring();
 }
 
 /// Setup online/offline status monitoring
+#[allow(dead_code)]
 fn setup_online_status_monitoring() {
     use wasm_bindgen::prelude::*;
     use wasm_bindgen::JsCast;

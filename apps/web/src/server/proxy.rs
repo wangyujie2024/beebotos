@@ -58,9 +58,12 @@ pub async fn proxy_handler(
     })?;
 
     // 构建代理请求
-    let mut proxy_req = state
-        .client
-        .request(reqwest::Method::from_bytes(req.method().as_str().as_bytes()).unwrap(), &target_url);
+    let method = reqwest::Method::from_bytes(req.method().as_str().as_bytes())
+        .map_err(|_| {
+            tracing::error!("Invalid HTTP method: {}", req.method());
+            StatusCode::BAD_REQUEST
+        })?;
+    let mut proxy_req = state.client.request(method, &target_url);
 
     // 复制请求头
     let mut headers = HeaderMap::new();

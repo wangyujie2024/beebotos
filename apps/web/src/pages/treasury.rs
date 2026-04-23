@@ -1,4 +1,5 @@
 use crate::api::{AssetInfo, TransactionInfo, TransactionStatus, TransactionType, TreasuryInfo, TreasuryService};
+use crate::components::Modal;
 use leptos::task::spawn_local;
 use crate::state::use_app_state;
 use leptos::prelude::*;
@@ -152,53 +153,47 @@ pub fn TreasuryPage() -> impl IntoView {
             // Transfer Modal
             {move || if transfer_open.get() {
                 view! {
-                    <div class="modal-overlay" on:click=move |_| transfer_open.set(false)>
-                        <div class="modal" on:click=move |e| e.stop_propagation()>
-                            <div class="modal-header">
-                                <h3>"Transfer"</h3>
-                                <button class="close-btn" on:click=move |_| transfer_open.set(false)>"✕"</button>
+                    <Modal title="Transfer" on_close=move || transfer_open.set(false)>
+                        <div class="modal-body">
+                            {move || transfer_error.get().map(|msg| view! {
+                                <div class="alert alert-error">{msg}</div>
+                            })}
+                            {move || transfer_success.get().map(|msg| view! {
+                                <div class="alert alert-success">{msg}</div>
+                            })}
+                            <div class="form-group">
+                                <label>"To Address"</label>
+                                <input
+                                    type="text"
+                                    prop:value=transfer_to
+                                    on:input=move |e| transfer_to.set(event_target_value(&e))
+                                    placeholder="0x..."
+                                />
                             </div>
-                            <div class="modal-body">
-                                {move || transfer_error.get().map(|msg| view! {
-                                    <div class="alert alert-error">{msg}</div>
-                                })}
-                                {move || transfer_success.get().map(|msg| view! {
-                                    <div class="alert alert-success">{msg}</div>
-                                })}
-                                <div class="form-group">
-                                    <label>"To Address"</label>
-                                    <input
-                                        type="text"
-                                        prop:value=transfer_to
-                                        on:input=move |e| transfer_to.set(event_target_value(&e))
-                                        placeholder="0x..."
-                                    />
-                                </div>
-                                <div class="form-group">
-                                    <label>"Amount (wei)"</label>
-                                    <input
-                                        type="text"
-                                        prop:value=transfer_amount
-                                        on:input=move |e| transfer_amount.set(event_target_value(&e))
-                                        placeholder="1000000000000000000"
-                                    />
-                                </div>
-                            </div>
-                            <div class="modal-footer">
-                                <button class="btn btn-secondary" on:click=move |_| transfer_open.set(false)>"Cancel"</button>
-                                <button
-                                    class="btn btn-primary"
-                                    on:click={
-                                        let on_transfer = on_transfer.clone();
-                                        move |_| on_transfer()
-                                    }
-                                    disabled=transfer_saving
-                                >
-                                    {move || if transfer_saving.get() { "Submitting..." } else { "Submit Transfer" }}
-                                </button>
+                            <div class="form-group">
+                                <label>"Amount (wei)"</label>
+                                <input
+                                    type="text"
+                                    prop:value=transfer_amount
+                                    on:input=move |e| transfer_amount.set(event_target_value(&e))
+                                    placeholder="1000000000000000000"
+                                />
                             </div>
                         </div>
-                    </div>
+                        <div class="modal-footer">
+                            <button class="btn btn-secondary" on:click=move |_| transfer_open.set(false)>"Cancel"</button>
+                            <button
+                                class="btn btn-primary"
+                                on:click={
+                                    let on_transfer = on_transfer.clone();
+                                    move |_| on_transfer()
+                                }
+                                disabled=transfer_saving
+                            >
+                                {move || if transfer_saving.get() { "Submitting..." } else { "Submit Transfer" }}
+                            </button>
+                        </div>
+                    </Modal>
                 }.into_any()
             } else {
                 ().into_any()
@@ -410,6 +405,63 @@ fn TreasuryError(#[prop(into)] message: String) -> impl IntoView {
             >
                 "Retry"
             </button>
+        </div>
+    }
+}
+
+/// Full transactions history page
+#[component]
+pub fn TreasuryTransactionsPage() -> impl IntoView {
+    let app_state = use_app_state();
+
+    let treasury = LocalResource::new(move || {
+        let service = app_state.treasury_service();
+        async move { service.get_info().await }
+    });
+
+    view! {
+        <Title text="Treasury Transactions - BeeBotOS" />
+        <div class="page treasury-page">
+            <div class="page-header">
+                <div class="breadcrumb-nav">
+                    <A href="/dao">"DAO"</A>
+                    <span>"/"</span>
+                    <A href="/dao/treasury">"Treasury"</A>
+                    <span>"/"</span>
+                    <span>"Transactions"</span>
+                </div>
+                <h1>"Transaction History"</h1>
+                <p class="page-description">"All treasury transactions are recorded on-chain"</p>
+            </div>
+
+            <Suspense fallback=|| view! { <TreasuryLoading/> }>
+                {move || {
+                    Suspend::new(async move {
+                        match treasury.await {
+                            Ok(data) => view! {
+                                <section class="card transactions-section">
+                                    <div class="section-header">
+                                        <h2>"All Transactions"</h2>
+                                        <span class="transaction-count">{format!("{} total", data.recent_transactions.len())}</span>
+                                    </div>
+                                    {if data.recent_transactions.is_empty() {
+                                        view! { <TransactionsEmpty/> }.into_any()
+                                    } else {
+                                        view! {
+                                            <div class="transactions-list">
+                                                {data.recent_transactions.into_iter().map(|tx| view! {
+                                                    <TransactionRow tx=tx/>
+                                                }).collect::<Vec<_>>()}
+                                            </div>
+                                        }.into_any()
+                                    }}
+                                </section>
+                            }.into_any(),
+                            Err(e) => view! { <TreasuryError message=e.to_string()/> }.into_any(),
+                        }
+                    })
+                }}
+            </Suspense>
         </div>
     }
 }

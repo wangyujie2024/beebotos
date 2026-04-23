@@ -1,5 +1,5 @@
 use crate::api::{AgentInfo, AgentStatus, CreateAgentRequest};
-use crate::components::{ErrorContext, Pagination, PaginationState, SkeletonGrid};
+use crate::components::{ErrorContext, Modal, Pagination, PaginationState, SkeletonGrid};
 use crate::state::use_app_state;
 use crate::utils::{FormValidator, StringValidators};
 use leptos::prelude::*;
@@ -363,8 +363,8 @@ fn AgentsError(#[prop(into)] message: String, on_retry: impl Fn() + 'static) -> 
 
 #[component]
 fn CreateAgentModal(
-    on_close: impl Fn() + Clone + 'static,
-    on_created: impl Fn() + Clone + 'static,
+    on_close: impl Fn() + Clone + Send + Sync + 'static,
+    on_created: impl Fn() + Clone + Send + Sync + 'static,
 ) -> impl IntoView {
     let app_state = use_app_state();
     let name = RwSignal::new(String::new());
@@ -373,56 +373,47 @@ fn CreateAgentModal(
     let model_name = RwSignal::new(String::from("gpt-4"));
     let validator = RwSignal::new(FormValidator::new());
     let is_submitting = RwSignal::new(false);
+    let on_close_modal = on_close.clone();
+    let on_close_submit = on_close.clone();
+    let on_close_cancel = on_close.clone();
+    let on_created_submit = on_created.clone();
 
     view! {
-        <div class="modal-overlay" on:click={
-            let on_close = on_close.clone();
-            move |_| on_close()
-        }>
-            <div class="modal" on:click=|ev| ev.stop_propagation()>
-                <div class="modal-header">
-                    <h2>"Create New Agent"</h2>
-                    <button class="btn btn-icon" on:click={
-                        let on_close = on_close.clone();
-                        move |_| on_close()
-                    }>"✕"</button>
-                </div>
+        <Modal title="Create New Agent" on_close=move || on_close_modal()>
+            <form on:submit={
+                move |ev: leptos::ev::SubmitEvent| {
+                    ev.prevent_default();
 
-                <form on:submit={
-                    let on_close = on_close.clone();
-                    let on_created = on_created.clone();
-                    move |ev: leptos::ev::SubmitEvent| {
-                        ev.prevent_default();
+                    let mut v = FormValidator::new();
+                    v.validate(StringValidators::required("name", &name.get()))
+                     .validate(StringValidators::min_length("name", &name.get(), 3))
+                     .validate(StringValidators::max_length("name", &name.get(), 50));
 
-                        let mut v = FormValidator::new();
-                        v.validate(StringValidators::required("name", &name.get()))
-                         .validate(StringValidators::min_length("name", &name.get(), 3))
-                         .validate(StringValidators::max_length("name", &name.get(), 50));
+                    if v.is_valid() {
+                        is_submitting.set(true);
+                        let service = app_state.agent_service();
+                        let req = CreateAgentRequest {
+                            name: name.get(),
+                            description: Some(description.get()).filter(|s| !s.is_empty()),
+                            capabilities: vec![],
+                            model_provider: Some(model_provider.get()).filter(|s| !s.is_empty()),
+                            model_name: Some(model_name.get()).filter(|s| !s.is_empty()),
+                        };
+                        let on_created = on_created_submit.clone();
+                        let on_close = on_close_submit.clone();
 
-                        if v.is_valid() {
-                            is_submitting.set(true);
-                            let service = app_state.agent_service();
-                            let req = CreateAgentRequest {
-                                name: name.get(),
-                                description: Some(description.get()).filter(|s| !s.is_empty()),
-                                capabilities: vec![],
-                                model_provider: Some(model_provider.get()).filter(|s| !s.is_empty()),
-                                model_name: Some(model_name.get()).filter(|s| !s.is_empty()),
-                            };
-                            let on_created = on_created.clone();
-                            let on_close = on_close.clone();
-
-                            spawn_local(async move {
-                                let _ = service.create(req).await;
-                                is_submitting.set(false);
-                                on_created();
-                                on_close();
-                            });
-                        } else {
-                            validator.set(v);
-                        }
+                        spawn_local(async move {
+                            let _ = service.create(req).await;
+                            is_submitting.set(false);
+                            on_created();
+                            on_close();
+                        });
+                    } else {
+                        validator.set(v);
                     }
-                }>
+                }
+            }>
+                <div class="modal-body">
                     <div class=move || format!("form-group {}",
                         if validator.get().has_error("name") { "has-error" } else { "" })>
                         <label>"Agent Name *"</label>
@@ -474,24 +465,20 @@ fn CreateAgentModal(
                             on:input=move |e| model_name.set(event_target_value(&e))
                         />
                     </div>
-
-                    <div class="modal-actions">
-                        <button type="button" class="btn btn-secondary" on:click={
-                            let on_close = on_close.clone();
-                            move |_| on_close()
-                        }>
-                            "Cancel"
-                        </button>
-                        <button
-                            type="submit"
-                            class="btn btn-primary"
-                            disabled=is_submitting
-                        >
-                            {move || if is_submitting.get() { "Creating..." } else { "Create Agent" }}
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" on:click=move |_| on_close_cancel()>
+                        "Cancel"
+                    </button>
+                    <button
+                        type="submit"
+                        class="btn btn-primary"
+                        disabled=is_submitting
+                    >
+                        {move || if is_submitting.get() { "Creating..." } else { "Create Agent" }}
+                    </button>
+                </div>
+            </form>
+        </Modal>
     }
 }
