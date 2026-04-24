@@ -8,7 +8,6 @@ use parking_lot::RwLock;
 
 use super::{StorageBackend, StorageConfig, StorageManager};
 use crate::error::Result;
-
 // Re-export InMemoryStorage as MemoryBackend for backward compatibility
 pub use crate::storage::backends::memory::InMemoryStorage as MemoryBackend;
 

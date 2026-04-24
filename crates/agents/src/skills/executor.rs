@@ -1,8 +1,8 @@
 //! Skill Executor
 //!
 //! Executes WASM skills in sandboxed environment using kernel's WASM runtime.
-//! Supports single-shot execution, multi-function dispatch, timeout enforcement,
-//! and streaming output.
+//! Supports single-shot execution, multi-function dispatch, timeout
+//! enforcement, and streaming output.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -14,7 +14,8 @@ use tokio::sync::mpsc;
 use crate::skills::loader::LoadedSkill;
 use crate::skills::security::{SkillSecurityPolicy, SkillSecurityValidator};
 
-/// Safe offset for input buffer in WASM linear memory (64KB, avoiding stack/data collisions).
+/// Safe offset for input buffer in WASM linear memory (64KB, avoiding
+/// stack/data collisions).
 const INPUT_BUFFER_OFFSET: usize = 64 * 1024;
 
 /// Chunk size for streaming output (1KB per chunk)
@@ -63,7 +64,9 @@ impl SkillExecutor {
 
         Ok(Self {
             engine: Arc::new(engine),
-            security_validator: Arc::new(SkillSecurityValidator::new(SkillSecurityPolicy::default())),
+            security_validator: Arc::new(SkillSecurityValidator::new(
+                SkillSecurityPolicy::default(),
+            )),
         })
     }
 
@@ -74,7 +77,9 @@ impl SkillExecutor {
 
         Ok(Self {
             engine: Arc::new(engine),
-            security_validator: Arc::new(SkillSecurityValidator::new(SkillSecurityPolicy::default())),
+            security_validator: Arc::new(SkillSecurityValidator::new(
+                SkillSecurityPolicy::default(),
+            )),
         })
     }
 
@@ -106,12 +111,15 @@ impl SkillExecutor {
     ///
     /// # Arguments
     /// * `skill` — The loaded skill to execute
-    /// * `function_name` — Optional exported function name; falls back to `manifest.entry_point`
-    /// * `parameters` — Binary parameters encoded as JSON with base64 values before passing to WASM
-    /// * `timeout_ms` — Optional execution timeout in milliseconds.
-    ///   **Note**: The timeout is enforced by Tokio's async scheduler. If the WASM guest enters
-    ///   an infinite loop without yielding, the timeout may not fire promptly because wasmtime
-    ///   execution is synchronous and does not yield to the Tokio runtime.
+    /// * `function_name` — Optional exported function name; falls back to
+    ///   `manifest.entry_point`
+    /// * `parameters` — Binary parameters encoded as JSON with base64 values
+    ///   before passing to WASM
+    /// * `timeout_ms` — Optional execution timeout in milliseconds. **Note**:
+    ///   The timeout is enforced by Tokio's async scheduler. If the WASM guest
+    ///   enters an infinite loop without yielding, the timeout may not fire
+    ///   promptly because wasmtime execution is synchronous and does not yield
+    ///   to the Tokio runtime.
     /// * `context` — Legacy skill context (merged with parameters)
     pub async fn execute_function(
         &self,
@@ -136,7 +144,8 @@ impl SkillExecutor {
         })
     }
 
-    /// Shared core: read WASM, validate, compile, instantiate, call, read output.
+    /// Shared core: read WASM, validate, compile, instantiate, call, read
+    /// output.
     async fn run_wasm_function(
         &self,
         skill: &LoadedSkill,
@@ -200,15 +209,12 @@ impl SkillExecutor {
         let start_time = std::time::Instant::now();
 
         let output_ptr = if let Some(ms) = timeout_ms {
-            tokio::time::timeout(
-                std::time::Duration::from_millis(ms as u64),
-                async {
-                    instance.call_typed::<(i32, i32), i32>(
-                        &target_func,
-                        (INPUT_BUFFER_OFFSET as i32, input_bytes.len() as i32),
-                    )
-                },
-            )
+            tokio::time::timeout(std::time::Duration::from_millis(ms as u64), async {
+                instance.call_typed::<(i32, i32), i32>(
+                    &target_func,
+                    (INPUT_BUFFER_OFFSET as i32, input_bytes.len() as i32),
+                )
+            })
             .await
             .map_err(|_| SkillExecutionError::ExecutionFailed("Execution timed out".to_string()))?
             .map_err(|e| SkillExecutionError::ExecutionFailed(e.to_string()))?
@@ -223,11 +229,9 @@ impl SkillExecutor {
 
         let execution_time_ms = start_time.elapsed().as_millis() as u64;
 
-        let output_len_bytes = instance
-            .read_memory(output_ptr as usize, 4)
-            .map_err(|e| {
-                SkillExecutionError::ExecutionFailed(format!("Failed to read output length: {}", e))
-            })?;
+        let output_len_bytes = instance.read_memory(output_ptr as usize, 4).map_err(|e| {
+            SkillExecutionError::ExecutionFailed(format!("Failed to read output length: {}", e))
+        })?;
         let output_len = i32::from_le_bytes([
             output_len_bytes[0],
             output_len_bytes[1],
@@ -256,13 +260,13 @@ impl SkillExecutor {
     /// Execute a skill in streaming mode.
     ///
     /// WASM runs in a blocking task; output is split into chunks and pushed
-    /// through an async channel. The receiver can be consumed by a gRPC streaming
-    /// response or SSE endpoint.
+    /// through an async channel. The receiver can be consumed by a gRPC
+    /// streaming response or SSE endpoint.
     /// Execute a skill in streaming mode.
     ///
     /// WASM runs in a background task; output is split into chunks and pushed
-    /// through an async channel. The receiver can be consumed by a gRPC streaming
-    /// response or SSE endpoint.
+    /// through an async channel. The receiver can be consumed by a gRPC
+    /// streaming response or SSE endpoint.
     pub async fn execute_stream(
         &self,
         skill: &LoadedSkill,
@@ -341,9 +345,8 @@ impl SkillExecutor {
                     .map_err(|e| SkillExecutionError::ExecutionFailed(e.to_string()))?;
                 let execution_time_ms = start_time.elapsed().as_millis() as u64;
 
-                let output_len_bytes = instance
-                    .read_memory(output_ptr as usize, 4)
-                    .map_err(|e| {
+                let output_len_bytes =
+                    instance.read_memory(output_ptr as usize, 4).map_err(|e| {
                         SkillExecutionError::ExecutionFailed(format!(
                             "Failed to read output length: {}",
                             e
@@ -419,7 +422,8 @@ impl SkillExecutor {
     }
 }
 
-/// Build JSON input merging legacy string input with structured binary parameters.
+/// Build JSON input merging legacy string input with structured binary
+/// parameters.
 ///
 /// Binary values are base64-encoded so they survive JSON serialization.
 fn build_input_json(legacy_input: &str, parameters: &HashMap<String, Vec<u8>>) -> String {

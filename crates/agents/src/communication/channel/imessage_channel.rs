@@ -61,7 +61,7 @@ impl Default for IMessageChannelConfig {
         let mut base = BaseChannelConfig::default();
         // iMessage defaults to Polling mode
         base.connection_mode = ConnectionMode::Polling;
-        
+
         Self {
             polling_interval_secs: 5,
             db_path: default_db_path(),

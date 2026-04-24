@@ -9,10 +9,8 @@
 //! - Environment variable management
 
 use wasmtime::component::ResourceTable;
-use wasmtime_wasi::{
-    p2::{IoView, WasiCtx, WasiCtxBuilder, WasiView},
-    DirPerms, FilePerms,
-};
+use wasmtime_wasi::p2::{IoView, WasiCtx, WasiCtxBuilder, WasiView};
+use wasmtime_wasi::{DirPerms, FilePerms};
 
 use crate::error::Result;
 use crate::wasm::wasi_ctx::{FilesystemAccess, WasiCapabilities};
@@ -245,8 +243,8 @@ impl ComponentEngine {
 impl Default for ComponentEngine {
     fn default() -> Self {
         // Note: This may panic if engine creation fails.
-        // For production use, prefer explicit construction with `ComponentEngine::new()`
-        // and handle the error properly.
+        // For production use, prefer explicit construction with
+        // `ComponentEngine::new()` and handle the error properly.
         Self::new().unwrap_or_else(|e| panic!("Failed to create ComponentEngine: {}", e))
     }
 }

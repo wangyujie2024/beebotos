@@ -2,17 +2,17 @@
 //!
 //! Provides chain-agnostic client functionality and base implementation.
 
-use crate::chains::common::{
-    contract::{ContractCall, ContractDeploy, ContractInterface},
-    provider::EvmProvider,
-    EvmBlock, EvmConfig, EvmError,
-};
-use crate::compat::{Address, U256};
-use crate::ChainResult;
+use std::time::Duration;
+
 use alloy_network::TransactionBuilder;
 use alloy_rpc_types::TransactionRequest;
 use async_trait::async_trait;
-use std::time::Duration;
+
+use crate::chains::common::contract::{ContractCall, ContractDeploy, ContractInterface};
+use crate::chains::common::provider::EvmProvider;
+use crate::chains::common::{EvmBlock, EvmConfig, EvmError};
+use crate::compat::{Address, U256};
+use crate::ChainResult;
 
 /// Generic EVM client trait
 #[async_trait]

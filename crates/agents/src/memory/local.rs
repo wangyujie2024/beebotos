@@ -1,10 +1,12 @@
 //! Local Memory
 
+use std::collections::VecDeque;
+
+use uuid::Uuid;
+
 use super::MemoryEntry;
 #[allow(unused_imports)]
 use crate::error::Result;
-use std::collections::VecDeque;
-use uuid::Uuid;
 
 /// Local in-memory storage
 pub struct LocalMemory {
@@ -27,15 +29,15 @@ impl LocalMemory {
             timestamp: chrono::Utc::now(),
             metadata: std::collections::HashMap::new(),
         };
-        
+
         let id = entry.id;
         self.entries.push_back(entry);
-        
+
         // Trim if exceeds max size
         while self.entries.len() > self.max_size {
             self.entries.pop_front();
         }
-        
+
         id
     }
 

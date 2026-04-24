@@ -2,8 +2,9 @@
 //!
 //! Kernel boot sequence and initialization.
 
-use crate::error::BootError;
 use tracing::{debug, error, info, warn};
+
+use crate::error::BootError;
 
 /// Boot information passed from bootloader
 #[derive(Debug)]

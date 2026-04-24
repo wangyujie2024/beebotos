@@ -6,11 +6,7 @@ use crate::error::Result;
 
 #[async_trait]
 pub trait UserChannelStore: Send + Sync {
-    async fn create(
-        &self,
-        binding: &UserChannelBinding,
-        config_encrypted: &str,
-    ) -> Result<()>;
+    async fn create(&self, binding: &UserChannelBinding, config_encrypted: &str) -> Result<()>;
 
     async fn get(&self, id: &str) -> Result<Option<UserChannelBinding>>;
 

@@ -1,8 +1,9 @@
 //! Message routing logic
 
+use std::collections::HashMap;
+
 use crate::error::{MessageBusError, Result};
 use crate::Message;
-use std::collections::HashMap;
 
 /// Topic matcher supporting wildcards
 #[derive(Debug, Clone)]
@@ -245,7 +246,12 @@ impl ContentRouter {
     }
 
     /// Add a content-based rule
-    pub fn add_rule(&mut self, field: impl Into<String>, value: impl Into<String>, target: impl Into<String>) {
+    pub fn add_rule(
+        &mut self,
+        field: impl Into<String>,
+        value: impl Into<String>,
+        target: impl Into<String>,
+    ) {
         self.content_rules.push(ContentRouteRule {
             field: field.into(),
             value: value.into(),
@@ -292,7 +298,10 @@ mod tests {
         assert!(TopicMatcher::matches("agent/+/task", "agent/123/task"));
         assert!(TopicMatcher::matches("agent/+/task", "agent/abc/task"));
         assert!(!TopicMatcher::matches("agent/+/task", "agent/123/other"));
-        assert!(!TopicMatcher::matches("agent/+/task", "agent/123/task/extra"));
+        assert!(!TopicMatcher::matches(
+            "agent/+/task",
+            "agent/123/task/extra"
+        ));
     }
 
     #[test]
@@ -306,17 +315,23 @@ mod tests {
 
     #[test]
     fn test_topic_matcher_mixed() {
-        assert!(TopicMatcher::matches("agent/+/task/#", "agent/123/task/start"));
-        assert!(TopicMatcher::matches("agent/+/task/#", "agent/123/task/start/progress"));
-        assert!(!TopicMatcher::matches("agent/+/task/#", "agent/123/other/start"));
+        assert!(TopicMatcher::matches(
+            "agent/+/task/#",
+            "agent/123/task/start"
+        ));
+        assert!(TopicMatcher::matches(
+            "agent/+/task/#",
+            "agent/123/task/start/progress"
+        ));
+        assert!(!TopicMatcher::matches(
+            "agent/+/task/#",
+            "agent/123/other/start"
+        ));
     }
 
     #[test]
     fn test_extract_params() {
-        let params = TopicMatcher::extract_params(
-            "agent/:id/task/:action",
-            "agent/123/task/start"
-        );
+        let params = TopicMatcher::extract_params("agent/:id/task/:action", "agent/123/task/start");
         assert_eq!(params.get("id"), Some(&"123".to_string()));
         assert_eq!(params.get("action"), Some(&"start".to_string()));
     }
@@ -340,13 +355,19 @@ mod tests {
 
         // Add rules
         router.add_rule(
-            RouteRule::new("agent/+/task/+").target("worker/tasks").with_priority(10)
+            RouteRule::new("agent/+/task/+")
+                .target("worker/tasks")
+                .with_priority(10),
         );
         router.add_rule(
-            RouteRule::new("agent/#").target("agent/logger").with_priority(5)
+            RouteRule::new("agent/#")
+                .target("agent/logger")
+                .with_priority(5),
         );
         router.add_rule(
-            RouteRule::new("system/#").target("system/monitor").with_priority(20)
+            RouteRule::new("system/#")
+                .target("system/monitor")
+                .with_priority(20),
         );
 
         let message = Message::new("test", vec![]);
@@ -369,10 +390,14 @@ mod tests {
 
         // Add overlapping rules
         router.add_rule(
-            RouteRule::new("agent/#").target("target1").with_priority(10)
+            RouteRule::new("agent/#")
+                .target("target1")
+                .with_priority(10),
         );
         router.add_rule(
-            RouteRule::new("agent/+/task").target("target1").with_priority(5)
+            RouteRule::new("agent/+/task")
+                .target("target1")
+                .with_priority(5),
         );
 
         let message = Message::new("test", vec![]);
@@ -387,10 +412,15 @@ mod tests {
         let mut router = Router::new();
 
         router.add_rule(
-            RouteRule::new("agent/+/task/+").target("worker/tasks").with_priority(10).stop_on_match()
+            RouteRule::new("agent/+/task/+")
+                .target("worker/tasks")
+                .with_priority(10)
+                .stop_on_match(),
         );
         router.add_rule(
-            RouteRule::new("agent/#").target("agent/logger").with_priority(5)
+            RouteRule::new("agent/#")
+                .target("agent/logger")
+                .with_priority(5),
         );
 
         let message = Message::new("test", vec![]);
@@ -407,13 +437,17 @@ mod tests {
         router.add_rule("x-type", "metric", "metrics/collector");
 
         let mut msg1 = Message::new("test", vec![]);
-        msg1.metadata.headers.insert("x-priority".to_string(), "high".to_string());
+        msg1.metadata
+            .headers
+            .insert("x-priority".to_string(), "high".to_string());
 
         let targets = router.route(&msg1);
         assert!(targets.contains(&"urgent/queue".to_string()));
 
         let mut msg2 = Message::new("test", vec![]);
-        msg2.metadata.headers.insert("x-type".to_string(), "metric".to_string());
+        msg2.metadata
+            .headers
+            .insert("x-type".to_string(), "metric".to_string());
 
         let targets = router.route(&msg2);
         assert!(targets.contains(&"metrics/collector".to_string()));

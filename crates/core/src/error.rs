@@ -367,7 +367,10 @@ impl BeeBotOSError {
 
     /// Create timeout error
     pub fn timeout(operation: impl Into<String>) -> Self {
-        Self::new(ErrorCode::Timeout, format!("Operation '{}' timed out", operation.into()))
+        Self::new(
+            ErrorCode::Timeout,
+            format!("Operation '{}' timed out", operation.into()),
+        )
     }
 
     /// Create agent error
@@ -451,7 +454,7 @@ impl BeeBotOSError {
 impl fmt::Display for BeeBotOSError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "[{}] {}", self.code, self.message)?;
-        
+
         if let Some(ref details) = self.details {
             write!(f, " | Details: {}", details)?;
         }
@@ -468,7 +471,7 @@ impl fmt::Display for BeeBotOSError {
 impl From<std::io::Error> for BeeBotOSError {
     fn from(err: std::io::Error) -> Self {
         use std::io::ErrorKind;
-        
+
         let code = match err.kind() {
             ErrorKind::NotFound => ErrorCode::NotFound,
             ErrorKind::PermissionDenied => ErrorCode::PermissionDenied,
@@ -476,9 +479,8 @@ impl From<std::io::Error> for BeeBotOSError {
             ErrorKind::InvalidInput | ErrorKind::InvalidData => ErrorCode::InvalidInput,
             _ => ErrorCode::Io,
         };
-        
-        BeeBotOSError::new(code, err.to_string())
-            .with_severity(Severity::Error)
+
+        BeeBotOSError::new(code, err.to_string()).with_severity(Severity::Error)
     }
 }
 
@@ -626,8 +628,7 @@ mod tests {
     #[test]
     fn test_error_chain() {
         let source = BeeBotOSError::database("Connection failed");
-        let err = BeeBotOSError::agent("Failed to spawn")
-            .with_source(source);
+        let err = BeeBotOSError::agent("Failed to spawn").with_source(source);
 
         assert!(err.source.is_some());
     }

@@ -11,9 +11,10 @@
 //! - Address space layout randomization (ASLR) support
 //! - Double-free and use-after-free detection
 
-use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::Arc;
+
+use parking_lot::RwLock;
 
 use crate::error::{KernelError, Result};
 
@@ -196,7 +197,8 @@ impl std::fmt::Debug for ProcessMemorySpace {
 impl ProcessMemorySpace {
     /// Create new user process memory space with ASLR
     pub fn new_user(process_id: u64) -> Self {
-        // Generate random ASLR base (simplified - real implementation would use secure RNG)
+        // Generate random ASLR base (simplified - real implementation would use secure
+        // RNG)
         let aslr_base = 0x1000 + ((process_id * 0x1000) % 0x100000);
 
         Self {
@@ -383,7 +385,8 @@ impl ProcessMemorySpace {
             return ValidationResult::InvalidAddress;
         }
 
-        // Check for user-space address range (on x86_64, user space is below 0x0000_8000_0000_0000)
+        // Check for user-space address range (on x86_64, user space is below
+        // 0x0000_8000_0000_0000)
         if !self.is_kernel && addr >= 0x0000_8000_0000_0000 {
             return ValidationResult::InvalidAddress;
         }
@@ -451,7 +454,8 @@ impl ProcessMemorySpace {
             }
             other => {
                 other.to_error(if require_write { "write" } else { "read" })?;
-                Err(KernelError::invalid_address()) // unreachable, but needed for type checking
+                Err(KernelError::invalid_address()) // unreachable, but needed
+                                                    // for type checking
             }
         }
     }
@@ -548,7 +552,8 @@ impl ProcessMemorySpace {
         self.regions.read().clone()
     }
 
-    /// Clear all freed regions tracking (call periodically to prevent memory bloat)
+    /// Clear all freed regions tracking (call periodically to prevent memory
+    /// bloat)
     pub fn clear_freed_regions(&self) {
         let count = self.freed_regions.read().len();
         if count > 1000 {

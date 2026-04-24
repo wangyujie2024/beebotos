@@ -520,12 +520,14 @@ impl WebhookHandler for DingTalkWebhookHandler {
                         msg.content, msg.message_type
                     );
 
-                    // P0 FIX: Removed dispatcher.dispatch() to avoid duplicate processing.
-                    // Messages are now routed exclusively through channel_event_bus →
+                    // P0 FIX: Removed dispatcher.dispatch() to avoid duplicate
+                    // processing. Messages are now routed
+                    // exclusively through channel_event_bus →
                     // MessageProcessor → AgentResolver path in webhook_handler.
                     // if let Some(dispatcher) = &self.dispatcher {
                     //     let platform_user_id = event.metadata.get("corp_id")
-                    //         .or_else(|| event.metadata.get("chatbot_corp_id"))
+                    //         .or_else(||
+                    // event.metadata.get("chatbot_corp_id"))
                     //         .cloned()
                     //         .unwrap_or_default();
                     //     let target_channel_id = msg.metadata.get("sender_id")

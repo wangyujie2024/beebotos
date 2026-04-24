@@ -3,9 +3,10 @@
 //! Unidirectional pipe for inter-process communication.
 //! Uses a bounded buffer with blocking reads and writes.
 
-use crate::error::{KernelError, Result};
 use std::collections::VecDeque;
 use std::sync::{Arc, Condvar, Mutex};
+
+use crate::error::{KernelError, Result};
 
 /// Pipe reader endpoint
 #[derive(Clone)]

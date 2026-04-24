@@ -2,14 +2,15 @@
 //!
 //! Displays global LLM configuration and real-time metrics from Gateway.
 
-use crate::api::{LlmConfigService, LlmGlobalConfig, LlmMetricsResponse, LlmHealthResponse};
-use crate::components::{BarChart, InlineLoading, InfoItem, PieChart};
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 use leptos::view;
 use leptos_meta::*;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
+
+use crate::api::{LlmConfigService, LlmGlobalConfig, LlmHealthResponse, LlmMetricsResponse};
+use crate::components::{BarChart, InfoItem, InlineLoading, PieChart};
 
 #[component]
 pub fn LlmConfigPage() -> impl IntoView {
@@ -244,11 +245,7 @@ fn MetricCard(
 }
 
 #[component]
-fn LatencyBar(
-    #[prop(into)] label: String,
-    value: f64,
-    max: f64,
-) -> impl IntoView {
+fn LatencyBar(#[prop(into)] label: String, value: f64, max: f64) -> impl IntoView {
     let pct = (value / max * 100.0).min(100.0);
     let color_class = if pct < 30.0 {
         "latency-good"

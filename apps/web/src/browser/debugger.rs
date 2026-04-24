@@ -3,10 +3,12 @@
 //! 提供实时日志、自动截图、智能错误提示等功能
 //! 兼容 OpenClaw V2026.3.13 开发者工具规格
 
+use std::collections::VecDeque;
+
+use serde::{Deserialize, Serialize};
+
 use super::{BrowserError, BrowserEvent};
 use crate::webchat::TokenUsage;
-use serde::{Deserialize, Serialize};
-use std::collections::VecDeque;
 
 /// 日志级别
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, PartialOrd)]
@@ -216,20 +218,26 @@ impl Default for PerformanceMetrics {
 /// 敏感信息脱敏（安全规范 10.1）
 pub fn sanitize_for_log(value: &str) -> String {
     let mut result = value.to_string();
-    
+
     // 脱敏敏感字段（简单字符串替换，不依赖 regex）
     let sensitive_keys = [
-        "token", "password", "api_key", "api-key", 
-        "secret", "authorization", "auth"
+        "token",
+        "password",
+        "api_key",
+        "api-key",
+        "secret",
+        "authorization",
+        "auth",
     ];
-    
+
     for key in &sensitive_keys {
         // 匹配 key=value 或 key: value 格式
         if let Some(pos) = result.to_lowercase().find(&format!("{}=", key)) {
             let start = pos + key.len() + 1;
             if start < result.len() {
                 // 找到值结束位置（空格、逗号或字符串结束）
-                let end = result[start..].find(|c: char| c.is_whitespace() || c == ',' || c == '&')
+                let end = result[start..]
+                    .find(|c: char| c.is_whitespace() || c == ',' || c == '&')
                     .map(|i| start + i)
                     .unwrap_or(result.len());
                 if end > start {
@@ -238,7 +246,7 @@ pub fn sanitize_for_log(value: &str) -> String {
             }
         }
     }
-    
+
     result
 }
 
@@ -340,7 +348,12 @@ impl BrowserDebugger {
     }
 
     /// 记录错误日志
-    pub fn error(&mut self, source: LogSource, message: impl Into<String>, error: Option<&BrowserError>) {
+    pub fn error(
+        &mut self,
+        source: LogSource,
+        message: impl Into<String>,
+        error: Option<&BrowserError>,
+    ) {
         let context = error.map(|e| {
             serde_json::json!({
                 "error": {
@@ -378,12 +391,7 @@ impl BrowserDebugger {
 
     /// 获取最近 N 条日志
     pub fn get_recent_logs(&self, n: usize) -> Vec<BrowserLogEntry> {
-        self.log_buffer
-            .iter()
-            .rev()
-            .take(n)
-            .cloned()
-            .collect()
+        self.log_buffer.iter().rev().take(n).cloned().collect()
     }
 
     /// 清空日志
@@ -482,10 +490,7 @@ impl BrowserDebugger {
 
         for log in logs.iter().filter(|e| e.level >= LogLevel::Error) {
             // 简单按错误消息分组
-            error_map
-                .entry(log.message.clone())
-                .or_default()
-                .push(log);
+            error_map.entry(log.message.clone()).or_default().push(log);
         }
 
         error_map
@@ -527,7 +532,9 @@ impl BrowserDebugger {
             }
             BrowserEvent::ConsoleLog { level, message } => {
                 if self.config.capture_console_logs {
-                    let source = LogSource::Console { level: level.clone() };
+                    let source = LogSource::Console {
+                        level: level.clone(),
+                    };
                     let log_level = LogLevel::from_str(level).unwrap_or(LogLevel::Info);
                     self.log(log_level, source, message.clone(), None);
                 }
@@ -559,7 +566,9 @@ impl BrowserDebugger {
 
         // 根据错误类型添加特定建议
         match &error.error_type {
-            super::BrowserErrorType::ElementNotFound { attempted_selectors } => {
+            super::BrowserErrorType::ElementNotFound {
+                attempted_selectors,
+            } => {
                 if attempted_selectors.iter().any(|s| s.starts_with("xpath=")) {
                     suggestions.push("XPath 选择器可能不稳定，尝试使用 CSS 选择器".to_string());
                 }
@@ -595,6 +604,7 @@ impl ScreenshotRequest {
 }
 
 use std::sync::OnceLock;
+
 use parking_lot::Mutex;
 
 /// 全局调试日志记录器

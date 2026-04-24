@@ -1,11 +1,14 @@
-use crate::api::{AssetInfo, TransactionInfo, TransactionStatus, TransactionType, TreasuryInfo, TreasuryService};
-use crate::components::Modal;
-use leptos::task::spawn_local;
-use crate::state::use_app_state;
 use leptos::prelude::*;
+use leptos::task::spawn_local;
 use leptos::view;
 use leptos_meta::*;
 use leptos_router::components::A;
+
+use crate::api::{
+    AssetInfo, TransactionInfo, TransactionStatus, TransactionType, TreasuryInfo, TreasuryService,
+};
+use crate::components::Modal;
+use crate::state::use_app_state;
 
 /// Format a number with thousand separators
 fn format_with_commas(num: impl ToString, suffix: &str) -> String {
@@ -114,7 +117,12 @@ pub fn TreasuryPage() -> impl IntoView {
             match service.transfer(&to, &amount).await {
                 Ok(resp) => {
                     transfer_saving.set(false);
-                    transfer_success.set(Some(format!("Transfer submitted: {}", resp.get("tx_hash").and_then(|v| v.as_str()).unwrap_or("N/A"))));
+                    transfer_success.set(Some(format!(
+                        "Transfer submitted: {}",
+                        resp.get("tx_hash")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("N/A")
+                    )));
                     transfer_to.set(String::new());
                     transfer_amount.set(String::new());
                 }

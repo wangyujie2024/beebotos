@@ -2,9 +2,10 @@
 //!
 //! 🔧 FIX: Performance optimizations for agent operations.
 
-use std::time::Instant;
-use tracing::{info, debug, trace};
 use std::collections::HashMap;
+use std::time::Instant;
+
+use tracing::{debug, info, trace};
 
 /// 🔧 FIX: Parallel agent recovery for faster startup
 pub async fn parallel_recover_agents<F, Fut>(
@@ -20,8 +21,11 @@ where
 
     let start = Instant::now();
     let total = agent_ids.len();
-    
-    info!("Starting parallel recovery of {} agents (max_concurrent: {})", total, max_concurrent);
+
+    info!(
+        "Starting parallel recovery of {} agents (max_concurrent: {})",
+        total, max_concurrent
+    );
 
     let results: Vec<_> = stream::iter(agent_ids)
         .map(move |agent_id| {
@@ -36,8 +40,11 @@ where
         .await;
 
     let elapsed = start.elapsed();
-    let success_count = results.iter().filter(|(_, r)| matches!(r, Ok(true))).count();
-    
+    let success_count = results
+        .iter()
+        .filter(|(_, r)| matches!(r, Ok(true)))
+        .count();
+
     info!(
         "Parallel recovery complete: {}/{} agents recovered in {:?} (avg: {:?} per agent)",
         success_count,
@@ -92,8 +99,9 @@ impl BatchStatePersister {
         let mut pending = self.pending.lock().unwrap();
         pending.push(update);
 
-        let should_flush = pending.len() >= self.batch_size 
-            || self.last_flush.lock().unwrap().elapsed().as_millis() as u64 >= self.flush_interval_ms;
+        let should_flush = pending.len() >= self.batch_size
+            || self.last_flush.lock().unwrap().elapsed().as_millis() as u64
+                >= self.flush_interval_ms;
 
         if should_flush {
             drop(pending); // Release lock before flush
@@ -152,7 +160,7 @@ impl ProviderPool {
     /// Get a provider from the pool
     pub fn acquire(&self) -> beebotos_chain::chains::common::EvmProvider {
         let mut providers = self.providers.lock().unwrap();
-        
+
         if let Some(provider) = providers.pop() {
             trace!("Reusing provider from pool ({} remaining)", providers.len());
             provider
@@ -165,7 +173,7 @@ impl ProviderPool {
     /// Return a provider to the pool
     pub fn release(&self, provider: beebotos_chain::chains::common::EvmProvider) {
         let mut providers = self.providers.lock().unwrap();
-        
+
         if providers.len() < self.max_size {
             providers.push(provider);
             trace!("Provider returned to pool ({} in pool)", providers.len());
@@ -206,7 +214,7 @@ impl CachedMetrics {
 
         // Check if we should flush
         let should_flush = self.last_flush.lock().unwrap().elapsed() >= self.flush_interval;
-        
+
         if should_flush {
             self.flush();
         }
@@ -218,17 +226,17 @@ impl CachedMetrics {
         if local.is_empty() {
             return;
         }
-        
+
         let mut global = self.global_counters.write().unwrap();
-        
+
         // Aggregate local counters to global
         for (key, value) in local.iter() {
             *global.entry(key.clone()).or_insert(0) += value;
         }
-        
+
         // Clear local counters after flush
         local.clear();
-        
+
         *self.last_flush.lock().unwrap() = Instant::now();
         trace!("Metrics flushed to global");
     }
@@ -236,7 +244,12 @@ impl CachedMetrics {
     /// Get global counter value
     pub fn get(&self, name: &str) -> u64 {
         self.flush();
-        self.global_counters.read().unwrap().get(name).copied().unwrap_or(0)
+        self.global_counters
+            .read()
+            .unwrap()
+            .get(name)
+            .copied()
+            .unwrap_or(0)
     }
 }
 
@@ -287,7 +300,7 @@ pub struct BoundedTaskQueue<T> {
 impl<T> BoundedTaskQueue<T> {
     pub fn new(capacity: usize) -> Self {
         let (sender, receiver) = tokio::sync::mpsc::channel(capacity);
-        
+
         Self {
             sender,
             receiver: std::sync::Mutex::new(Some(receiver)),
@@ -305,11 +318,7 @@ impl<T> BoundedTaskQueue<T> {
     }
 
     /// Send with timeout
-    pub async fn send_timeout(
-        &self,
-        item: T,
-        timeout: std::time::Duration,
-    ) -> Result<(), T> 
+    pub async fn send_timeout(&self, item: T, timeout: std::time::Duration) -> Result<(), T>
     where
         T: Clone,
     {
@@ -347,8 +356,11 @@ impl PerformanceMonitor {
 
     pub fn finish(self) {
         let elapsed = self.start.elapsed();
-        debug!("Operation '{}' completed in {:?}", self.operation_name, elapsed);
-        
+        debug!(
+            "Operation '{}' completed in {:?}",
+            self.operation_name, elapsed
+        );
+
         // Could also record to metrics here
     }
 }
@@ -372,11 +384,7 @@ impl<T> BatchProcessor<T> {
     }
 
     /// Process items in parallel batches
-    pub async fn process_parallel<F, Fut, R>(
-        self,
-        processor: F,
-        max_concurrency: usize,
-    ) -> Vec<R>
+    pub async fn process_parallel<F, Fut, R>(self, processor: F, max_concurrency: usize) -> Vec<R>
     where
         F: Fn(T) -> Fut + Send + Sync + Clone + 'static,
         Fut: std::future::Future<Output = R> + Send,
@@ -391,9 +399,7 @@ impl<T> BatchProcessor<T> {
         let results: Vec<_> = stream::iter(self.items)
             .map(move |item| {
                 let processor = processor.clone();
-                async move {
-                    processor(item).await
-                }
+                async move { processor(item).await }
             })
             .buffer_unordered(max_concurrency)
             .collect()
@@ -418,7 +424,7 @@ impl<T> BatchProcessor<T> {
         T: Clone,
     {
         let mut results = Vec::with_capacity(self.items.len());
-        
+
         for chunk in self.items.chunks(self.batch_size) {
             for item in chunk {
                 results.push(processor(item.clone()).await);
@@ -436,7 +442,7 @@ mod tests {
     #[tokio::test]
     async fn test_parallel_recovery() {
         let agent_ids: Vec<String> = (0..10).map(|i| format!("agent-{}", i)).collect();
-        
+
         let recover_fn = |_id: String| async move {
             tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
             Ok(true)
@@ -468,7 +474,7 @@ mod tests {
     #[tokio::test]
     async fn test_batch_state_persister() {
         let persister = BatchStatePersister::new(5, 1000);
-        
+
         for i in 0..3 {
             persister.queue_update(format!("agent-{}", i), "running".to_string());
         }
@@ -481,7 +487,7 @@ mod tests {
     #[test]
     fn test_cached_metrics() {
         let metrics = CachedMetrics::new(1000);
-        
+
         metrics.inc("test_counter");
         metrics.inc("test_counter");
         metrics.inc("test_counter");
@@ -494,7 +500,7 @@ mod tests {
     #[tokio::test]
     async fn test_bounded_task_queue() {
         let queue: BoundedTaskQueue<i32> = BoundedTaskQueue::new(10);
-        
+
         // Fill the queue
         for i in 0..10 {
             queue.try_send(i).await.unwrap();
@@ -509,8 +515,10 @@ mod tests {
         let items: Vec<i32> = (0..100).collect();
         let processor = BatchProcessor::new(items, 10);
 
-        let results = processor.process_parallel(|x| async move { x * 2 }, 10).await;
-        
+        let results = processor
+            .process_parallel(|x| async move { x * 2 }, 10)
+            .await;
+
         assert_eq!(results.len(), 100);
         assert_eq!(results[0], 0);
         assert_eq!(results[50], 100);

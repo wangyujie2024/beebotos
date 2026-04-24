@@ -1,18 +1,15 @@
 //! LLM Provider Admin API Handlers
 
-use axum::{
-    extract::{Path, State},
-    Json,
-};
-use gateway::{
-    error::GatewayError,
-    middleware::{require_any_role, AuthUser},
-};
-use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-use crate::AppState;
+use axum::extract::{Path, State};
+use axum::Json;
+use gateway::error::GatewayError;
+use gateway::middleware::{require_any_role, AuthUser};
+use serde::{Deserialize, Serialize};
+
 use crate::services::llm_provider_db as db;
+use crate::AppState;
 
 // ---- Request/Response DTOs ----
 
@@ -49,6 +46,9 @@ pub struct ProviderResponse {
     pub api_key_masked: Option<String>,
     pub enabled: bool,
     pub is_default_provider: bool,
+    pub icon: Option<String>,
+    pub icon_color: Option<String>,
+    pub type_label: Option<String>,
     pub models: Vec<ModelResponse>,
 }
 
@@ -95,6 +95,9 @@ pub async fn list_providers(
             api_key_masked: mask_encrypted_key(p.api_key_encrypted.as_deref()),
             enabled: p.enabled,
             is_default_provider: p.is_default_provider,
+            icon: p.icon,
+            icon_color: p.icon_color,
+            type_label: p.type_label,
             models: models
                 .into_iter()
                 .map(|m| ModelResponse {
@@ -128,11 +131,12 @@ pub async fn create_provider(
 
     // Encrypt API key if provided
     let api_key_encrypted = match req.api_key {
-        Some(key) if !key.is_empty() => {
-            Some(state.encryption_service.encrypt(&key).map_err(|e| {
-                GatewayError::internal(format!("Encryption failed: {}", e))
-            })?)
-        }
+        Some(key) if !key.is_empty() => Some(
+            state
+                .encryption_service
+                .encrypt(&key)
+                .map_err(|e| GatewayError::internal(format!("Encryption failed: {}", e)))?,
+        ),
         _ => None,
     };
 
@@ -150,7 +154,9 @@ pub async fn create_provider(
     // Reload providers after creation
     state.llm_service.reload_providers().await.ok();
 
-    Ok(Json(serde_json::json!({ "id": id, "message": "Provider created" })))
+    Ok(Json(
+        serde_json::json!({ "id": id, "message": "Provider created" }),
+    ))
 }
 
 /// PUT /api/v1/admin/llm/providers/:id
@@ -164,11 +170,12 @@ pub async fn update_provider(
 
     // Encrypt API key if provided
     let api_key_encrypted = match req.api_key {
-        Some(key) if !key.is_empty() => {
-            Some(state.encryption_service.encrypt(&key).map_err(|e| {
-                GatewayError::internal(format!("Encryption failed: {}", e))
-            })?)
-        }
+        Some(key) if !key.is_empty() => Some(
+            state
+                .encryption_service
+                .encrypt(&key)
+                .map_err(|e| GatewayError::internal(format!("Encryption failed: {}", e)))?,
+        ),
         Some(_) => Some(String::new()), // empty string means clear
         None => None,                   // not provided means don't change
     };
@@ -221,7 +228,9 @@ pub async fn add_model(
         .await
         .map_err(|e| GatewayError::internal(format!("Database error: {}", e)))?;
 
-    Ok(Json(serde_json::json!({ "id": model_id, "message": "Model added" })))
+    Ok(Json(
+        serde_json::json!({ "id": model_id, "message": "Model added" }),
+    ))
 }
 
 /// DELETE /api/v1/admin/llm/providers/:id/models/:model_id
@@ -257,7 +266,9 @@ pub async fn set_default_provider(
     // Reload providers after setting default
     state.llm_service.reload_providers().await.ok();
 
-    Ok(Json(serde_json::json!({ "message": "Default provider set" })))
+    Ok(Json(
+        serde_json::json!({ "message": "Default provider set" }),
+    ))
 }
 
 /// PUT /api/v1/admin/llm/providers/:id/models/:model_id/default

@@ -1,6 +1,7 @@
 //! Chain Configuration Module
 //!
-//! Provides chain configuration management with validation and hot-reloading support.
+//! Provides chain configuration management with validation and hot-reloading
+//! support.
 
 mod config;
 pub mod reloadable;

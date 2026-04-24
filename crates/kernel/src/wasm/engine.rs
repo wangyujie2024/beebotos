@@ -2,14 +2,16 @@
 //!
 //! WebAssembly runtime using wasmtime 34.0
 
+use std::collections::HashMap;
+use std::sync::Arc;
+
+use parking_lot::RwLock;
+use tracing::{debug, info};
+use wasmtime::{Config, Engine, Module, Store};
+
 use crate::error::{KernelError, Result};
 use crate::wasm::host_funcs::{HostContext, HostFunctions};
 use crate::wasm::instance::WasmInstance;
-use parking_lot::RwLock;
-use std::collections::HashMap;
-use std::sync::Arc;
-use tracing::{debug, info};
-use wasmtime::{Config, Engine, Module, Store};
 
 /// WASM engine configuration
 #[derive(Debug, Clone)]
@@ -206,7 +208,8 @@ impl WasmEngine {
     /// BeeBotOS-specific capabilities.
     ///
     /// # Arguments
-    /// * `module` - The compiled WASM module (must be a component for full WASI)
+    /// * `module` - The compiled WASM module (must be a component for full
+    ///   WASI)
     /// * `agent_id` - Unique identifier for the agent
     /// * `caps` - Optional capability configuration
     pub fn instantiate_wasi(

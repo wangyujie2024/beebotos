@@ -7,9 +7,9 @@ pub mod ollama;
 pub mod openai;
 
 // Re-export providers
-pub use anthropic::{AnthropicConfig, AnthropicProvider, anthropic_models};
-pub use ollama::{OllamaConfig, OllamaProvider, ollama_models};
-pub use openai::{OpenAIConfig, OpenAIProvider, openai_models};
+pub use anthropic::{anthropic_models, AnthropicConfig, AnthropicProvider};
+pub use ollama::{ollama_models, OllamaConfig, OllamaProvider};
+pub use openai::{openai_models, OpenAIConfig, OpenAIProvider};
 
 /// Provider factory - creates providers by name from environment
 ///
@@ -19,7 +19,8 @@ pub struct ProviderFactory;
 impl ProviderFactory {
     pub fn from_env(name: &str) -> Result<Box<dyn super::traits::LLMProvider>, String> {
         match name.to_lowercase().as_str() {
-            "openai" | "chatgpt" | "kimi" | "moonshot" | "deepseek" | "zhipu" | "doubao" | "qwen" | "gemini" => {
+            "openai" | "chatgpt" | "kimi" | "moonshot" | "deepseek" | "zhipu" | "doubao"
+            | "qwen" | "gemini" => {
                 let provider = OpenAIProvider::from_env()
                     .map_err(|e| format!("Failed to create OpenAI-compatible provider: {}", e))?;
                 Ok(Box::new(provider))

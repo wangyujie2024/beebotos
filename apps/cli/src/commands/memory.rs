@@ -1,11 +1,14 @@
 //! Memory management commands
 //!
-//! Vector memory retrieval and management: STM (Short-Term), LTM (Long-Term), EM (Episodic)
+//! Vector memory retrieval and management: STM (Short-Term), LTM (Long-Term),
+//! EM (Episodic)
 
-use crate::progress::TaskProgress;
+use std::path::PathBuf;
+
 use anyhow::Result;
 use clap::{Parser, Subcommand, ValueEnum};
-use std::path::PathBuf;
+
+use crate::progress::TaskProgress;
 
 #[derive(Parser)]
 pub struct MemoryArgs {
@@ -375,32 +378,41 @@ pub async fn execute(args: MemoryArgs) -> Result<()> {
             if verbose {
                 println!("\n📈 Storage Details:");
                 println!("  Vector embeddings: {}", status.embedding_count);
-                println!("  Average embedding size: {} bytes", status.avg_embedding_size);
+                println!(
+                    "  Average embedding size: {} bytes",
+                    status.avg_embedding_size
+                );
                 println!("  Last consolidation: {}", status.last_consolidation);
                 println!("  Index health: {}", status.health);
 
                 if let Some(per_agent) = status.per_agent {
                     println!("\n👤 Per-Agent Breakdown:");
                     for (agent_id, stats) in per_agent {
-                        println!("  {}: {} memories (STM: {}, LTM: {})", 
-                            agent_id, stats.total, stats.stm, stats.ltm);
+                        println!(
+                            "  {}: {} memories (STM: {}, LTM: {})",
+                            agent_id, stats.total, stats.stm, stats.ltm
+                        );
                     }
                 }
             }
         }
 
-        MemoryCommand::Index { force, agent, incremental } => {
+        MemoryCommand::Index {
+            force,
+            agent,
+            incremental,
+        } => {
             let progress = TaskProgress::new("Rebuilding memory index");
-            
+
             let options = IndexOptions {
                 force,
                 incremental,
                 agent_id: agent,
             };
-            
+
             let result = client.rebuild_memory_index(&options).await?;
             progress.finish_success(Some(&format!("{} memories indexed", result.indexed_count)));
-            
+
             println!("\n✅ Index rebuild complete!");
             println!("  Indexed: {} memories", result.indexed_count);
             println!("  Removed: {} stale entries", result.removed_count);
@@ -408,9 +420,16 @@ pub async fn execute(args: MemoryArgs) -> Result<()> {
             println!("  Duration: {:.2}s", result.duration_secs);
         }
 
-        MemoryCommand::Search { query, agent, limit, r#type, threshold, metadata } => {
+        MemoryCommand::Search {
+            query,
+            agent,
+            limit,
+            r#type,
+            threshold,
+            metadata,
+        } => {
             let progress = TaskProgress::new("Searching memories");
-            
+
             let search_req = SearchRequest {
                 query: query.clone(),
                 agent_id: agent,
@@ -419,7 +438,7 @@ pub async fn execute(args: MemoryArgs) -> Result<()> {
                 threshold,
                 include_metadata: metadata,
             };
-            
+
             let results = client.search_memories(&search_req).await?;
             progress.finish_success(Some(&format!("{} results", results.len())));
 
@@ -430,7 +449,7 @@ pub async fn execute(args: MemoryArgs) -> Result<()> {
 
             println!("\n🔍 Search Results for: '{}'", query);
             println!("{}", "=".repeat(60));
-            
+
             for (i, result) in results.iter().enumerate() {
                 let icon = match result.memory_type.as_str() {
                     "stm" => "⚡",
@@ -438,14 +457,21 @@ pub async fn execute(args: MemoryArgs) -> Result<()> {
                     "em" => "📸",
                     _ => "📝",
                 };
-                
-                println!("\n{}. {} {} (similarity: {:.2})", 
-                    i + 1, icon, result.id, result.similarity);
+
+                println!(
+                    "\n{}. {} {} (similarity: {:.2})",
+                    i + 1,
+                    icon,
+                    result.id,
+                    result.similarity
+                );
                 println!("   {}", truncate(&result.content, 120));
-                
+
                 if metadata {
-                    println!("   Type: {} | Agent: {} | Created: {}",
-                        result.memory_type, result.agent_id, result.created_at);
+                    println!(
+                        "   Type: {} | Agent: {} | Created: {}",
+                        result.memory_type, result.agent_id, result.created_at
+                    );
                     if !result.tags.is_empty() {
                         println!("   Tags: {}", result.tags.join(", "));
                     }
@@ -453,9 +479,16 @@ pub async fn execute(args: MemoryArgs) -> Result<()> {
             }
         }
 
-        MemoryCommand::Add { content, agent, r#type, tag, importance, source } => {
+        MemoryCommand::Add {
+            content,
+            agent,
+            r#type,
+            tag,
+            importance,
+            source,
+        } => {
             let progress = TaskProgress::new("Adding memory");
-            
+
             let memory_req = CreateMemoryRequest {
                 content,
                 agent_id: agent,
@@ -464,10 +497,10 @@ pub async fn execute(args: MemoryArgs) -> Result<()> {
                 importance: importance.min(10),
                 source,
             };
-            
+
             let memory = client.create_memory(&memory_req).await?;
             progress.finish_success(Some(&memory.id));
-            
+
             println!("✅ Memory added successfully!");
             println!("  ID: {}", memory.id);
             println!("  Type: {}", memory.memory_type);
@@ -493,11 +526,11 @@ pub async fn execute(args: MemoryArgs) -> Result<()> {
             println!("Created: {}", memory.created_at);
             println!("Last accessed: {}", memory.last_accessed);
             println!("Access count: {}", memory.access_count);
-            
+
             if !memory.tags.is_empty() {
                 println!("Tags: {}", memory.tags.join(", "));
             }
-            
+
             if let Some(source) = memory.source {
                 println!("Source: {}", source);
             }
@@ -515,7 +548,11 @@ pub async fn execute(args: MemoryArgs) -> Result<()> {
             }
         }
 
-        MemoryCommand::Delete { id, permanent, force } => {
+        MemoryCommand::Delete {
+            id,
+            permanent,
+            force,
+        } => {
             if !force && !permanent {
                 print!("Move memory '{}' to trash? [y/N] ", id);
                 std::io::Write::flush(&mut std::io::stdout())?;
@@ -528,7 +565,10 @@ pub async fn execute(args: MemoryArgs) -> Result<()> {
             }
 
             if !force && permanent {
-                print!("⚠️  Permanently delete memory '{}'? This cannot be undone! [y/N] ", id);
+                print!(
+                    "⚠️  Permanently delete memory '{}'? This cannot be undone! [y/N] ",
+                    id
+                );
                 std::io::Write::flush(&mut std::io::stdout())?;
                 let mut input = String::new();
                 std::io::stdin().read_line(&mut input)?;
@@ -547,27 +587,39 @@ pub async fn execute(args: MemoryArgs) -> Result<()> {
             progress.finish_success(None);
         }
 
-        MemoryCommand::Update { id, content, importance, add_tag, remove_tag } => {
+        MemoryCommand::Update {
+            id,
+            content,
+            importance,
+            add_tag,
+            remove_tag,
+        } => {
             let progress = TaskProgress::new("Updating memory");
-            
+
             let update = UpdateMemoryRequest {
                 content,
                 importance,
                 add_tags: add_tag,
                 remove_tags: remove_tag,
             };
-            
+
             let memory = client.update_memory(&id, &update).await?;
             progress.finish_success(None);
-            
+
             println!("✅ Memory updated!");
             println!("  ID: {}", memory.id);
             println!("  New version: {}", memory.version);
         }
 
-        MemoryCommand::List { agent, r#type, tag, limit, recent } => {
+        MemoryCommand::List {
+            agent,
+            r#type,
+            tag,
+            limit,
+            recent,
+        } => {
             let progress = TaskProgress::new("Listing memories");
-            
+
             let filter = MemoryFilter {
                 agent_id: agent,
                 memory_type: r#type.map(|t| format!("{:?}", t).to_lowercase()),
@@ -575,24 +627,36 @@ pub async fn execute(args: MemoryArgs) -> Result<()> {
                 limit,
                 recent_only: recent,
             };
-            
+
             let memories = client.list_memories(&filter).await?;
             progress.finish_success(Some(&format!("{} memories", memories.len())));
 
-            println!("{:<36} {:<10} {:<8} {:<20} Preview", 
-                "ID", "Type", "Import.", "Created");
+            println!(
+                "{:<36} {:<10} {:<8} {:<20} Preview",
+                "ID", "Type", "Import.", "Created"
+            );
             println!("{}", "-".repeat(120));
-            
+
             for m in memories {
                 let preview = truncate(&m.content, 40);
-                println!("{:<36} {:<10} {:<8} {:<20} {}",
-                    m.id, m.memory_type, m.importance, m.created_at, preview);
+                println!(
+                    "{:<36} {:<10} {:<8} {:<20} {}",
+                    m.id, m.memory_type, m.importance, m.created_at, preview
+                );
             }
         }
 
-        MemoryCommand::Export { agent, output, format, encrypt, r#type, from, to } => {
+        MemoryCommand::Export {
+            agent,
+            output,
+            format,
+            encrypt,
+            r#type,
+            from,
+            to,
+        } => {
             let progress = TaskProgress::new("Exporting memories");
-            
+
             let export_req = ExportRequest {
                 agent_id: agent,
                 format: format!("{:?}", format).to_lowercase(),
@@ -601,14 +665,18 @@ pub async fn execute(args: MemoryArgs) -> Result<()> {
                 date_to: to,
                 encrypt,
             };
-            
+
             let result = client.export_memories(&export_req).await?;
-            
+
             // Write to file
             std::fs::write(&output, &result.data)?;
             progress.finish_success(Some(&format!("{} memories", result.count)));
-            
-            println!("✅ Exported {} memories to {}", result.count, output.display());
+
+            println!(
+                "✅ Exported {} memories to {}",
+                result.count,
+                output.display()
+            );
             if encrypt {
                 println!("  Encryption: Enabled");
             }
@@ -616,9 +684,14 @@ pub async fn execute(args: MemoryArgs) -> Result<()> {
             println!("  Size: {:.2} KB", result.data.len() as f64 / 1024.0);
         }
 
-        MemoryCommand::Import { path, agent, strategy, dry_run } => {
+        MemoryCommand::Import {
+            path,
+            agent,
+            strategy,
+            dry_run,
+        } => {
             let progress = TaskProgress::new("Importing memories");
-            
+
             let data = std::fs::read_to_string(&path)?;
             let import_req = ImportRequest {
                 data,
@@ -626,10 +699,10 @@ pub async fn execute(args: MemoryArgs) -> Result<()> {
                 strategy: format!("{:?}", strategy).to_lowercase(),
                 dry_run,
             };
-            
+
             let result = client.import_memories(&import_req).await?;
             progress.finish_success(None);
-            
+
             if dry_run {
                 println!("📋 Dry Run Results:");
                 println!("  Would import: {} memories", result.would_import);
@@ -644,54 +717,75 @@ pub async fn execute(args: MemoryArgs) -> Result<()> {
             }
         }
 
-        MemoryCommand::Consolidate { agent, dry_run: _, force: _ } => {
+        MemoryCommand::Consolidate {
+            agent,
+            dry_run: _,
+            force: _,
+        } => {
             let progress = TaskProgress::new("Consolidating memories");
-            
+
             // Use the first agent if specified, otherwise use "default"
             let agent_id = agent.as_deref().unwrap_or("default");
-            
+
             client.consolidate_memories(agent_id).await?;
             progress.finish_success(None);
-            
+
             println!("✅ Memory consolidation completed successfully.");
         }
 
-        MemoryCommand::Forget { agent, strategy, older_than, dry_run } => {
+        MemoryCommand::Forget {
+            agent,
+            strategy,
+            older_than,
+            dry_run,
+        } => {
             let progress = TaskProgress::new("Applying forgetting strategy");
-            
+
             let options = ForgetOptions {
                 agent_id: agent,
                 strategy: format!("{:?}", strategy).to_lowercase(),
                 older_than_days: older_than,
                 dry_run,
             };
-            
+
             let result = client.apply_forgetting(&options).await?;
             progress.finish_success(None);
-            
+
             if dry_run {
                 println!("📋 Forgetting Preview:");
                 println!("  Would forget: {} memories", result.would_forget);
-                println!("  STM: {}, LTM: {}, EM: {}", 
-                    result.would_forget_stm, result.would_forget_ltm, result.would_forget_em);
+                println!(
+                    "  STM: {}, LTM: {}, EM: {}",
+                    result.would_forget_stm, result.would_forget_ltm, result.would_forget_em
+                );
             } else {
                 println!("✅ Forgetting complete!");
                 println!("  Forgotten: {} memories", result.forgotten);
-                println!("  STM: {}, LTM: {}, EM: {}", 
-                    result.forgotten_stm, result.forgotten_ltm, result.forgotten_em);
+                println!(
+                    "  STM: {}, LTM: {}, EM: {}",
+                    result.forgotten_stm, result.forgotten_ltm, result.forgotten_em
+                );
                 println!("  Storage freed: {:.2} MB", result.storage_freed_mb);
             }
         }
 
-        MemoryCommand::Stats { agent, range, trends } => {
+        MemoryCommand::Stats {
+            agent,
+            range,
+            trends,
+        } => {
             let progress = TaskProgress::new("Fetching memory statistics");
-            
+
             let stats = if let Some(agent_id) = agent {
-                client.get_agent_memory_stats(&agent_id, &format!("{:?}", range)).await?
+                client
+                    .get_agent_memory_stats(&agent_id, &format!("{:?}", range))
+                    .await?
             } else {
-                client.get_global_memory_stats(&format!("{:?}", range)).await?
+                client
+                    .get_global_memory_stats(&format!("{:?}", range))
+                    .await?
             };
-            
+
             progress.finish_success(None);
 
             println!("📊 Memory Statistics");
@@ -721,15 +815,21 @@ pub async fn execute(args: MemoryArgs) -> Result<()> {
         MemoryCommand::Trash(cmd) => match cmd {
             TrashCommand::List { agent, limit } => {
                 let progress = TaskProgress::new("Listing trashed memories");
-                let memories = client.list_trashed_memories(agent.as_deref(), limit).await?;
+                let memories = client
+                    .list_trashed_memories(agent.as_deref(), limit)
+                    .await?;
                 progress.finish_success(Some(&format!("{} items", memories.len())));
 
                 println!("🗑️  Trashed Memories");
                 println!("{:<36} {:<20} Preview", "ID", "Deleted At");
                 println!("{}", "-".repeat(100));
                 for m in memories {
-                    println!("{:<36} {:<20} {}", 
-                        m.id, m.deleted_at, truncate(&m.content, 40));
+                    println!(
+                        "{:<36} {:<20} {}",
+                        m.id,
+                        m.deleted_at,
+                        truncate(&m.content, 40)
+                    );
                 }
             }
             TrashCommand::Restore { id } => {
@@ -765,16 +865,23 @@ pub async fn execute(args: MemoryArgs) -> Result<()> {
         MemoryCommand::Graph { command } => match command {
             GraphCommand::Structure { agent, depth } => {
                 let progress = TaskProgress::new("Analyzing memory graph");
-                let structure = client.get_memory_graph_structure(agent.as_deref(), depth).await?;
+                let structure = client
+                    .get_memory_graph_structure(agent.as_deref(), depth)
+                    .await?;
                 progress.finish_success(None);
 
                 println!("🕸️  Memory Graph Structure");
                 println!("Max depth: {}", depth);
-                println!("\nNodes: {} | Edges: {}", structure.node_count, structure.edge_count);
+                println!(
+                    "\nNodes: {} | Edges: {}",
+                    structure.node_count, structure.edge_count
+                );
                 println!("\nClusters:");
                 for cluster in structure.clusters {
-                    println!("  {}: {} nodes, density {:.2}", 
-                        cluster.name, cluster.node_count, cluster.density);
+                    println!(
+                        "  {}: {} nodes, density {:.2}",
+                        cluster.name, cluster.node_count, cluster.density
+                    );
                 }
             }
             GraphCommand::Related { id, limit } => {
@@ -784,19 +891,31 @@ pub async fn execute(args: MemoryArgs) -> Result<()> {
 
                 println!("🔗 Memories related to '{}'", id);
                 for (i, mem) in related.iter().enumerate() {
-                    println!("{}. {} (strength: {:.2})", i + 1, mem.id, mem.relation_strength);
+                    println!(
+                        "{}. {} (strength: {:.2})",
+                        i + 1,
+                        mem.id,
+                        mem.relation_strength
+                    );
                     println!("   {}", truncate(&mem.content, 80));
                 }
             }
             GraphCommand::Clusters { agent, n_clusters } => {
                 let progress = TaskProgress::new("Clustering memories");
-                let clusters = client.get_memory_clusters(agent.as_deref(), n_clusters).await?;
+                let clusters = client
+                    .get_memory_clusters(agent.as_deref(), n_clusters)
+                    .await?;
                 progress.finish_success(Some(&format!("{} clusters", clusters.len())));
 
                 println!("🎯 Memory Clusters");
                 for (i, cluster) in clusters.iter().enumerate() {
-                    println!("\nCluster {}: {} ({} memories, density: {:.2})", 
-                        i + 1, cluster.name, cluster.node_count, cluster.density);
+                    println!(
+                        "\nCluster {}: {} ({} memories, density: {:.2})",
+                        i + 1,
+                        cluster.name,
+                        cluster.node_count,
+                        cluster.density
+                    );
                     println!("  Keywords: {}", cluster.keywords.join(", "));
                     println!("  Sample: {}", truncate(&cluster.sample_memory, 60));
                 }
@@ -1067,17 +1186,30 @@ trait MemoryClient {
     async fn permanently_delete_memory(&self, id: &str) -> Result<()>;
     async fn export_memories(&self, request: &ExportRequest) -> Result<ExportResult>;
     async fn import_memories(&self, request: &ImportRequest) -> Result<ImportResult>;
-    async fn consolidate_memories(&self, options: &ConsolidateOptions) -> Result<ConsolidateResult>;
+    async fn consolidate_memories(&self, options: &ConsolidateOptions)
+        -> Result<ConsolidateResult>;
     async fn apply_forgetting(&self, options: &ForgetOptions) -> Result<ForgetResult>;
     async fn get_agent_memory_stats(&self, agent_id: &str, range: &str) -> Result<MemoryStats>;
     async fn get_global_memory_stats(&self, range: &str) -> Result<MemoryStats>;
-    async fn list_trashed_memories(&self, agent_id: Option<&str>, limit: usize) -> Result<Vec<TrashedMemory>>;
+    async fn list_trashed_memories(
+        &self,
+        agent_id: Option<&str>,
+        limit: usize,
+    ) -> Result<Vec<TrashedMemory>>;
     async fn restore_memory(&self, id: &str) -> Result<()>;
     async fn empty_trash(&self) -> Result<()>;
     async fn purge_memory(&self, id: &str) -> Result<()>;
-    async fn get_memory_graph_structure(&self, agent_id: Option<&str>, depth: usize) -> Result<GraphStructure>;
+    async fn get_memory_graph_structure(
+        &self,
+        agent_id: Option<&str>,
+        depth: usize,
+    ) -> Result<GraphStructure>;
     async fn get_related_memories(&self, id: &str, limit: usize) -> Result<Vec<RelatedMemory>>;
-    async fn get_memory_clusters(&self, agent_id: Option<&str>, n_clusters: usize) -> Result<Vec<Cluster>>;
+    async fn get_memory_clusters(
+        &self,
+        agent_id: Option<&str>,
+        n_clusters: usize,
+    ) -> Result<Vec<Cluster>>;
 }
 
 // Stub implementations
@@ -1118,7 +1250,10 @@ impl MemoryClient for crate::client::ApiClient {
     async fn import_memories(&self, _request: &ImportRequest) -> Result<ImportResult> {
         anyhow::bail!("Not implemented")
     }
-    async fn consolidate_memories(&self, _options: &ConsolidateOptions) -> Result<ConsolidateResult> {
+    async fn consolidate_memories(
+        &self,
+        _options: &ConsolidateOptions,
+    ) -> Result<ConsolidateResult> {
         anyhow::bail!("Not implemented")
     }
     async fn apply_forgetting(&self, _options: &ForgetOptions) -> Result<ForgetResult> {
@@ -1130,7 +1265,11 @@ impl MemoryClient for crate::client::ApiClient {
     async fn get_global_memory_stats(&self, _range: &str) -> Result<MemoryStats> {
         anyhow::bail!("Not implemented")
     }
-    async fn list_trashed_memories(&self, _agent_id: Option<&str>, _limit: usize) -> Result<Vec<TrashedMemory>> {
+    async fn list_trashed_memories(
+        &self,
+        _agent_id: Option<&str>,
+        _limit: usize,
+    ) -> Result<Vec<TrashedMemory>> {
         Ok(vec![])
     }
     async fn restore_memory(&self, _id: &str) -> Result<()> {
@@ -1142,13 +1281,21 @@ impl MemoryClient for crate::client::ApiClient {
     async fn purge_memory(&self, _id: &str) -> Result<()> {
         Ok(())
     }
-    async fn get_memory_graph_structure(&self, _agent_id: Option<&str>, _depth: usize) -> Result<GraphStructure> {
+    async fn get_memory_graph_structure(
+        &self,
+        _agent_id: Option<&str>,
+        _depth: usize,
+    ) -> Result<GraphStructure> {
         anyhow::bail!("Not implemented")
     }
     async fn get_related_memories(&self, _id: &str, _limit: usize) -> Result<Vec<RelatedMemory>> {
         Ok(vec![])
     }
-    async fn get_memory_clusters(&self, _agent_id: Option<&str>, _n_clusters: usize) -> Result<Vec<Cluster>> {
+    async fn get_memory_clusters(
+        &self,
+        _agent_id: Option<&str>,
+        _n_clusters: usize,
+    ) -> Result<Vec<Cluster>> {
         Ok(vec![])
     }
 }

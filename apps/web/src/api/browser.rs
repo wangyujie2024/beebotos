@@ -2,14 +2,15 @@
 //!
 //! 与 Gateway 的浏览器自动化 API 对接
 
+use serde::{Deserialize, Serialize};
+
 use super::client::{ApiClient, ApiError};
+use crate::browser::automation::BatchOptions;
+use crate::browser::sandbox::SandboxStats;
 use crate::browser::{
     BatchOperation, BatchResult, BrowserInstance, BrowserProfile, BrowserProfileStatus,
     BrowserSandbox, BrowserStatus, ScreenshotResult,
 };
-use crate::browser::automation::BatchOptions;
-use crate::browser::sandbox::SandboxStats;
-use serde::{Deserialize, Serialize};
 
 /// 浏览器 API 服务
 #[derive(Clone)]
@@ -43,14 +44,22 @@ impl BrowserApiService {
     /// 删除浏览器配置
     pub async fn delete_profile(&self, id: &str) -> Result<(), ApiError> {
         self.client
-            .delete(&format!("/browser/profiles/{}", js_sys::encode_uri_component(id)))
+            .delete(&format!(
+                "/browser/profiles/{}",
+                js_sys::encode_uri_component(id)
+            ))
             .await
     }
 
     /// 连接到浏览器
     pub async fn connect(&self, profile_id: &str) -> Result<BrowserInstance, ApiError> {
         self.client
-            .post("/browser/connect", &ConnectRequest { profile_id: profile_id.to_string() })
+            .post(
+                "/browser/connect",
+                &ConnectRequest {
+                    profile_id: profile_id.to_string(),
+                },
+            )
             .await
     }
 
@@ -59,13 +68,19 @@ impl BrowserApiService {
         self.client
             .post(
                 "/browser/disconnect",
-                &DisconnectRequest { instance_id: instance_id.to_string() },
+                &DisconnectRequest {
+                    instance_id: instance_id.to_string(),
+                },
             )
             .await
     }
 
     /// 导航到 URL
-    pub async fn navigate(&self, instance_id: &str, url: &str) -> Result<NavigationResponse, ApiError> {
+    pub async fn navigate(
+        &self,
+        instance_id: &str,
+        url: &str,
+    ) -> Result<NavigationResponse, ApiError> {
         self.client
             .post(
                 "/browser/navigate",
@@ -145,13 +160,21 @@ impl BrowserApiService {
 
     /// 删除沙箱
     pub async fn delete_sandbox(&self, id: &str) -> Result<(), ApiError> {
-        self.client.delete(&format!("/browser/sandboxes/{}", js_sys::encode_uri_component(id))).await
+        self.client
+            .delete(&format!(
+                "/browser/sandboxes/{}",
+                js_sys::encode_uri_component(id)
+            ))
+            .await
     }
 
     /// 获取沙箱统计
     pub async fn get_sandbox_stats(&self, id: &str) -> Result<SandboxStats, ApiError> {
         self.client
-            .get(&format!("/browser/sandboxes/{}/stats", js_sys::encode_uri_component(id)))
+            .get(&format!(
+                "/browser/sandboxes/{}/stats",
+                js_sys::encode_uri_component(id)
+            ))
             .await
     }
 
@@ -161,7 +184,10 @@ impl BrowserApiService {
         instance_id: &str,
     ) -> Result<BrowserProfileStatus, ApiError> {
         self.client
-            .get(&format!("/browser/instances/{}/status", js_sys::encode_uri_component(instance_id)))
+            .get(&format!(
+                "/browser/instances/{}/status",
+                js_sys::encode_uri_component(instance_id)
+            ))
             .await
     }
 }

@@ -15,22 +15,24 @@
 //! - RFC 1459: <https://tools.ietf.org/html/rfc1459>
 //! - RFC 2810-2813: IRC updates
 
-use super::r#trait::{
-    BaseChannelConfig, Channel, ChannelConfig, ChannelEvent, ChannelInfo, ChannelType, ConnectionMode,
-    ContentType, MemberInfo,
-};
-use crate::communication::{Message, PlatformType};
-use crate::error::{AgentError, Result};
-use async_trait::async_trait;
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
+
+use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
 use tokio::sync::{mpsc, Mutex};
 use tokio_native_tls::{TlsConnector, TlsStream};
 use tracing::{debug, error, info};
 use uuid::Uuid;
+
+use super::r#trait::{
+    BaseChannelConfig, Channel, ChannelConfig, ChannelEvent, ChannelInfo, ChannelType,
+    ConnectionMode, ContentType, MemberInfo,
+};
+use crate::communication::{Message, PlatformType};
+use crate::error::{AgentError, Result};
 
 /// IRC channel implementation
 pub struct IRCChannel {
@@ -93,7 +95,8 @@ impl IRCConfig {
         Some(Self {
             server,
             port,
-            use_tls: std::env::var("IRC_USE_TLS").ok()?.parse().ok()?,            nickname: nickname.clone(),
+            use_tls: std::env::var("IRC_USE_TLS").ok()?.parse().ok()?,
+            nickname: nickname.clone(),
             username: std::env::var("IRC_USERNAME").unwrap_or_else(|_| nickname.clone()),
             realname: std::env::var("IRC_REALNAME").unwrap_or_else(|_| "BeeBotOS Bot".to_string()),
             server_password: std::env::var("IRC_SERVER_PASSWORD").ok(),
@@ -117,7 +120,7 @@ impl Default for IRCConfig {
         let mut base = BaseChannelConfig::default();
         // IRC uses WebSocket as the connection mode (represents persistent connection)
         base.connection_mode = ConnectionMode::WebSocket;
-        
+
         Self {
             server: "irc.libera.chat".to_string(),
             port: 6667,
@@ -337,9 +340,9 @@ impl IRCMessage {
 
     /// Get nickname from prefix
     pub fn nickname(&self) -> Option<String> {
-        self.prefix.as_ref().and_then(|p| {
-            p.split('!').next().map(|s| s.to_string())
-        })
+        self.prefix
+            .as_ref()
+            .and_then(|p| p.split('!').next().map(|s| s.to_string()))
     }
 }
 
@@ -368,7 +371,8 @@ impl IRCChannel {
     async fn send_raw(&self, message: &IRCMessage) -> Result<()> {
         let data = message.format();
         if let Some(tx) = &self.writer_tx {
-            tx.send(data).await
+            tx.send(data)
+                .await
                 .map_err(|_| AgentError::platform("Failed to send: channel closed"))?;
             Ok(())
         } else {
@@ -380,7 +384,7 @@ impl IRCChannel {
     async fn send_privmsg(&self, target: &str, content: &str) -> Result<()> {
         // Split long messages
         const MAX_LENGTH: usize = 400;
-        
+
         for chunk in content.chars().collect::<Vec<_>>().chunks(MAX_LENGTH) {
             let msg: String = chunk.iter().collect();
             let irc_msg = IRCMessage::privmsg(target, &msg);
@@ -394,7 +398,7 @@ impl IRCChannel {
     async fn join_channel(&self, channel: &str) -> Result<()> {
         let msg = IRCMessage::join(channel);
         self.send_raw(&msg).await?;
-        
+
         {
             let mut state = self.state.lock().await;
             if !state.channels.contains(&channel.to_string()) {
@@ -411,12 +415,12 @@ impl IRCChannel {
     async fn part_channel(&self, channel: &str) -> Result<()> {
         let msg = IRCMessage::part(channel);
         self.send_raw(&msg).await?;
-        
+
         {
             let mut state = self.state.lock().await;
             state.channels.retain(|c| c != channel);
         }
-        
+
         info!("Parted IRC channel: {}", channel);
         Ok(())
     }
@@ -425,7 +429,8 @@ impl IRCChannel {
     #[allow(dead_code)]
     async fn identify_nickserv(&self) -> Result<()> {
         if let Some(password) = &self.config.nickserv_password {
-            self.send_privmsg("NickServ", &format!("IDENTIFY {}", password)).await?;
+            self.send_privmsg("NickServ", &format!("IDENTIFY {}", password))
+                .await?;
             info!("Sent NickServ identification");
         }
         Ok(())
@@ -480,7 +485,7 @@ impl IRCChannel {
     #[allow(dead_code)]
     async fn connect_tls(&self) -> Result<TlsStream<TcpStream>> {
         let addr = format!("{}:{}", self.config.server, self.config.port);
-        
+
         // Connect to server
         let stream = TcpStream::connect(&addr)
             .await
@@ -491,7 +496,9 @@ impl IRCChannel {
             native_tls::TlsConnector::builder()
                 .danger_accept_invalid_certs(false)
                 .build()
-                .map_err(|e| AgentError::platform(format!("Failed to create TLS connector: {}", e)))?
+                .map_err(|e| {
+                    AgentError::platform(format!("Failed to create TLS connector: {}", e))
+                })?,
         );
 
         let stream = connector
@@ -507,7 +514,7 @@ impl IRCChannel {
     #[allow(dead_code)]
     async fn connect_plain(&self) -> Result<TcpStream> {
         let addr = format!("{}:{}", self.config.server, self.config.port);
-        
+
         let stream = TcpStream::connect(&addr)
             .await
             .map_err(|e| AgentError::platform(format!("Failed to connect: {}", e)))?;
@@ -534,10 +541,14 @@ impl Channel for IRCChannel {
     }
 
     async fn connect(&mut self) -> Result<()> {
-        info!("Connecting to IRC server {}:{}", self.config.server, self.config.port);
+        info!(
+            "Connecting to IRC server {}:{}",
+            self.config.server, self.config.port
+        );
 
         // Create channel for sending messages to writer
-        let (writer_tx, mut writer_rx): (mpsc::Sender<String>, mpsc::Receiver<String>) = mpsc::channel(100);
+        let (writer_tx, mut writer_rx): (mpsc::Sender<String>, mpsc::Receiver<String>) =
+            mpsc::channel(100);
         let writer_tx_for_read = writer_tx.clone();
         self.writer_tx = Some(writer_tx);
 
@@ -560,34 +571,41 @@ impl Channel for IRCChannel {
                     let stream = TcpStream::connect(&addr)
                         .await
                         .map_err(|e| AgentError::platform(format!("Failed to connect: {}", e)))?;
-                    
+
                     let connector = TlsConnector::from(
                         native_tls::TlsConnector::new()
-                            .map_err(|e| AgentError::platform(format!("TLS error: {}", e)))?
+                            .map_err(|e| AgentError::platform(format!("TLS error: {}", e)))?,
                     );
-                    
-                    let mut stream = connector
-                        .connect(&server, stream)
-                        .await
-                        .map_err(|e| AgentError::platform(format!("TLS handshake failed: {}", e)))?;
+
+                    let mut stream = connector.connect(&server, stream).await.map_err(|e| {
+                        AgentError::platform(format!("TLS handshake failed: {}", e))
+                    })?;
 
                     // Send PASS if configured
                     if let Some(password) = server_password {
                         let pass_msg = format!("PASS {}\r\n", password);
-                        stream.write_all(pass_msg.as_bytes()).await
+                        stream
+                            .write_all(pass_msg.as_bytes())
+                            .await
                             .map_err(|e| AgentError::platform(format!("Failed to send: {}", e)))?;
                     }
 
                     // Send NICK and USER
                     let nick_msg = format!("NICK {}\r\n", nickname);
-                    stream.write_all(nick_msg.as_bytes()).await
+                    stream
+                        .write_all(nick_msg.as_bytes())
+                        .await
                         .map_err(|e| AgentError::platform(format!("Failed to send: {}", e)))?;
 
                     let user_msg = format!("USER {} 0 * :{}\r\n", username, realname);
-                    stream.write_all(user_msg.as_bytes()).await
+                    stream
+                        .write_all(user_msg.as_bytes())
+                        .await
                         .map_err(|e| AgentError::platform(format!("Failed to send: {}", e)))?;
 
-                    stream.flush().await
+                    stream
+                        .flush()
+                        .await
                         .map_err(|e| AgentError::platform(format!("Failed to flush: {}", e)))?;
 
                     info!("Connected to IRC via TLS as {}", nickname);
@@ -639,22 +657,25 @@ impl Channel for IRCChannel {
                                     (msg.nickname(), msg.params.get(0), &msg.trailing)
                                 {
                                     if sender != nickname {
-                                        let channel_id = if target.starts_with('#') || target.starts_with('&') {
-                                            target.clone()
-                                        } else {
-                                            sender.clone()
-                                        };
+                                        let channel_id =
+                                            if target.starts_with('#') || target.starts_with('&') {
+                                                target.clone()
+                                            } else {
+                                                sender.clone()
+                                            };
 
                                         if let Some(sender) = event_sender.as_ref() {
-                                            let _ = sender.send(ChannelEvent::MessageReceived {
-                                                platform: PlatformType::IRC,
-                                                channel_id,
-                                                message: Message::new(
-                                                    Uuid::new_v4(),
-                                                    PlatformType::IRC,
-                                                    content.clone(),
-                                                ),
-                                            }).await;
+                                            let _ = sender
+                                                .send(ChannelEvent::MessageReceived {
+                                                    platform: PlatformType::IRC,
+                                                    channel_id,
+                                                    message: Message::new(
+                                                        Uuid::new_v4(),
+                                                        PlatformType::IRC,
+                                                        content.clone(),
+                                                    ),
+                                                })
+                                                .await;
                                         }
                                     }
                                 }
@@ -672,7 +693,9 @@ impl Channel for IRCChannel {
                     if let Some(password) = server_password {
                         let _pass_msg = format!("PASS {}\r\n", password);
                         // TODO: Actually send the PASS message
-                        stream.writable().await
+                        stream
+                            .writable()
+                            .await
                             .map_err(|e| AgentError::platform(format!("Stream error: {}", e)))?;
                     }
 
@@ -681,12 +704,18 @@ impl Channel for IRCChannel {
                     let user_msg = format!("USER {} 0 * :{}\r\n", username, realname);
 
                     let (read_half, mut write_half) = tokio::io::split(stream);
-                    
-                    write_half.write_all(nick_msg.as_bytes()).await
+
+                    write_half
+                        .write_all(nick_msg.as_bytes())
+                        .await
                         .map_err(|e| AgentError::platform(format!("Failed to send: {}", e)))?;
-                    write_half.write_all(user_msg.as_bytes()).await
+                    write_half
+                        .write_all(user_msg.as_bytes())
+                        .await
                         .map_err(|e| AgentError::platform(format!("Failed to send: {}", e)))?;
-                    write_half.flush().await
+                    write_half
+                        .flush()
+                        .await
                         .map_err(|e| AgentError::platform(format!("Failed to flush: {}", e)))?;
 
                     info!("Connected to IRC as {}", nickname);
@@ -735,22 +764,25 @@ impl Channel for IRCChannel {
                                     (msg.nickname(), msg.params.get(0), &msg.trailing)
                                 {
                                     if sender != nickname {
-                                        let channel_id = if target.starts_with('#') || target.starts_with('&') {
-                                            target.clone()
-                                        } else {
-                                            sender.clone()
-                                        };
+                                        let channel_id =
+                                            if target.starts_with('#') || target.starts_with('&') {
+                                                target.clone()
+                                            } else {
+                                                sender.clone()
+                                            };
 
                                         if let Some(sender) = event_sender.as_ref() {
-                                            let _ = sender.send(ChannelEvent::MessageReceived {
-                                                platform: PlatformType::IRC,
-                                                channel_id,
-                                                message: Message::new(
-                                                    Uuid::new_v4(),
-                                                    PlatformType::IRC,
-                                                    content.clone(),
-                                                ),
-                                            }).await;
+                                            let _ = sender
+                                                .send(ChannelEvent::MessageReceived {
+                                                    platform: PlatformType::IRC,
+                                                    channel_id,
+                                                    message: Message::new(
+                                                        Uuid::new_v4(),
+                                                        PlatformType::IRC,
+                                                        content.clone(),
+                                                    ),
+                                                })
+                                                .await;
                                         }
                                     }
                                 }
@@ -760,12 +792,13 @@ impl Channel for IRCChannel {
                 }
 
                 Ok(())
-            }.await;
+            }
+            .await;
 
             if let Err(e) = result {
                 error!("IRC connection error: {}", e);
             }
-            
+
             info!("IRC connection closed");
         });
 
@@ -789,14 +822,14 @@ impl Channel for IRCChannel {
     async fn disconnect(&mut self) -> Result<()> {
         let quit_msg = IRCMessage::quit("BeeBotOS signing off");
         self.send_raw(&quit_msg).await.ok();
-        
+
         self.writer_tx = None;
-        
+
         {
             let mut state = self.state.lock().await;
             state.connected = false;
         }
-        
+
         info!("Disconnected from IRC");
         Ok(())
     }
@@ -823,26 +856,35 @@ impl Channel for IRCChannel {
         self.config.base.connection_mode
     }
 
-    async fn download_image(&self, _file_key: &str, _message_id: Option<&str>) -> crate::error::Result<Vec<u8>> {
-        Err(crate::error::AgentError::platform("Image download not supported for IRC"))
+    async fn download_image(
+        &self,
+        _file_key: &str,
+        _message_id: Option<&str>,
+    ) -> crate::error::Result<Vec<u8>> {
+        Err(crate::error::AgentError::platform(
+            "Image download not supported for IRC",
+        ))
     }
 
     async fn list_channels(&self) -> Result<Vec<ChannelInfo>> {
         let state = self.state.lock().await;
-        Ok(state.channels.iter().map(|c| ChannelInfo {
-            id: c.clone(),
-            name: c.clone(),
-            channel_type: ChannelType::Group,
-            unread_count: 0,
-            metadata: HashMap::new(),
-        }).collect())
+        Ok(state
+            .channels
+            .iter()
+            .map(|c| ChannelInfo {
+                id: c.clone(),
+                name: c.clone(),
+                channel_type: ChannelType::Group,
+                unread_count: 0,
+                metadata: HashMap::new(),
+            })
+            .collect())
     }
 
     async fn list_members(&self, _channel_id: &str) -> Result<Vec<MemberInfo>> {
         // Would need to send NAMES and wait for response
         Ok(vec![])
     }
-
 }
 
 #[cfg(test)]
@@ -861,7 +903,7 @@ mod tests {
     fn test_irc_message_parse() {
         let line = ":nick!user@host PRIVMSG #channel :Hello world";
         let msg = IRCMessage::parse(line).unwrap();
-        
+
         assert_eq!(msg.prefix, Some("nick!user@host".to_string()));
         assert_eq!(msg.command, "PRIVMSG");
         assert_eq!(msg.params, vec!["#channel"]);

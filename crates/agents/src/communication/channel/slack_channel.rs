@@ -423,9 +423,7 @@ impl SlackChannel {
     /// Process an Events API payload and emit ChannelEvent for message events.
     async fn process_events_api_payload(&self, payload: &serde_json::Value) -> Result<()> {
         let event = payload.get("event");
-        let event_type = event
-            .and_then(|e| e.get("type"))
-            .and_then(|v| v.as_str());
+        let event_type = event.and_then(|e| e.get("type")).and_then(|v| v.as_str());
 
         if event_type != Some("message") {
             return Ok(());
@@ -492,7 +490,10 @@ impl SlackChannel {
             if let Err(e) = tx.send(event).await {
                 warn!("Failed to send ChannelEvent to event bus: {}", e);
             } else {
-                info!("📨 Emitted ChannelEvent::MessageReceived for Slack user {}", user);
+                info!(
+                    "📨 Emitted ChannelEvent::MessageReceived for Slack user {}",
+                    user
+                );
             }
         } else {
             warn!("Event bus not set, cannot emit ChannelEvent");
@@ -745,7 +746,10 @@ impl ChannelFactory for SlackChannelFactory {
         super::PlatformType::Slack
     }
 
-    async fn create(&self, config: &Value) -> crate::error::Result<Arc<RwLock<dyn super::Channel>>> {
+    async fn create(
+        &self,
+        config: &Value,
+    ) -> crate::error::Result<Arc<RwLock<dyn super::Channel>>> {
         use crate::error::AgentError;
 
         let bot_token = config
@@ -756,8 +760,14 @@ impl ChannelFactory for SlackChannelFactory {
 
         let channel = SlackChannel::new(SlackChannelConfig {
             bot_token,
-            app_token: config.get("app_token").and_then(|v| v.as_str()).map(|s| s.to_string()),
-            signing_secret: config.get("signing_secret").and_then(|v| v.as_str()).map(|s| s.to_string()),
+            app_token: config
+                .get("app_token")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string()),
+            signing_secret: config
+                .get("signing_secret")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string()),
             base: BaseChannelConfig::default(),
         });
 

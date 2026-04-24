@@ -125,7 +125,14 @@ impl AgentService {
             .await?;
 
         // Step 7: Log creation
-        self.add_log(&agent_id.to_string(), "info", "Agent created and spawned in kernel sandbox", Some("lifecycle")).await.ok();
+        self.add_log(
+            &agent_id.to_string(),
+            "info",
+            "Agent created and spawned in kernel sandbox",
+            Some("lifecycle"),
+        )
+        .await
+        .ok();
 
         info!(
             "Agent {} created and spawned in kernel sandbox (task_id: {})",
@@ -185,7 +192,9 @@ impl AgentService {
             .await?;
 
         // Step 7: Log start
-        self.add_log(agent_id, "info", "Agent started", Some("lifecycle")).await.ok();
+        self.add_log(agent_id, "info", "Agent started", Some("lifecycle"))
+            .await
+            .ok();
 
         info!(
             "Agent {} started successfully (task_id: {})",
@@ -237,7 +246,9 @@ impl AgentService {
             .await?;
 
         // Step 5: Log stop
-        self.add_log(agent_id, "info", "Agent stopped", Some("lifecycle")).await.ok();
+        self.add_log(agent_id, "info", "Agent stopped", Some("lifecycle"))
+            .await
+            .ok();
 
         info!("Agent {} stopped successfully", agent_id);
         Ok(())
@@ -287,7 +298,9 @@ impl AgentService {
         }
 
         // Step 4: Log deletion
-        self.add_log(agent_id, "info", "Agent deleted", Some("lifecycle")).await.ok();
+        self.add_log(agent_id, "info", "Agent deleted", Some("lifecycle"))
+            .await
+            .ok();
 
         info!("Agent {} deleted", agent_id);
         Ok(())
@@ -333,16 +346,16 @@ impl AgentService {
         })?;
 
         // Fetch the created record
-        let row: crate::models::AgentRecordRow = sqlx::query_as(
-            "SELECT * FROM agents WHERE id = ?1"
-        )
-        .bind(id.to_string())
-        .fetch_one(&self.db)
-        .await
-        .map_err(|e| AppError::database(e))?;
+        let row: crate::models::AgentRecordRow =
+            sqlx::query_as("SELECT * FROM agents WHERE id = ?1")
+                .bind(id.to_string())
+                .fetch_one(&self.db)
+                .await
+                .map_err(|e| AppError::database(e))?;
 
-        let agent_record = row.try_into()
-            .map_err(|e: String| AppError::Internal(format!("Failed to parse agent record: {}", e)))?;
+        let agent_record = row.try_into().map_err(|e: String| {
+            AppError::Internal(format!("Failed to parse agent record: {}", e))
+        })?;
 
         Ok(agent_record)
     }
@@ -438,11 +451,12 @@ impl AgentService {
         tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
 
         // Update status to running
-        let _ =
-            sqlx::query("UPDATE agents SET status = 'running', updated_at = datetime('now') WHERE id = ?1")
-                .bind(agent_id.to_string())
-                .execute(&db)
-                .await;
+        let _ = sqlx::query(
+            "UPDATE agents SET status = 'running', updated_at = datetime('now') WHERE id = ?1",
+        )
+        .bind(agent_id.to_string())
+        .execute(&db)
+        .await;
 
         // Record status change
         let _ = sqlx::query(
@@ -492,7 +506,8 @@ impl AgentService {
 
             // Update heartbeat
             let result = sqlx::query(
-                "UPDATE agents SET last_heartbeat = datetime('now') WHERE id = ?1 AND status = 'running'",
+                "UPDATE agents SET last_heartbeat = datetime('now') WHERE id = ?1 AND status = \
+                 'running'",
             )
             .bind(agent_id.to_string())
             .execute(&db)
@@ -577,7 +592,11 @@ impl AgentService {
 
         let agents: Result<Vec<AgentRecord>, AppError> = rows
             .into_iter()
-            .map(|row| row.try_into().map_err(|e: String| AppError::Internal(format!("Failed to parse agent: {}", e))))
+            .map(|row| {
+                row.try_into().map_err(|e: String| {
+                    AppError::Internal(format!("Failed to parse agent: {}", e))
+                })
+            })
             .collect();
 
         agents
@@ -615,7 +634,10 @@ impl AgentService {
 
     /// Get agent by ID
     pub async fn get_agent(&self, agent_id: &str) -> Result<Option<AgentRecord>, AppError> {
-        let row: Option<crate::models::AgentRecordRow> = sqlx::query_as::<_, crate::models::AgentRecordRow>("SELECT * FROM agents WHERE id = ?1")
+        let row: Option<crate::models::AgentRecordRow> =
+            sqlx::query_as::<_, crate::models::AgentRecordRow>(
+                "SELECT * FROM agents WHERE id = ?1",
+            )
             .bind(agent_id.to_string())
             .fetch_optional(&self.db)
             .await
@@ -626,8 +648,9 @@ impl AgentService {
 
         match row {
             Some(row) => {
-                let agent: AgentRecord = row.try_into()
-                    .map_err(|e: String| AppError::Internal(format!("Failed to parse agent: {}", e)))?;
+                let agent: AgentRecord = row.try_into().map_err(|e: String| {
+                    AppError::Internal(format!("Failed to parse agent: {}", e))
+                })?;
                 Ok(Some(agent))
             }
             None => Ok(None),
@@ -650,7 +673,8 @@ impl AgentService {
         Ok(())
     }
 
-    /// Update agent fields (name, description, capabilities, model_provider, model_name)
+    /// Update agent fields (name, description, capabilities, model_provider,
+    /// model_name)
     pub async fn update_agent(
         &self,
         agent_id: &str,
@@ -675,8 +699,9 @@ impl AgentService {
             binds.push(status.clone());
         }
         if let Some(caps) = &request.capabilities {
-            let caps_json = serde_json::to_string(caps)
-                .map_err(|e| AppError::Internal(format!("Failed to serialize capabilities: {}", e)))?;
+            let caps_json = serde_json::to_string(caps).map_err(|e| {
+                AppError::Internal(format!("Failed to serialize capabilities: {}", e))
+            })?;
             set_parts.push("capabilities = ?".to_string());
             binds.push(caps_json);
         }
@@ -690,7 +715,9 @@ impl AgentService {
         }
 
         if set_parts.is_empty() {
-            return self.get_agent(agent_id).await?
+            return self
+                .get_agent(agent_id)
+                .await?
                 .ok_or_else(|| AppError::not_found("Agent", agent_id));
         }
 
@@ -718,10 +745,18 @@ impl AgentService {
         info!("Agent {} updated", agent_id);
 
         // Log update
-        self.add_log(agent_id, "info", "Agent configuration updated", Some("lifecycle")).await.ok();
+        self.add_log(
+            agent_id,
+            "info",
+            "Agent configuration updated",
+            Some("lifecycle"),
+        )
+        .await
+        .ok();
 
         // Return updated record
-        self.get_agent(agent_id).await?
+        self.get_agent(agent_id)
+            .await?
             .ok_or_else(|| AppError::not_found("Agent", agent_id))
     }
 
@@ -735,7 +770,7 @@ impl AgentService {
     ) -> Result<(), AppError> {
         sqlx::query(
             "INSERT INTO agent_logs (agent_id, level, message, source, timestamp)
-             VALUES (?1, ?2, ?3, ?4, datetime('now'))"
+             VALUES (?1, ?2, ?3, ?4, datetime('now'))",
         )
         .bind(agent_id)
         .bind(level)

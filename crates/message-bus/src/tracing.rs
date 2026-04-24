@@ -3,9 +3,11 @@
 //! This module provides distributed tracing capabilities for the message bus,
 //! allowing end-to-end tracing of messages across services.
 
-use crate::Message;
 use std::collections::HashMap;
+
 use tracing::Span;
+
+use crate::Message;
 
 /// Tracing configuration
 #[derive(Debug, Clone)]
@@ -350,7 +352,8 @@ impl TraceExporter for JaegerExporter {
         // For now, just log
         tracing::debug!(
             "Exporting span {} for trace {}",
-            span.span_id, span.trace_id
+            span.span_id,
+            span.trace_id
         );
         Ok(())
     }
@@ -373,7 +376,7 @@ pub mod propagation {
             .and_then(|v| v.to_str().ok())
             .map(|v| v == "true")
             .unwrap_or(true);
-        
+
         // Extract baggage items (headers starting with "x-baggage-")
         let mut baggage = HashMap::new();
         for (name, value) in headers.iter() {
@@ -405,7 +408,7 @@ pub mod propagation {
         if let Ok(sampled) = context.sampled.to_string().parse() {
             headers.insert("x-trace-sampled", sampled);
         }
-        
+
         // Inject baggage items
         for (key, value) in &context.baggage {
             let header_name = format!("x-baggage-{}", key);
@@ -458,8 +461,7 @@ mod tests {
     #[test]
     fn test_message_tracing_ext() {
         let ctx = TraceContext::new().with_baggage("test", "value");
-        let message = Message::new("test/topic", b"data".to_vec())
-            .with_trace_context(&ctx);
+        let message = Message::new("test/topic", b"data".to_vec()).with_trace_context(&ctx);
 
         let extracted = message.trace_context().unwrap();
         assert_eq!(extracted.trace_id, ctx.trace_id);

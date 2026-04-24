@@ -150,33 +150,72 @@ impl WizardState {
         s.push_str(&format!("host = \"{}\"\n", self.server.host));
         s.push_str(&format!("http_port = {}\n", self.server.http_port));
         s.push_str(&format!("grpc_port = {}\n", self.server.grpc_port));
-        s.push_str(&format!("request_timeout = {}\n", self.server.request_timeout));
+        s.push_str(&format!(
+            "request_timeout = {}\n",
+            self.server.request_timeout
+        ));
         s.push_str(&format!("max_body_size = {}\n", self.server.max_body_size));
-        s.push_str(&format!("cors_origins = {:?}\n\n", self.server.cors_origins));
+        s.push_str(&format!(
+            "cors_origins = {:?}\n\n",
+            self.server.cors_origins
+        ));
 
         s.push_str("[database]\n");
         s.push_str(&format!("db_type = \"{}\"\n", self.database.db_type));
         if self.database.db_type == "sqlite" {
-            s.push_str(&format!("sqlite_path = \"{}\"\n", self.database.sqlite_path));
+            s.push_str(&format!(
+                "sqlite_path = \"{}\"\n",
+                self.database.sqlite_path
+            ));
         } else {
-            s.push_str(&format!("postgres_url = \"{}\"\n", self.database.postgres_url));
+            s.push_str(&format!(
+                "postgres_url = \"{}\"\n",
+                self.database.postgres_url
+            ));
         }
-        s.push_str(&format!("max_connections = {}\n", self.database.max_connections));
-        s.push_str(&format!("min_connections = {}\n", self.database.min_connections));
-        s.push_str(&format!("connect_timeout = {}\n", self.database.connect_timeout));
-        s.push_str(&format!("auto_migrate = {}\n\n", self.database.auto_migrate));
+        s.push_str(&format!(
+            "max_connections = {}\n",
+            self.database.max_connections
+        ));
+        s.push_str(&format!(
+            "min_connections = {}\n",
+            self.database.min_connections
+        ));
+        s.push_str(&format!(
+            "connect_timeout = {}\n",
+            self.database.connect_timeout
+        ));
+        s.push_str(&format!(
+            "auto_migrate = {}\n\n",
+            self.database.auto_migrate
+        ));
 
         s.push_str("[jwt]\n");
         s.push_str(&format!("secret = \"{}\"\n", self.jwt.secret));
         s.push_str(&format!("token_expiry = {}\n", self.jwt.token_expiry));
-        s.push_str(&format!("refresh_token_expiry = {}\n\n", self.jwt.refresh_token_expiry));
+        s.push_str(&format!(
+            "refresh_token_expiry = {}\n\n",
+            self.jwt.refresh_token_expiry
+        ));
 
         s.push_str("[models]\n");
-        s.push_str(&format!("default_provider = \"{}\"\n", self.models.default_provider));
-        s.push_str(&format!("fallback_chain = {:?}\n", self.models.fallback_chain));
-        s.push_str(&format!("cost_optimization = {}\n", self.models.cost_optimization));
+        s.push_str(&format!(
+            "default_provider = \"{}\"\n",
+            self.models.default_provider
+        ));
+        s.push_str(&format!(
+            "fallback_chain = {:?}\n",
+            self.models.fallback_chain
+        ));
+        s.push_str(&format!(
+            "cost_optimization = {}\n",
+            self.models.cost_optimization
+        ));
         s.push_str(&format!("max_tokens = {}\n", self.models.max_tokens));
-        s.push_str(&format!("request_timeout = {}\n\n", self.models.request_timeout));
+        s.push_str(&format!(
+            "request_timeout = {}\n\n",
+            self.models.request_timeout
+        ));
 
         for provider in &self.models.providers {
             s.push_str(&format!("[models.providers.{}]\n", provider.name));
@@ -203,11 +242,23 @@ impl WizardState {
         s.push_str(&format!("format = \"{}\"\n", self.logging.format));
         s.push_str(&format!("file_path = \"{}\"\n", self.logging.file_path));
         s.push_str(&format!("rotation = \"{}\"\n", self.logging.rotation));
-        s.push_str(&format!("enable_metrics = {}\n", self.logging.enable_metrics));
+        s.push_str(&format!(
+            "enable_metrics = {}\n",
+            self.logging.enable_metrics
+        ));
         s.push_str(&format!("metrics_port = {}\n", self.logging.metrics_port));
-        s.push_str(&format!("enable_tracing = {}\n", self.logging.enable_tracing));
-        s.push_str(&format!("otlp_endpoint = \"{}\"\n", self.logging.otlp_endpoint));
-        s.push_str(&format!("trace_sampling_rate = {}\n", self.logging.trace_sampling_rate));
+        s.push_str(&format!(
+            "enable_tracing = {}\n",
+            self.logging.enable_tracing
+        ));
+        s.push_str(&format!(
+            "otlp_endpoint = \"{}\"\n",
+            self.logging.otlp_endpoint
+        ));
+        s.push_str(&format!(
+            "trace_sampling_rate = {}\n",
+            self.logging.trace_sampling_rate
+        ));
 
         s
     }
@@ -216,19 +267,43 @@ impl WizardState {
         let mut s = String::new();
         s.push_str("# BeeBotOS Environment Variables\n");
         s.push_str(&format!("BEE__SERVER__HOST={}\n", self.server.host));
-        s.push_str(&format!("BEE__SERVER__HTTP_PORT={}\n", self.server.http_port));
-        s.push_str(&format!("BEE__SERVER__GRPC_PORT={}\n", self.server.grpc_port));
+        s.push_str(&format!(
+            "BEE__SERVER__HTTP_PORT={}\n",
+            self.server.http_port
+        ));
+        s.push_str(&format!(
+            "BEE__SERVER__GRPC_PORT={}\n",
+            self.server.grpc_port
+        ));
         s.push_str(&format!("BEE__DATABASE__TYPE={}\n", self.database.db_type));
         if self.database.db_type == "sqlite" {
-            s.push_str(&format!("BEE__DATABASE__SQLITE_PATH={}\n", self.database.sqlite_path));
+            s.push_str(&format!(
+                "BEE__DATABASE__SQLITE_PATH={}\n",
+                self.database.sqlite_path
+            ));
         } else {
-            s.push_str(&format!("BEE__DATABASE__POSTGRES_URL={}\n", self.database.postgres_url));
+            s.push_str(&format!(
+                "BEE__DATABASE__POSTGRES_URL={}\n",
+                self.database.postgres_url
+            ));
         }
         s.push_str(&format!("BEE__JWT__SECRET={}\n", self.jwt.secret));
-        s.push_str(&format!("BEE__JWT__TOKEN_EXPIRY={}\n", self.jwt.token_expiry));
-        s.push_str(&format!("BEE__MODELS__DEFAULT_PROVIDER={}\n", self.models.default_provider));
-        s.push_str(&format!("BEE__MODELS__MAX_TOKENS={}\n", self.models.max_tokens));
-        s.push_str(&format!("BEE__BLOCKCHAIN__ENABLED={}\n", self.blockchain.enabled));
+        s.push_str(&format!(
+            "BEE__JWT__TOKEN_EXPIRY={}\n",
+            self.jwt.token_expiry
+        ));
+        s.push_str(&format!(
+            "BEE__MODELS__DEFAULT_PROVIDER={}\n",
+            self.models.default_provider
+        ));
+        s.push_str(&format!(
+            "BEE__MODELS__MAX_TOKENS={}\n",
+            self.models.max_tokens
+        ));
+        s.push_str(&format!(
+            "BEE__BLOCKCHAIN__ENABLED={}\n",
+            self.blockchain.enabled
+        ));
         s.push_str(&format!("BEE__LOGGING__LEVEL={}\n", self.logging.level));
         s
     }
@@ -263,30 +338,75 @@ impl WizardState {
         s.push_str("    image: beebotos/gateway:latest\n");
         s.push_str("    container_name: beebotos-gateway\n");
         s.push_str("    ports:\n");
-        s.push_str(&format!("      - \"{}:{}\"\n", self.server.http_port, self.server.http_port));
-        s.push_str(&format!("      - \"{}:{}\"\n", self.server.grpc_port, self.server.grpc_port));
+        s.push_str(&format!(
+            "      - \"{}:{}\"\n",
+            self.server.http_port, self.server.http_port
+        ));
+        s.push_str(&format!(
+            "      - \"{}:{}\"\n",
+            self.server.grpc_port, self.server.grpc_port
+        ));
         if self.logging.enable_metrics {
-            s.push_str(&format!("      - \"{}:{}\"\n", self.logging.metrics_port, self.logging.metrics_port));
+            s.push_str(&format!(
+                "      - \"{}:{}\"\n",
+                self.logging.metrics_port, self.logging.metrics_port
+            ));
         }
         s.push_str("    environment:\n");
         s.push_str(&format!("      - BEE__SERVER__HOST={}\n", self.server.host));
-        s.push_str(&format!("      - BEE__SERVER__HTTP_PORT={}\n", self.server.http_port));
-        s.push_str(&format!("      - BEE__SERVER__GRPC_PORT={}\n", self.server.grpc_port));
-        s.push_str(&format!("      - BEE__DATABASE__TYPE={}\n", self.database.db_type));
+        s.push_str(&format!(
+            "      - BEE__SERVER__HTTP_PORT={}\n",
+            self.server.http_port
+        ));
+        s.push_str(&format!(
+            "      - BEE__SERVER__GRPC_PORT={}\n",
+            self.server.grpc_port
+        ));
+        s.push_str(&format!(
+            "      - BEE__DATABASE__TYPE={}\n",
+            self.database.db_type
+        ));
         if self.database.db_type == "sqlite" {
-            s.push_str(&format!("      - BEE__DATABASE__SQLITE_PATH={}\n", self.database.sqlite_path));
+            s.push_str(&format!(
+                "      - BEE__DATABASE__SQLITE_PATH={}\n",
+                self.database.sqlite_path
+            ));
         } else {
-            s.push_str(&format!("      - BEE__DATABASE__POSTGRES_URL={}\n", self.database.postgres_url));
+            s.push_str(&format!(
+                "      - BEE__DATABASE__POSTGRES_URL={}\n",
+                self.database.postgres_url
+            ));
         }
         s.push_str(&format!("      - BEE__JWT__SECRET={}\n", self.jwt.secret));
-        s.push_str(&format!("      - BEE__JWT__TOKEN_EXPIRY={}\n", self.jwt.token_expiry));
-        s.push_str(&format!("      - BEE__MODELS__DEFAULT_PROVIDER={}\n", self.models.default_provider));
-        s.push_str(&format!("      - BEE__MODELS__MAX_TOKENS={}\n", self.models.max_tokens));
-        s.push_str(&format!("      - BEE__BLOCKCHAIN__ENABLED={}\n", self.blockchain.enabled));
-        s.push_str(&format!("      - BEE__LOGGING__LEVEL={}\n", self.logging.level));
-        s.push_str(&format!("      - BEE__LOGGING__ENABLE_METRICS={}\n", self.logging.enable_metrics));
+        s.push_str(&format!(
+            "      - BEE__JWT__TOKEN_EXPIRY={}\n",
+            self.jwt.token_expiry
+        ));
+        s.push_str(&format!(
+            "      - BEE__MODELS__DEFAULT_PROVIDER={}\n",
+            self.models.default_provider
+        ));
+        s.push_str(&format!(
+            "      - BEE__MODELS__MAX_TOKENS={}\n",
+            self.models.max_tokens
+        ));
+        s.push_str(&format!(
+            "      - BEE__BLOCKCHAIN__ENABLED={}\n",
+            self.blockchain.enabled
+        ));
+        s.push_str(&format!(
+            "      - BEE__LOGGING__LEVEL={}\n",
+            self.logging.level
+        ));
+        s.push_str(&format!(
+            "      - BEE__LOGGING__ENABLE_METRICS={}\n",
+            self.logging.enable_metrics
+        ));
         if self.logging.enable_metrics {
-            s.push_str(&format!("      - BEE__LOGGING__METRICS_PORT={}\n", self.logging.metrics_port));
+            s.push_str(&format!(
+                "      - BEE__LOGGING__METRICS_PORT={}\n",
+                self.logging.metrics_port
+            ));
         }
         s.push_str("    volumes:\n");
         s.push_str("      - ./data:/app/data\n");
@@ -323,17 +443,44 @@ impl WizardState {
         s.push_str("    app: beebotos-gateway\n");
         s.push_str("data:\n");
         s.push_str(&format!("  BEE__SERVER__HOST: \"{}\"\n", self.server.host));
-        s.push_str(&format!("  BEE__SERVER__HTTP_PORT: \"{}\"\n", self.server.http_port));
-        s.push_str(&format!("  BEE__SERVER__GRPC_PORT: \"{}\"\n", self.server.grpc_port));
-        s.push_str(&format!("  BEE__DATABASE__TYPE: \"{}\"\n", self.database.db_type));
+        s.push_str(&format!(
+            "  BEE__SERVER__HTTP_PORT: \"{}\"\n",
+            self.server.http_port
+        ));
+        s.push_str(&format!(
+            "  BEE__SERVER__GRPC_PORT: \"{}\"\n",
+            self.server.grpc_port
+        ));
+        s.push_str(&format!(
+            "  BEE__DATABASE__TYPE: \"{}\"\n",
+            self.database.db_type
+        ));
         if self.database.db_type == "sqlite" {
-            s.push_str(&format!("  BEE__DATABASE__SQLITE_PATH: \"{}\"\n", self.database.sqlite_path));
+            s.push_str(&format!(
+                "  BEE__DATABASE__SQLITE_PATH: \"{}\"\n",
+                self.database.sqlite_path
+            ));
         }
-        s.push_str(&format!("  BEE__MODELS__DEFAULT_PROVIDER: \"{}\"\n", self.models.default_provider));
-        s.push_str(&format!("  BEE__MODELS__MAX_TOKENS: \"{}\"\n", self.models.max_tokens));
-        s.push_str(&format!("  BEE__BLOCKCHAIN__ENABLED: \"{}\"\n", self.blockchain.enabled));
-        s.push_str(&format!("  BEE__LOGGING__LEVEL: \"{}\"\n", self.logging.level));
-        s.push_str(&format!("  BEE__LOGGING__ENABLE_METRICS: \"{}\"\n", self.logging.enable_metrics));
+        s.push_str(&format!(
+            "  BEE__MODELS__DEFAULT_PROVIDER: \"{}\"\n",
+            self.models.default_provider
+        ));
+        s.push_str(&format!(
+            "  BEE__MODELS__MAX_TOKENS: \"{}\"\n",
+            self.models.max_tokens
+        ));
+        s.push_str(&format!(
+            "  BEE__BLOCKCHAIN__ENABLED: \"{}\"\n",
+            self.blockchain.enabled
+        ));
+        s.push_str(&format!(
+            "  BEE__LOGGING__LEVEL: \"{}\"\n",
+            self.logging.level
+        ));
+        s.push_str(&format!(
+            "  BEE__LOGGING__ENABLE_METRICS: \"{}\"\n",
+            self.logging.enable_metrics
+        ));
         s.push_str("---\n");
 
         // Secret for sensitive data
@@ -347,7 +494,10 @@ impl WizardState {
         s.push_str("stringData:\n");
         s.push_str(&format!("  BEE__JWT__SECRET: \"{}\"\n", self.jwt.secret));
         if self.database.db_type == "postgres" {
-            s.push_str(&format!("  BEE__DATABASE__POSTGRES_URL: \"{}\"\n", self.database.postgres_url));
+            s.push_str(&format!(
+                "  BEE__DATABASE__POSTGRES_URL: \"{}\"\n",
+                self.database.postgres_url
+            ));
         }
         s.push_str("---\n");
 
@@ -372,10 +522,19 @@ impl WizardState {
         s.push_str("      - name: gateway\n");
         s.push_str("        image: beebotos/gateway:latest\n");
         s.push_str("        ports:\n");
-        s.push_str(&format!("        - containerPort: {}\n", self.server.http_port));
-        s.push_str(&format!("        - containerPort: {}\n", self.server.grpc_port));
+        s.push_str(&format!(
+            "        - containerPort: {}\n",
+            self.server.http_port
+        ));
+        s.push_str(&format!(
+            "        - containerPort: {}\n",
+            self.server.grpc_port
+        ));
         if self.logging.enable_metrics {
-            s.push_str(&format!("        - containerPort: {}\n", self.logging.metrics_port));
+            s.push_str(&format!(
+                "        - containerPort: {}\n",
+                self.logging.metrics_port
+            ));
         }
         s.push_str("        envFrom:\n");
         s.push_str("        - configMapRef:\n");
@@ -415,10 +574,19 @@ impl WizardState {
         s.push_str("  selector:\n");
         s.push_str("    app: beebotos-gateway\n");
         s.push_str("  ports:\n");
-        s.push_str(&format!("  - port: {}\n    targetPort: {}\n    name: http\n", self.server.http_port, self.server.http_port));
-        s.push_str(&format!("  - port: {}\n    targetPort: {}\n    name: grpc\n", self.server.grpc_port, self.server.grpc_port));
+        s.push_str(&format!(
+            "  - port: {}\n    targetPort: {}\n    name: http\n",
+            self.server.http_port, self.server.http_port
+        ));
+        s.push_str(&format!(
+            "  - port: {}\n    targetPort: {}\n    name: grpc\n",
+            self.server.grpc_port, self.server.grpc_port
+        ));
         if self.logging.enable_metrics {
-            s.push_str(&format!("  - port: {}\n    targetPort: {}\n    name: metrics\n", self.logging.metrics_port, self.logging.metrics_port));
+            s.push_str(&format!(
+                "  - port: {}\n    targetPort: {}\n    name: metrics\n",
+                self.logging.metrics_port, self.logging.metrics_port
+            ));
         }
         s.push_str("  type: ClusterIP\n");
 
@@ -441,7 +609,10 @@ impl WizardState {
         s.push_str("          service:\n");
         s.push_str("            name: beebotos-gateway\n");
         s.push_str(&format!("            port:\n"));
-        s.push_str(&format!("              number: {}\n", self.server.http_port));
+        s.push_str(&format!(
+            "              number: {}\n",
+            self.server.http_port
+        ));
         s
     }
 
@@ -492,8 +663,16 @@ impl WizardState {
                     auto_reply: true,
                     default_agent_id: "agent-001".to_string(),
                     platforms: vec![
-                        PlatformDraft { name: "webchat".to_string(), enabled: true, settings: std::collections::HashMap::new() },
-                        PlatformDraft { name: "lark".to_string(), enabled: true, settings: std::collections::HashMap::new() },
+                        PlatformDraft {
+                            name: "webchat".to_string(),
+                            enabled: true,
+                            settings: std::collections::HashMap::new(),
+                        },
+                        PlatformDraft {
+                            name: "lark".to_string(),
+                            enabled: true,
+                            settings: std::collections::HashMap::new(),
+                        },
                     ],
                 };
                 self.logging = LoggingConfigDraft {
@@ -510,7 +689,11 @@ impl WizardState {
             }
             "standard" => {
                 self.apply_template("minimal");
-                self.models.fallback_chain = vec!["kimi".to_string(), "openai".to_string(), "deepseek".to_string()];
+                self.models.fallback_chain = vec![
+                    "kimi".to_string(),
+                    "openai".to_string(),
+                    "deepseek".to_string(),
+                ];
                 self.models.providers = vec![
                     ProviderDraft {
                         name: "kimi".to_string(),
@@ -538,11 +721,31 @@ impl WizardState {
                     },
                 ];
                 self.channels.platforms = vec![
-                    PlatformDraft { name: "webchat".to_string(), enabled: true, settings: std::collections::HashMap::new() },
-                    PlatformDraft { name: "lark".to_string(), enabled: true, settings: std::collections::HashMap::new() },
-                    PlatformDraft { name: "telegram".to_string(), enabled: true, settings: std::collections::HashMap::new() },
-                    PlatformDraft { name: "dingtalk".to_string(), enabled: false, settings: std::collections::HashMap::new() },
-                    PlatformDraft { name: "discord".to_string(), enabled: false, settings: std::collections::HashMap::new() },
+                    PlatformDraft {
+                        name: "webchat".to_string(),
+                        enabled: true,
+                        settings: std::collections::HashMap::new(),
+                    },
+                    PlatformDraft {
+                        name: "lark".to_string(),
+                        enabled: true,
+                        settings: std::collections::HashMap::new(),
+                    },
+                    PlatformDraft {
+                        name: "telegram".to_string(),
+                        enabled: true,
+                        settings: std::collections::HashMap::new(),
+                    },
+                    PlatformDraft {
+                        name: "dingtalk".to_string(),
+                        enabled: false,
+                        settings: std::collections::HashMap::new(),
+                    },
+                    PlatformDraft {
+                        name: "discord".to_string(),
+                        enabled: false,
+                        settings: std::collections::HashMap::new(),
+                    },
                 ];
             }
             "enterprise" => {
@@ -664,8 +867,11 @@ pub struct LoggingConfigDraft {
 pub fn generate_jwt_secret() -> Result<String, String> {
     let mut bytes = [0u8; 32];
     let window = web_sys::window().ok_or("Window not available".to_string())?;
-    let crypto = window.crypto().map_err(|_| "Crypto API not available".to_string())?;
-    crypto.get_random_values_with_u8_array(&mut bytes)
+    let crypto = window
+        .crypto()
+        .map_err(|_| "Crypto API not available".to_string())?;
+    crypto
+        .get_random_values_with_u8_array(&mut bytes)
         .map_err(|_| "Failed to generate random values".to_string())?;
     let mut hex = String::with_capacity(64);
     for b in bytes {

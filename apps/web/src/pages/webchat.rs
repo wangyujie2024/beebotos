@@ -1,8 +1,10 @@
 //! WebChat 页面
 //!
 //! 提供聊天界面、会话管理、侧边提问等功能
-//! 已接入 WebChat Channel：通过 WebSocket 接收 Agent 回复，通过 HTTP POST 发送消息
+//! 已接入 WebChat Channel：通过 WebSocket 接收 Agent 回复，通过 HTTP POST
+//! 发送消息
 
+use gloo_storage::{LocalStorage, Storage};
 use leptos::prelude::*;
 use leptos::view;
 use leptos_meta::Title;
@@ -10,11 +12,12 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 
 use crate::api::{create_client, create_webchat_service};
-use crate::components::webchat::{MessageInput, MessageList, SessionList, SidePanel, UsagePanelComponent};
+use crate::components::webchat::{
+    MessageInput, MessageList, SessionList, SidePanel, UsagePanelComponent,
+};
 use crate::state::{use_auth_state, use_chat_ui_state, use_webchat_state};
 use crate::utils::get_user_id;
 use crate::webchat::{ChatMessage, MessageRole};
-use gloo_storage::{LocalStorage, Storage};
 
 /// 获取或创建持久化的会话 ID（仅作本地缓存，后端为准）
 fn get_stored_session_id() -> Option<String> {
@@ -44,11 +47,26 @@ pub fn WebchatPage() -> impl IntoView {
             let service = create_webchat_service(client);
             match service.list_sessions().await {
                 Ok(sessions) => {
-                    let _ = web_sys::console::log_1(&format!("[webchat] list_sessions returned {} sessions", sessions.len()).into());
+                    let _ = web_sys::console::log_1(
+                        &format!(
+                            "[webchat] list_sessions returned {} sessions",
+                            sessions.len()
+                        )
+                        .into(),
+                    );
                     // 如果有本地缓存的会话 ID，尝试恢复选中
                     let stored = get_stored_session_id();
-                    let has_stored = stored.as_ref().map(|id| sessions.iter().any(|s| &s.id == id)).unwrap_or(false);
-                    let _ = web_sys::console::log_1(&format!("[webchat] stored_session_id={:?}, has_stored={}", stored, has_stored).into());
+                    let has_stored = stored
+                        .as_ref()
+                        .map(|id| sessions.iter().any(|s| &s.id == id))
+                        .unwrap_or(false);
+                    let _ = web_sys::console::log_1(
+                        &format!(
+                            "[webchat] stored_session_id={:?}, has_stored={}",
+                            stored, has_stored
+                        )
+                        .into(),
+                    );
 
                     chat_state.sessions.set(sessions.clone());
 
@@ -58,12 +76,23 @@ pub fn WebchatPage() -> impl IntoView {
                             // 加载该会话的消息
                             match service.get_messages(&id).await {
                                 Ok(msgs) => {
-                                    let _ = web_sys::console::log_1(&format!("[webchat] loaded {} messages for session {}", msgs.len(), id).into());
+                                    let _ = web_sys::console::log_1(
+                                        &format!(
+                                            "[webchat] loaded {} messages for session {}",
+                                            msgs.len(),
+                                            id
+                                        )
+                                        .into(),
+                                    );
                                     chat_state.current_messages.set(msgs.clone());
-                                    chat_state.message_cache.update(|cache| { cache.insert(id.clone(), msgs); });
+                                    chat_state.message_cache.update(|cache| {
+                                        cache.insert(id.clone(), msgs);
+                                    });
                                 }
                                 Err(e) => {
-                                    let _ = web_sys::console::error_1(&format!("[webchat] get_messages failed: {}", e).into());
+                                    let _ = web_sys::console::error_1(
+                                        &format!("[webchat] get_messages failed: {}", e).into(),
+                                    );
                                     chat_state.set_error(Some(format!("加载消息失败: {}", e)));
                                 }
                             }
@@ -74,12 +103,23 @@ pub fn WebchatPage() -> impl IntoView {
                         store_session_id(&id);
                         match service.get_messages(&id).await {
                             Ok(msgs) => {
-                                let _ = web_sys::console::log_1(&format!("[webchat] loaded {} messages for session {}", msgs.len(), id).into());
+                                let _ = web_sys::console::log_1(
+                                    &format!(
+                                        "[webchat] loaded {} messages for session {}",
+                                        msgs.len(),
+                                        id
+                                    )
+                                    .into(),
+                                );
                                 chat_state.current_messages.set(msgs.clone());
-                                chat_state.message_cache.update(|cache| { cache.insert(id.clone(), msgs); });
+                                chat_state.message_cache.update(|cache| {
+                                    cache.insert(id.clone(), msgs);
+                                });
                             }
                             Err(e) => {
-                                let _ = web_sys::console::error_1(&format!("[webchat] get_messages failed: {}", e).into());
+                                let _ = web_sys::console::error_1(
+                                    &format!("[webchat] get_messages failed: {}", e).into(),
+                                );
                                 chat_state.set_error(Some(format!("加载消息失败: {}", e)));
                             }
                         }
@@ -136,7 +176,9 @@ pub fn WebchatPage() -> impl IntoView {
                 if let Ok(json) = serde_json::from_str::<serde_json::Value>(&text_str) {
                     if json.get("type").and_then(|v| v.as_str()) == Some("chat_message") {
                         if let Some(msg_json) = json.get("message") {
-                            if let Ok(message) = serde_json::from_value::<ChatMessage>(msg_json.clone()) {
+                            if let Ok(message) =
+                                serde_json::from_value::<ChatMessage>(msg_json.clone())
+                            {
                                 chat_state_clone.add_message(message);
                                 chat_state_clone.is_sending.set(false);
                             }
@@ -149,7 +191,12 @@ pub fn WebchatPage() -> impl IntoView {
         onmessage.forget();
 
         let ws_for_open = ws.clone();
-        let user_id = auth_state_for_ws.user.get().as_ref().map(|u| u.id.clone()).unwrap_or_else(get_user_id);
+        let user_id = auth_state_for_ws
+            .user
+            .get()
+            .as_ref()
+            .map(|u| u.id.clone())
+            .unwrap_or_else(get_user_id);
         let onopen = Closure::wrap(Box::new(move |_e: web_sys::Event| {
             let subscribe = serde_json::json!({
                 "type": "subscribe",
@@ -211,7 +258,12 @@ pub fn WebchatPage() -> impl IntoView {
             let client = create_client();
             client.set_auth_token(auth_state_send.get_token());
             let service = create_webchat_service(client);
-            let user_id = auth_state_send.user.get().as_ref().map(|u| u.id.clone()).unwrap_or_default();
+            let user_id = auth_state_send
+                .user
+                .get()
+                .as_ref()
+                .map(|u| u.id.clone())
+                .unwrap_or_default();
             match service.send_message(&session_id, &content, &user_id).await {
                 Ok(_) => {
                     // HTTP 发送成功，但保持 is_sending=true 等待 WebSocket 回复
@@ -246,7 +298,9 @@ pub fn WebchatPage() -> impl IntoView {
             chat_state.current_session_id.set(Some(id.clone()));
 
             // Check cache first
-            let cached = chat_state.message_cache.with(|cache| cache.get(&id).cloned());
+            let cached = chat_state
+                .message_cache
+                .with(|cache| cache.get(&id).cloned());
             if let Some(msgs) = cached {
                 chat_state.current_messages.set(msgs);
             } else {
@@ -258,13 +312,23 @@ pub fn WebchatPage() -> impl IntoView {
                     match service.get_messages(&id).await {
                         Ok(msgs) => {
                             let _ = web_sys::console::log_1(
-                                &format!("[webchat] select_session loaded {} messages for session {}", msgs.len(), id).into());
+                                &format!(
+                                    "[webchat] select_session loaded {} messages for session {}",
+                                    msgs.len(),
+                                    id
+                                )
+                                .into(),
+                            );
                             chat_state.current_messages.set(msgs.clone());
-                            chat_state.message_cache.update(|cache| { cache.insert(id.clone(), msgs); });
+                            chat_state.message_cache.update(|cache| {
+                                cache.insert(id.clone(), msgs);
+                            });
                         }
                         Err(e) => {
                             let _ = web_sys::console::error_1(
-                                &format!("[webchat] select_session get_messages failed: {}", e).into());
+                                &format!("[webchat] select_session get_messages failed: {}", e)
+                                    .into(),
+                            );
                             chat_state.set_error(Some(format!("加载消息失败: {}", e)));
                         }
                     }

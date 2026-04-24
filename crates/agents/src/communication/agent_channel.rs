@@ -14,7 +14,8 @@ pub struct AgentChannelBinding {
     pub routing_rules: RoutingRules,
 }
 
-/// Rules used to decide whether an inbound message should be routed to an agent.
+/// Rules used to decide whether an inbound message should be routed to an
+/// agent.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct RoutingRules {
     pub allowed_group_ids: Vec<String>,

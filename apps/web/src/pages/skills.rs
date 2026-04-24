@@ -1,13 +1,15 @@
 //! Skills Marketplace Page
 //!
-//! Browse, install, and manage WASM skills from ClawHub/BeeHub or local registry.
+//! Browse, install, and manage WASM skills from ClawHub/BeeHub or local
+//! registry.
+
+use leptos::prelude::*;
+use leptos::view;
+use leptos_meta::*;
 
 use crate::api::{InstallSkillRequest, SkillCategory, SkillInfo};
 use crate::components::{Modal, StarRating};
 use crate::state::use_app_state;
-use leptos::prelude::*;
-use leptos::view;
-use leptos_meta::*;
 
 #[component]
 pub fn SkillsPage() -> impl IntoView {
@@ -28,7 +30,9 @@ pub fn SkillsPage() -> impl IntoView {
             let app_state = app_state.clone();
             async move {
                 app_state.loading().skills.set(true);
-                let result = service.list(hub.as_deref().filter(|h| !h.is_empty()), Some(&search)).await;
+                let result = service
+                    .list(hub.as_deref().filter(|h| !h.is_empty()), Some(&search))
+                    .await;
                 app_state.loading().skills.set(false);
                 result
             }
@@ -311,15 +315,40 @@ fn SkillCard(
 
     let category_icon = {
         let skill = skill_sig.get();
-        if skill.tags.iter().any(|t| t.to_lowercase() == "trading") || skill.capabilities.iter().any(|c| c.to_lowercase().contains("trade")) {
+        if skill.tags.iter().any(|t| t.to_lowercase() == "trading")
+            || skill
+                .capabilities
+                .iter()
+                .any(|c| c.to_lowercase().contains("trade"))
+        {
             "📈"
-        } else if skill.tags.iter().any(|t| t.to_lowercase() == "data") || skill.capabilities.iter().any(|c| c.to_lowercase().contains("data")) {
+        } else if skill.tags.iter().any(|t| t.to_lowercase() == "data")
+            || skill
+                .capabilities
+                .iter()
+                .any(|c| c.to_lowercase().contains("data"))
+        {
             "📊"
-        } else if skill.tags.iter().any(|t| t.to_lowercase() == "social") || skill.capabilities.iter().any(|c| c.to_lowercase().contains("social")) {
+        } else if skill.tags.iter().any(|t| t.to_lowercase() == "social")
+            || skill
+                .capabilities
+                .iter()
+                .any(|c| c.to_lowercase().contains("social"))
+        {
             "💬"
-        } else if skill.tags.iter().any(|t| t.to_lowercase() == "automation") || skill.capabilities.iter().any(|c| c.to_lowercase().contains("auto")) {
+        } else if skill.tags.iter().any(|t| t.to_lowercase() == "automation")
+            || skill
+                .capabilities
+                .iter()
+                .any(|c| c.to_lowercase().contains("auto"))
+        {
             "⚙️"
-        } else if skill.tags.iter().any(|t| t.to_lowercase() == "analysis") || skill.capabilities.iter().any(|c| c.to_lowercase().contains("analy")) {
+        } else if skill.tags.iter().any(|t| t.to_lowercase() == "analysis")
+            || skill
+                .capabilities
+                .iter()
+                .any(|c| c.to_lowercase().contains("analy"))
+        {
             "🔍"
         } else {
             "📦"

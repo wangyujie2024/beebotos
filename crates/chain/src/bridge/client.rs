@@ -1,16 +1,19 @@
 //! Cross-Chain Bridge Client
 //!
-//! Unified implementation that aligns Rust client with Solidity CrossChainBridge contract.
-//! Supports both lock/release mechanism (from Solidity) and atomic swaps.
+//! Unified implementation that aligns Rust client with Solidity
+//! CrossChainBridge contract. Supports both lock/release mechanism (from
+//! Solidity) and atomic swaps.
+
+use std::sync::Arc;
+
+use alloy_primitives::Bytes;
+use alloy_provider::Provider as AlloyProvider;
+use alloy_rpc_types::TransactionReceipt;
+use tracing::{debug, error, info, instrument};
 
 use crate::compat::{Address, B256, U256};
 use crate::contracts::CrossChainBridge;
 use crate::{ChainError, Result};
-use alloy_primitives::Bytes;
-use alloy_provider::Provider as AlloyProvider;
-use alloy_rpc_types::TransactionReceipt;
-use std::sync::Arc;
-use tracing::{debug, error, info, instrument};
 
 /// Bridge state (aligned with Solidity BridgeState enum)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

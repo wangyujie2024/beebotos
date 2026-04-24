@@ -2,13 +2,16 @@
 //!
 //! Reference: /data/copaw-style-web channel management design
 
-use crate::api::{ChannelService, ChannelInfo, ChannelStatus, WeChatQrResponse, QrStatusResponse, ChannelConfig};
-use wasm_bindgen::JsCast;
-use crate::components::InlineLoading;
-use crate::i18n::I18nContext;
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 use leptos::view;
+use wasm_bindgen::JsCast;
+
+use crate::api::{
+    ChannelConfig, ChannelInfo, ChannelService, ChannelStatus, QrStatusResponse, WeChatQrResponse,
+};
+use crate::components::InlineLoading;
+use crate::i18n::I18nContext;
 
 #[component]
 pub fn ChannelsPage() -> impl IntoView {
@@ -23,9 +26,7 @@ pub fn ChannelsPage() -> impl IntoView {
     // Channels resource
     let channels = LocalResource::new(move || {
         let service = service_stored.get_value();
-        async move {
-            service.list().await.unwrap_or_default()
-        }
+        async move { service.list().await.unwrap_or_default() }
     });
 
     // Selected channel for configuration

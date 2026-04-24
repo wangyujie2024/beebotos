@@ -4,6 +4,7 @@
 //! to store different client implementations without generic parameters.
 
 use async_trait::async_trait;
+
 use crate::compat::{Address, BlockNumber, Bytes, TxHash, U256};
 
 /// Agent identity information (simplified for trait object safety)
@@ -23,54 +24,57 @@ pub struct AgentIdentityInfo {
 pub trait ChainClientTrait: Send + Sync {
     /// Get chain ID
     async fn get_chain_id(&self) -> Result<u64, ChainClientError>;
-    
+
     /// Get current block number
     async fn get_block_number(&self) -> Result<BlockNumber, ChainClientError>;
-    
+
     /// Get account balance
     async fn get_balance(&self, address: Address) -> Result<U256, ChainClientError>;
-    
+
     /// Get transaction receipt
-    async fn get_transaction_receipt(&self, tx_hash: TxHash) -> Result<Option<TransactionReceipt>, ChainClientError>;
-    
+    async fn get_transaction_receipt(
+        &self,
+        tx_hash: TxHash,
+    ) -> Result<Option<TransactionReceipt>, ChainClientError>;
+
     /// Call contract (read-only)
     async fn call(&self, call: ContractCall) -> Result<Bytes, ChainClientError>;
-    
+
     /// Send raw transaction
     async fn send_raw_transaction(&self, signed_tx: Bytes) -> Result<TxHash, ChainClientError>;
-    
+
     /// Estimate gas
     async fn estimate_gas(&self, call: ContractCall) -> Result<U256, ChainClientError>;
-    
+
     /// Get gas price
     async fn get_gas_price(&self) -> Result<U256, ChainClientError>;
-    
+
     /// Check client health
     async fn health_check(&self) -> Result<HealthStatus, ChainClientError>;
-    
+
     /// Send a transaction (for use with external signing)
-    /// 
+    ///
     /// # Arguments
     /// * `tx` - Transaction request
-    /// 
+    ///
     /// # Returns
     /// Transaction hash
     async fn send_transaction(&self, tx: TransactionRequest) -> Result<TxHash, ChainClientError>;
-    
+
     /// Get transaction count (nonce) for address
     async fn get_transaction_count(&self, address: Address) -> Result<u64, ChainClientError>;
-    
+
     // ==================== Identity Registry Operations ====================
-    
+
     /// Register agent identity on-chain
-    /// 
+    ///
     /// # Arguments
     /// * `identity_contract` - The AgentIdentity contract address
     /// * `agent_id` - Unique agent identifier (bytes32)
     /// * `did` - Decentralized identifier string
     /// * `public_key` - Agent's public key (32 bytes)
     /// * `sender` - Transaction sender address
-    /// 
+    ///
     /// # Returns
     /// Transaction hash of the registration transaction
     async fn register_agent_identity(
@@ -81,13 +85,13 @@ pub trait ChainClientTrait: Send + Sync {
         public_key: [u8; 32],
         sender: Address,
     ) -> Result<TxHash, ChainClientError>;
-    
+
     /// Get agent identity information
-    /// 
+    ///
     /// # Arguments
     /// * `identity_contract` - The AgentIdentity contract address
     /// * `agent_id` - Unique agent identifier (bytes32)
-    /// 
+    ///
     /// # Returns
     /// Agent identity information if registered
     async fn get_agent_identity(
@@ -95,9 +99,9 @@ pub trait ChainClientTrait: Send + Sync {
         identity_contract: Address,
         agent_id: [u8; 32],
     ) -> Result<Option<AgentIdentityInfo>, ChainClientError>;
-    
+
     /// Check if agent identity is registered
-    /// 
+    ///
     /// # Arguments
     /// * `identity_contract` - The AgentIdentity contract address
     /// * `agent_id` - Unique agent identifier (bytes32)
@@ -106,9 +110,9 @@ pub trait ChainClientTrait: Send + Sync {
         identity_contract: Address,
         agent_id: [u8; 32],
     ) -> Result<bool, ChainClientError>;
-    
+
     /// Get agent ID by DID
-    /// 
+    ///
     /// # Arguments
     /// * `identity_contract` - The AgentIdentity contract address
     /// * `did` - Decentralized identifier string
@@ -117,11 +121,11 @@ pub trait ChainClientTrait: Send + Sync {
         identity_contract: Address,
         did: &str,
     ) -> Result<Option<[u8; 32]>, ChainClientError>;
-    
+
     // ==================== DAO Governance Operations ====================
-    
+
     /// Create a DAO proposal
-    /// 
+    ///
     /// # Arguments
     /// * `dao_contract` - The AgentDAO contract address
     /// * `targets` - Target addresses for proposal actions
@@ -136,9 +140,9 @@ pub trait ChainClientTrait: Send + Sync {
         calldatas: Vec<Bytes>,
         description: &str,
     ) -> Result<u64, ChainClientError>;
-    
+
     /// Cast a vote on a proposal
-    /// 
+    ///
     /// # Arguments
     /// * `dao_contract` - The AgentDAO contract address
     /// * `proposal_id` - Proposal ID
@@ -149,9 +153,9 @@ pub trait ChainClientTrait: Send + Sync {
         proposal_id: u64,
         support: u8,
     ) -> Result<(), ChainClientError>;
-    
+
     /// Get proposal information
-    /// 
+    ///
     /// # Arguments
     /// * `dao_contract` - The AgentDAO contract address
     /// * `proposal_id` - Proposal ID
@@ -160,9 +164,9 @@ pub trait ChainClientTrait: Send + Sync {
         dao_contract: Address,
         proposal_id: u64,
     ) -> Result<Option<ProposalInfo>, ChainClientError>;
-    
+
     /// Get voting power for an address
-    /// 
+    ///
     /// # Arguments
     /// * `dao_contract` - The AgentDAO contract address
     /// * `account` - Account address
@@ -171,18 +175,15 @@ pub trait ChainClientTrait: Send + Sync {
         dao_contract: Address,
         account: Address,
     ) -> Result<U256, ChainClientError>;
-    
+
     /// Get proposal count
-    /// 
+    ///
     /// # Arguments
     /// * `dao_contract` - The AgentDAO contract address
-    async fn get_proposal_count(
-        &self,
-        dao_contract: Address,
-    ) -> Result<u64, ChainClientError>;
-    
+    async fn get_proposal_count(&self, dao_contract: Address) -> Result<u64, ChainClientError>;
+
     /// List proposals with pagination
-    /// 
+    ///
     /// # Arguments
     /// * `dao_contract` - The AgentDAO contract address
     /// * `start_id` - Starting proposal ID
@@ -298,7 +299,10 @@ pub struct HealthStatus {
 #[derive(Debug, Clone)]
 pub enum SyncStatus {
     Synced,
-    Syncing { current: BlockNumber, target: BlockNumber },
+    Syncing {
+        current: BlockNumber,
+        target: BlockNumber,
+    },
     NotConnected,
 }
 

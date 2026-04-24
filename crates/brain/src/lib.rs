@@ -11,7 +11,7 @@
 //! # Quick Start
 //!
 //! ```
-//! use beebotos_brain::{SocialBrainApi, ApiConfig, BrainConfig};
+//! use beebotos_brain::{ApiConfig, BrainConfig, SocialBrainApi};
 //!
 //! // Create API with default configuration
 //! let mut api = SocialBrainApi::new();
@@ -78,36 +78,55 @@ pub mod test_utils;
 
 // Core API types
 pub use api::{ApiConfig, ApiStats, SocialBrainApi, StimulusResponse};
-
+// Attention types
+pub use attention::{
+    Attention, AttentionFilter, Focus, FocusType, SaliencyMap, SelectiveAttention,
+};
+// Decision types
+pub use cognition::decision::{
+    Constraint, ConstraintType, Decision, DecisionContext, DecisionEngine, DecisionOption,
+    ExpectedValueStrategy, MinimaxStrategy, Objective, RiskLevel, SatisficingStrategy, TimeHorizon,
+};
+// Perception types
+pub use cognition::perception::{
+    FeatureType, FeatureValue, Percept, PerceptualFeature, PerceptualInput, PerceptualSystem,
+    SensoryModality, TextFeatureExtractor,
+};
+// Cognition types
+pub use cognition::{
+    Action, Belief, CognitiveError, CognitiveState, Goal, GoalStatus, Intention, IntentionStatus,
+    MemoryItem, WorkingMemory,
+};
+// Config re-exports
+pub use config::{
+    loader, validator, ConfigBuilder, ConfigError, ConfigLoader, ConfigProfile, ConfigSource,
+    ConfigValidator, ValidationError, ValidationResult,
+};
+// Creativity types
+pub use creativity::{
+    BrainstormingSession, BrainstormingStats, CreativeEngine, CreativeProcess, CreativeStage, Idea,
+    Solution,
+};
+// PAD/Emotion types
+pub use emotion::{EmotionConfig, EmotionEngine, EmotionState, EmotionType};
 // Error types
 pub use error::{
     helpers as error_helpers, BrainError, BrainResult, MemoryError, NeatError, ReasoningError,
     ResultExt as BrainResultExt,
 };
-
-// Configuration types (defined in this module, no re-export needed)
-// BrainConfig, PadConfig, MemoryConfig, PersonalityConfig, ParallelConfig, FeatureToggles, BaselineEmotion, VERSION
-
-// NEAT types
-pub use neat::{
-    genome::{ActivationFn, ConnectionGene, LayerGene, LayerType, LearningParams},
-    AgentBrain, FitnessResult, Genome, InnovationTracker, NeatConfig, NeuralNetwork, Population,
-    Species,
+// Evolution types (re-exports from neat)
+pub use evolution::*;
+// Knowledge types
+pub use knowledge::{
+    Concept as KnowledgeConcept, Edge, KnowledgeEngine, KnowledgeGraph, Node, Ontology,
 };
-
-// PAD/Emotion types
-pub use emotion::{EmotionConfig, EmotionEngine, EmotionState, EmotionType};
-pub use pad::{
-    BasicEmotion, Emotion, EmotionCategory, EmotionalEvent, EmotionalIntelligence, EmotionalTrait,
-    Pad,
+// Language types
+pub use language::{nlp, sentiment, translation};
+// Learning types
+pub use learning::{
+    CompositeSkill, LearningExperience, PolicyGradient, PrimitiveSkill, QLearning, ReplayBuffer,
+    SkillLearner,
 };
-
-// Personality types
-pub use personality::{
-    Behavior, DecisionStyle, Experience as PersonalityExperience, LearningStrategy, OceanEngine,
-    OceanProfile, Outcome,
-};
-
 // Memory types
 pub use memory::{
     embeddings::Embedding,
@@ -117,72 +136,50 @@ pub use memory::{
     ProceduralMemory, Procedure, PropertyValue, Relation, RelationType, SemanticMemory,
     ShortTermMemory, Step, UnifiedMemory,
 };
-
-// Cognition types
-pub use cognition::{
-    Action, Belief, CognitiveError, CognitiveState, Goal, GoalStatus, Intention, IntentionStatus,
-    MemoryItem, WorkingMemory,
-};
-
-// Perception types
-pub use cognition::perception::{
-    FeatureType, FeatureValue, Percept, PerceptualFeature, PerceptualInput, PerceptualSystem,
-    SensoryModality, TextFeatureExtractor,
-};
-
-// Decision types
-pub use cognition::decision::{
-    Constraint, ConstraintType, Decision, DecisionContext, DecisionEngine, DecisionOption,
-    ExpectedValueStrategy, MinimaxStrategy, Objective, RiskLevel, SatisficingStrategy, TimeHorizon,
-};
-
-// Attention types
-pub use attention::{
-    Attention, AttentionFilter, Focus, FocusType, SaliencyMap, SelectiveAttention,
-};
-
-// Learning types
-pub use learning::{
-    CompositeSkill, LearningExperience, PolicyGradient, PrimitiveSkill, QLearning, ReplayBuffer,
-    SkillLearner,
-};
-
-// Reasoning types
-pub use reasoning::{Atom, Fact, InferenceResult, KnowledgeBase, ProofNode, Rule, Term};
-
-// Evolution types (re-exports from neat)
-pub use evolution::*;
-
-// Social types
-pub use social::{
-    InteractionOutcome, InteractionType, Relationship, SocialAgent, SocialCognition, SocialContext,
-    SocialGraph,
-};
-
-// Knowledge types
-pub use knowledge::{
-    Concept as KnowledgeConcept, Edge, KnowledgeEngine, KnowledgeGraph, Node, Ontology,
-};
-
-// Creativity types
-pub use creativity::{
-    BrainstormingSession, BrainstormingStats, CreativeEngine, CreativeProcess, CreativeStage, Idea,
-    Solution,
-};
-
 // Metacognition types
 pub use metacognition::{
     reflection::{ReflectionDepth, ReflectionType, ReflectiveSystem, ReflectiveThought},
     AdjustmentTrigger, AwarenessLevel, MetacognitionEngine, StrategyAdjustment, StrategyAssessment,
     StrategyEffectiveness,
 };
-
+// Metrics re-exports
+pub use metrics::{
+    global_metrics, increment_counter, record_timing, set_gauge, Histogram, MetricsCollector,
+    MetricsSnapshot, Timer, TimingStats,
+};
 // Performance monitoring types (从 metrics 模块导出)
 pub use metrics::{MetricPoint, MetricsCollector as PerformanceMonitor};
+// Configuration types (defined in this module, no re-export needed)
+// BrainConfig, PadConfig, MemoryConfig, PersonalityConfig, ParallelConfig, FeatureToggles,
+// BaselineEmotion, VERSION
 
-// Language types
-pub use language::{nlp, sentiment, translation};
-
+// NEAT types
+pub use neat::{
+    genome::{ActivationFn, ConnectionGene, LayerGene, LayerType, LearningParams},
+    AgentBrain, FitnessResult, Genome, InnovationTracker, NeatConfig, NeuralNetwork, Population,
+    Species,
+};
+// Optimization re-exports
+pub use optimization::{
+    batch_process, fast_contains, BufferPool, EfficientStringBuilder, FastClearVec, Lazy,
+    StringPool, TimedCache,
+};
+pub use pad::{
+    BasicEmotion, Emotion, EmotionCategory, EmotionalEvent, EmotionalIntelligence, EmotionalTrait,
+    Pad,
+};
+// Personality types
+pub use personality::{
+    Behavior, DecisionStyle, Experience as PersonalityExperience, LearningStrategy, OceanEngine,
+    OceanProfile, Outcome,
+};
+// Reasoning types
+pub use reasoning::{Atom, Fact, InferenceResult, KnowledgeBase, ProofNode, Rule, Term};
+// Social types
+pub use social::{
+    InteractionOutcome, InteractionType, Relationship, SocialAgent, SocialCognition, SocialContext,
+    SocialGraph,
+};
 // Utility re-exports
 pub use utils::{
     choose,
@@ -215,24 +212,6 @@ pub use utils::{
     validate_importance,
     validate_input_length,
     validate_priority,
-};
-
-// Metrics re-exports
-pub use metrics::{
-    global_metrics, increment_counter, record_timing, set_gauge, Histogram, MetricsCollector,
-    MetricsSnapshot, Timer, TimingStats,
-};
-
-// Optimization re-exports
-pub use optimization::{
-    batch_process, fast_contains, BufferPool, EfficientStringBuilder, FastClearVec, Lazy,
-    StringPool, TimedCache,
-};
-
-// Config re-exports
-pub use config::{
-    loader, validator, ConfigBuilder, ConfigError, ConfigLoader, ConfigProfile, ConfigSource,
-    ConfigValidator, ValidationError, ValidationResult,
 };
 
 /// Module version

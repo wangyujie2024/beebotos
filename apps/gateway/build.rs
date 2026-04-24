@@ -9,7 +9,10 @@ fn main() -> io::Result<()> {
         .build_server(true)
         .build_client(false)
         .compile(
-            &["../../proto/skills/registry.proto", "../../proto/common/types.proto"],
+            &[
+                "../../proto/skills/registry.proto",
+                "../../proto/common/types.proto",
+            ],
             &["../../proto"],
         )
         .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;

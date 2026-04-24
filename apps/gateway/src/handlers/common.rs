@@ -2,16 +2,15 @@
 //!
 //! Shared helper functions for HTTP handlers to reduce code duplication.
 
-use gateway::{
-    error::GatewayError,
-    middleware::AuthUser,
-};
+use gateway::error::GatewayError;
+use gateway::middleware::AuthUser;
 
 use crate::models::AgentRecord;
 
 /// Check if user is admin or owns the agent
 ///
-/// Returns Ok(()) if user has permission, Err(GatewayError::forbidden) otherwise
+/// Returns Ok(()) if user has permission, Err(GatewayError::forbidden)
+/// otherwise
 ///
 /// # Arguments
 /// * `user` - The authenticated user

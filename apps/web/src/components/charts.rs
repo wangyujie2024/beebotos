@@ -20,7 +20,12 @@ pub fn BarChart(
             canvas.set_width(width);
             canvas.set_height(height);
 
-            if let Ok(ctx) = canvas.get_context("2d").unwrap().unwrap().dyn_into::<web_sys::CanvasRenderingContext2d>() {
+            if let Ok(ctx) = canvas
+                .get_context("2d")
+                .unwrap()
+                .unwrap()
+                .dyn_into::<web_sys::CanvasRenderingContext2d>()
+            {
                 // Clear
                 ctx.set_fill_style_str("#1a1a2e");
                 ctx.fill_rect(0.0, 0.0, width as f64, height as f64);
@@ -94,7 +99,12 @@ pub fn PieChart(
             canvas.set_width(width);
             canvas.set_height(height);
 
-            if let Ok(ctx) = canvas.get_context("2d").unwrap().unwrap().dyn_into::<web_sys::CanvasRenderingContext2d>() {
+            if let Ok(ctx) = canvas
+                .get_context("2d")
+                .unwrap()
+                .unwrap()
+                .dyn_into::<web_sys::CanvasRenderingContext2d>()
+            {
                 ctx.set_fill_style_str("#1a1a2e");
                 ctx.fill_rect(0.0, 0.0, width as f64, height as f64);
 
@@ -140,7 +150,8 @@ pub fn PieChart(
                 // Donut hole
                 ctx.set_fill_style_str("#1a1a2e");
                 ctx.begin_path();
-                ctx.arc(cx, cy, radius * 0.4, 0.0, 2.0 * std::f64::consts::PI).unwrap();
+                ctx.arc(cx, cy, radius * 0.4, 0.0, 2.0 * std::f64::consts::PI)
+                    .unwrap();
                 ctx.fill();
             }
         }

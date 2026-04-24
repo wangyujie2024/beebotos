@@ -11,13 +11,12 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
 
+use super::common::{encryption, MetadataBuilder};
 use crate::communication::webhook::{
     SignatureVerification, WebhookConfig, WebhookEvent, WebhookEventType, WebhookHandler,
 };
 use crate::communication::{AgentMessageDispatcher, Message, MessageType, PlatformType};
 use crate::error::{AgentError, Result};
-
-use super::common::{MetadataBuilder, encryption};
 
 /// WeChat Work webhook payload (XML format)
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -236,8 +235,14 @@ impl WeChatWebhookHandler {
             None => return Err(AgentError::configuration("No encoding AES key provided").into()),
         };
 
-        tracing::info!("Decrypting message, encrypted_data len: {}", encrypted_data.len());
-        tracing::info!("AES key (first 10 chars): {}...", &aes_key[..10.min(aes_key.len())]);
+        tracing::info!(
+            "Decrypting message, encrypted_data len: {}",
+            encrypted_data.len()
+        );
+        tracing::info!(
+            "AES key (first 10 chars): {}...",
+            &aes_key[..10.min(aes_key.len())]
+        );
 
         // Decode base64 encrypted data
         let encrypted = base64::engine::general_purpose::STANDARD
@@ -258,21 +263,22 @@ impl WeChatWebhookHandler {
 
         // Use common encryption utilities
         let iv = &key[..16];
-        tracing::info!("Using IV (first 16 bytes of key): {:?}", &iv[..4.min(iv.len())]);
+        tracing::info!(
+            "Using IV (first 16 bytes of key): {:?}",
+            &iv[..4.min(iv.len())]
+        );
 
-        let decrypted = encryption::aes_cbc_decrypt(&encrypted, &key, iv)
-            .map_err(|e| {
-                tracing::error!("AES decryption failed: {:?}", e);
-                e
-            })?;
+        let decrypted = encryption::aes_cbc_decrypt(&encrypted, &key, iv).map_err(|e| {
+            tracing::error!("AES decryption failed: {:?}", e);
+            e
+        })?;
 
         tracing::info!("Decrypted data len: {}", decrypted.len());
 
-        let (content, corp_id) = encryption::extract_wechat_content(&decrypted)
-            .map_err(|e| {
-                tracing::error!("Extract wechat content failed: {:?}", e);
-                e
-            })?;
+        let (content, corp_id) = encryption::extract_wechat_content(&decrypted).map_err(|e| {
+            tracing::error!("Extract wechat content failed: {:?}", e);
+            e
+        })?;
 
         // Verify corp_id
         if corp_id != self.corp_id {
@@ -489,7 +495,7 @@ impl WeChatWebhookHandler {
 
         let metadata = MetadataBuilder::new()
             .add("from_user", &sender_id)
-            .add("channel_id", &sender_id)  // Use sender_id as channel_id for WeChat
+            .add("channel_id", &sender_id) // Use sender_id as channel_id for WeChat
             .add("msg_type", &msg_type)
             .add_optional("msg_id", payload.msg_id.map(|v| v.to_string()).as_ref())
             .add_optional("agent_id", payload.agent_id.as_ref())
@@ -500,7 +506,10 @@ impl WeChatWebhookHandler {
             .add_optional("event_key", payload.event_key.as_ref())
             .add_optional("file_key", payload.file_key.as_ref())
             .add_optional("file_md5", payload.file_md5.as_ref())
-            .add_optional("file_total_len", payload.file_total_len.map(|v| v.to_string()))
+            .add_optional(
+                "file_total_len",
+                payload.file_total_len.map(|v| v.to_string()),
+            )
             .build();
 
         Some(Message {
@@ -615,7 +624,7 @@ impl WebhookHandler for WeChatWebhookHandler {
         let metadata = MetadataBuilder::new()
             .add_optional("agent_id", payload.agent_id.as_ref())
             .add_optional("sender_id", payload.from_user_name.as_ref())
-            .add("channel_id", sender_id)  // Use sender_id as channel_id for reply
+            .add("channel_id", sender_id) // Use sender_id as channel_id for reply
             .build();
 
         let webhook_event = WebhookEvent {
@@ -647,14 +656,17 @@ impl WebhookHandler for WeChatWebhookHandler {
                         msg.content, msg.message_type
                     );
 
-                    // P0 FIX: Removed dispatcher.dispatch() to avoid duplicate processing.
-                    // Messages are now routed exclusively through channel_event_bus →
+                    // P0 FIX: Removed dispatcher.dispatch() to avoid duplicate
+                    // processing. Messages are now routed
+                    // exclusively through channel_event_bus →
                     // MessageProcessor → AgentResolver path in webhook_handler.
                     // if let Some(dispatcher) = &self.dispatcher {
-                    //     let platform_user_id = event.metadata.get("to_user_name")
+                    //     let platform_user_id =
+                    // event.metadata.get("to_user_name")
                     //         .cloned()
                     //         .unwrap_or_else(|| self.corp_id.clone());
-                    //     let target_channel_id = msg.metadata.get("from_user_name")
+                    //     let target_channel_id =
+                    // msg.metadata.get("from_user_name")
                     //         .cloned()
                     //         .unwrap_or_default();
                     //
@@ -775,10 +787,7 @@ mod tests {
         assert_eq!(handler.parse_message_type("voice"), MessageType::Voice);
         assert_eq!(handler.parse_message_type("video"), MessageType::Video);
         assert_eq!(handler.parse_message_type("file"), MessageType::File);
-        assert_eq!(
-            handler.parse_message_type("location"),
-            MessageType::System
-        );
+        assert_eq!(handler.parse_message_type("location"), MessageType::System);
         assert_eq!(handler.parse_message_type("event"), MessageType::System);
         assert_eq!(handler.parse_message_type("unknown"), MessageType::System);
     }

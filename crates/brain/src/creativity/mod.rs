@@ -2,8 +2,9 @@ pub mod divergence;
 pub mod ideation;
 pub mod synthesis;
 
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreativeProcess {

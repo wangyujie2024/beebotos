@@ -6,8 +6,8 @@
 pub mod google_calendar;
 
 pub use google_calendar::{
-    Attendee, CalendarEvent, CalendarEventBuilder, CalendarFreeBusy, CalendarItem, CalendarListEntry,
-    ConferenceData, ConferenceSolution, ConferenceSolutionKey, Creator, EntryPoint, EventQuery,
-    EventStatus, EventTime, FreeBusyRequest, FreeBusyResponse, GoogleCalendarClient, ReminderOverride,
-    Reminders, ResponseStatus, TimeSlot, Visibility,
+    Attendee, CalendarEvent, CalendarEventBuilder, CalendarFreeBusy, CalendarItem,
+    CalendarListEntry, ConferenceData, ConferenceSolution, ConferenceSolutionKey, Creator,
+    EntryPoint, EventQuery, EventStatus, EventTime, FreeBusyRequest, FreeBusyResponse,
+    GoogleCalendarClient, ReminderOverride, Reminders, ResponseStatus, TimeSlot, Visibility,
 };

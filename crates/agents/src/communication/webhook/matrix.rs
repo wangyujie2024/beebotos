@@ -10,10 +10,10 @@ use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
 use uuid::Uuid;
 
+use crate::communication::webhook::common::MetadataBuilder;
 use crate::communication::webhook::{
     SignatureVerification, WebhookConfig, WebhookEvent, WebhookEventType, WebhookHandler,
 };
-use crate::communication::webhook::common::MetadataBuilder;
 use crate::communication::{Message, MessageType, PlatformType};
 use crate::error::{AgentError, Result};
 
@@ -358,7 +358,10 @@ mod tests {
         assert_eq!(message.content, "Hello Matrix!");
         assert_eq!(message.message_type, MessageType::Text);
         // sender info is stored in metadata
-        assert_eq!(message.metadata.get("sender_id"), Some(&"@user:example.com".to_string()));
+        assert_eq!(
+            message.metadata.get("sender_id"),
+            Some(&"@user:example.com".to_string())
+        );
     }
 
     #[test]

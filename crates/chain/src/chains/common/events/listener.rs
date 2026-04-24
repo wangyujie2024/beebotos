@@ -1,13 +1,15 @@
 //! Event Listener
 
-use crate::chains::common::events::{EventFilter, EvmEvent};
-use crate::{ChainError, Result};
-use alloy_provider::Provider;
-use alloy_rpc_types::Log;
 use std::pin::Pin;
 use std::task::{Context, Poll};
+
+use alloy_provider::Provider;
+use alloy_rpc_types::Log;
 use tokio::sync::mpsc;
 use tokio_stream::Stream;
+
+use crate::chains::common::events::{EventFilter, EvmEvent};
+use crate::{ChainError, Result};
 
 /// Subscription type
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

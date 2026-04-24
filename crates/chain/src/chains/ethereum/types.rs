@@ -1,10 +1,11 @@
 //! Ethereum-specific types
 
-use crate::chains::common::token::{chain_formatters, parse_native_amount};
 use alloy_consensus::Transaction as _;
 use alloy_primitives::U256;
 use alloy_rpc_types::{Block, Log, Transaction, TransactionReceipt};
 use serde::{Deserialize, Serialize};
+
+use crate::chains::common::token::{chain_formatters, parse_native_amount};
 
 /// Ethereum Block representation
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -201,7 +202,8 @@ pub enum ValidatorStatus {
 
 /// Format ETH amount (18 decimals)
 ///
-/// DEPRECATED: Use `chains::common::token::chain_formatters::format_eth` instead
+/// DEPRECATED: Use `chains::common::token::chain_formatters::format_eth`
+/// instead
 pub fn format_eth(wei: U256) -> String {
     chain_formatters::format_eth(wei)
 }

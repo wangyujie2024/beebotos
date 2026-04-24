@@ -60,7 +60,6 @@ pub mod error_integration;
 #[cfg(test)]
 pub mod tests_integration;
 // 🔧 FIX: Performance optimizations
-pub mod performance_optimizations;
 pub mod events;
 pub mod health;
 pub mod llm;
@@ -70,6 +69,7 @@ pub mod memory;
 pub mod message_bus;
 pub mod metrics;
 pub mod models;
+pub mod performance_optimizations;
 // 🟢 P1 FIX: Planning module - structured agent planning capabilities
 pub mod planning;
 pub mod queue;
@@ -102,6 +102,8 @@ pub mod kernel_integration;
 // Re-export webhook types for Gateway integration
 // Re-export core agent and task types
 pub use agent_impl::Agent;
+// 🆕 PLANNING FIX: Re-export TaskComplexity for planning integration
+pub use agent_impl::TaskComplexity;
 // 🔒 P0 FIX: Re-export beebotos_chain wallet types for agent use
 pub use beebotos_chain::wallet::{AccountInfo, EncryptedMnemonic, HDWallet, Wallet as ChainWallet};
 // 🟢 P1 FIX: Re-export unified event bus types
@@ -109,49 +111,107 @@ pub use beebotos_core::event::{Event, EventBus as CoreEventBus};
 pub use channel_registry::{ChannelInfo, ChannelRegistry};
 pub use communication::channel::{
     ChannelFactory, ChannelManager, ChannelManagerConfig, DingTalkChannelFactory,
-    DiscordChannelFactory, LarkChannelFactory, PersonalWeChatFactory, SlackChannelFactory, TelegramChannelFactory,
-    WebChatFactory,
-};
-pub use communication::{
-    AgentChannelBinding, AgentMessageDispatcher, ChannelBindingStatus,
-    ChannelInstanceId, ChannelInstanceManager, ChannelInstanceRef, ChannelInstanceStatus,
-    InboundMessageRouter, MemoryOfflineMessageStore, OfflineMessageStore,
-    OutboundMessageRouter, ReplyRoute, RoutingDecision, RoutingRules,
-    SqliteOfflineMessageStore, UserChannelBinding, UserChannelConfig, UserMessageContext,
+    DiscordChannelFactory, LarkChannelFactory, PersonalWeChatFactory, SlackChannelFactory,
+    TelegramChannelFactory, WebChatFactory,
 };
 pub use communication::webhook::*;
-pub use services::{
-    AgentChannelBindingStore, AgentChannelService, ChannelConfigEncryptor,
-    SqliteAgentChannelBindingStore, SqliteUserChannelStore, UserChannelStore, UserChannelService,
-    plaintext_encryptor,
-};
-// 🆕 DEVICE FIX: Re-export device module types
-pub use device::{
-    Device, DeviceNode, AndroidDevice, IosDevice,
-    DeviceCapability, DeviceError, DeviceInfo, DeviceStatus,
-    ElementLocator, LocatorType, ScreenBounds, Point, Size,
-    SwipeDirection, GestureAction, DeviceAutomation,
-    AndroidController, IosController,
+pub use communication::{
+    AgentChannelBinding, AgentMessageDispatcher, ChannelBindingStatus, ChannelInstanceId,
+    ChannelInstanceManager, ChannelInstanceRef, ChannelInstanceStatus, InboundMessageRouter,
+    MemoryOfflineMessageStore, OfflineMessageStore, OutboundMessageRouter, ReplyRoute,
+    RoutingDecision, RoutingRules, SqliteOfflineMessageStore, UserChannelBinding,
+    UserChannelConfig, UserMessageContext,
 };
 pub use deduplicator::{MessageDeduplicator, MessageKey, MessageStatus};
+// 🆕 DEVICE FIX: Re-export device module types
+pub use device::{
+    AndroidController, AndroidDevice, Device, DeviceAutomation, DeviceCapability, DeviceError,
+    DeviceInfo, DeviceNode, DeviceStatus, ElementLocator, GestureAction, IosController, IosDevice,
+    LocatorType, Point, ScreenBounds, Size, SwipeDirection,
+};
 pub use events::AgentEventBus;
-pub use memory::{MemoryEntry, MemoryLimitsConfig, MemoryError};
+// 🟢 P1 FIX: AgentLifecycleEvent is in events module, not message_bus
+pub use events::AgentLifecycleEvent;
 // 🟡 P1 FIX: Re-export kernel integration types
 pub use kernel_integration::{
     AgentKernelTask, KernelAgentBuilder, KernelAgentConfig, KernelIntegrable, KernelTaskRequest,
 };
+pub use memory::{MemoryEntry, MemoryError, MemoryLimitsConfig};
+// 🟢 P1 FIX: Message Bus integration
+pub use message_bus::{init_message_bus, message_bus, AgentsMessageBus};
+// Re-export unified ModelConfig from models module
+pub use models::ModelConfig;
+// 🟢 P1 FIX: Re-export planning module types
+pub use planning::{
+    // Core plan types
+    Action,
+    // Executor types
+    ActionHandler,
+    // Replanner types
+    AdaptationResult,
+    AdaptationStrategy,
+    // Engine types
+    ChainOfThoughtPlanner,
+    // Decomposer types
+    CompositeDecomposer,
+    CompositeRePlanner,
+    ConditionRePlanner,
+    Decomposer,
+    DecompositionContext,
+    DecompositionStrategy,
+    DefaultActionHandler,
+    DomainDecomposer,
+    ExecutionConfig,
+    ExecutionContext,
+    ExecutionEvent,
+    ExecutionResult,
+    ExecutionStrategy,
+    FeedbackRePlanner,
+    GoalBasedPlanner,
+    HierarchicalDecomposer,
+    HybridPlanner,
+    ParallelDecomposer,
+    ParallelExecutor,
+    Plan,
+    PlanContext,
+    PlanExecutor,
+    PlanId,
+    PlanStatus,
+    PlanStep,
+    PlanStrategy,
+    Planner,
+    PlannerToolRegistry,
+    PlanningConfig,
+    PlanningEngine,
+    PlanningError,
+    PlanningResult,
+    Priority,
+    ReActPlanner,
+    RePlanTrigger,
+    RePlanner,
+    ResourceRePlanner,
+    SequentialExecutor,
+    StepStatus,
+    StepType,
+    TaskDecomposer,
+    ToolExecutor,
+};
+// 🟢 P1 FIX: Gateway AgentRuntime implementation
+pub use runtime::agent_runtime_impl::GatewayAgentRuntime;
 // 🟢 P1 FIX: Re-export runtime types for object pool and batch processing
 pub use runtime::{
     AgentRuntime, AgentRuntimeBuilder, BatchExecutor, BatchResult, RuntimeConfig,
     RuntimeConfigBuilder, RuntimeMetrics, TaskExecutor,
 };
-// 🟢 P1 FIX: Gateway AgentRuntime implementation
-pub use runtime::agent_runtime_impl::GatewayAgentRuntime;
 pub use scheduling::{CronScheduler, HeartbeatScheduler};
 use serde::{Deserialize, Serialize};
 // 🟢 P1 FIX: Re-export Service Mesh types
 pub use service_mesh::{
     AgentServiceMesh, LoadBalanceStrategy, ServiceMeshBuilder, ServiceMeshConfig, ServiceMeshStats,
+};
+pub use services::{
+    plaintext_encryptor, AgentChannelBindingStore, AgentChannelService, ChannelConfigEncryptor,
+    SqliteAgentChannelBindingStore, SqliteUserChannelStore, UserChannelService, UserChannelStore,
 };
 pub use session::{SessionContext, SessionKey, SessionType};
 pub use spawning::{SpawnConfig, SpawnEngine, SpawnResult};
@@ -160,36 +220,7 @@ pub use state_manager::{
     AgentState, AgentStateManager, AgentStateRecord, AgentStats, StateChangeEvent,
     StateManagerHandle, StateTransition,
 };
-// 🆕 PLANNING FIX: Re-export TaskComplexity for planning integration
-pub use agent_impl::TaskComplexity;
 pub use task::{Artifact, Task, TaskResult, TaskType};
-// 🟢 P1 FIX: Message Bus integration
-pub use message_bus::{AgentsMessageBus, init_message_bus, message_bus};
-// 🟢 P1 FIX: AgentLifecycleEvent is in events module, not message_bus
-pub use events::AgentLifecycleEvent;
-
-// Re-export unified ModelConfig from models module
-pub use models::ModelConfig;
-// 🟢 P1 FIX: Re-export planning module types
-pub use planning::{
-    // Core plan types
-    Action, Plan, PlanId, PlanStatus, PlanStep, PlanningError, PlanningResult, Priority,
-    StepStatus, StepType,
-    // Decomposer types
-    CompositeDecomposer, Decomposer, DecompositionContext, DecompositionStrategy,
-    DomainDecomposer, HierarchicalDecomposer, ParallelDecomposer, TaskDecomposer,
-    // Engine types
-    ChainOfThoughtPlanner, GoalBasedPlanner, HybridPlanner, PlanContext, PlanStrategy,
-    Planner, PlanningConfig, PlanningEngine, ReActPlanner, PlannerToolRegistry,
-    // Executor types
-    ActionHandler, DefaultActionHandler, ExecutionConfig, ExecutionContext, ExecutionEvent,
-    ExecutionResult, ExecutionStrategy, ParallelExecutor, PlanExecutor, SequentialExecutor,
-    ToolExecutor,
-    // Replanner types
-    AdaptationResult, AdaptationStrategy, CompositeRePlanner, ConditionRePlanner,
-    FeedbackRePlanner, RePlanTrigger, RePlanner, ResourceRePlanner,
-};
-
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentConfig {

@@ -38,7 +38,7 @@ pub struct MessageEditRecord {
     pub edited_at: DateTime<Utc>,
     pub edit_reason: Option<String>,
     pub version: u32,
-    pub is_major_edit: bool,  // Significant content change
+    pub is_major_edit: bool, // Significant content change
 }
 
 /// Message deletion record
@@ -162,7 +162,8 @@ impl MessageHistoryStore {
             author_id,
             new_content,
             record.version,
-        ).await;
+        )
+        .await;
 
         record
     }
@@ -219,7 +220,7 @@ impl MessageHistoryStore {
 
         let mut pins = self.pins.write().await;
         let channel_pins = pins.entry(channel_id.to_string()).or_default();
-        
+
         // Mark any existing pin record as unpinned
         for pin in channel_pins.iter_mut() {
             if pin.message_id == message_id && pin.is_currently_pinned {
@@ -227,7 +228,7 @@ impl MessageHistoryStore {
                 pin.unpinned_at = Some(Utc::now());
             }
         }
-        
+
         channel_pins.push(record.clone());
 
         record
@@ -242,7 +243,7 @@ impl MessageHistoryStore {
     ) -> Option<MessagePinRecord> {
         let mut pins = self.pins.write().await;
         let channel_pins = pins.get_mut(channel_id)?;
-        
+
         for pin in channel_pins.iter_mut() {
             if pin.message_id == message_id && pin.is_currently_pinned {
                 pin.is_currently_pinned = false;
@@ -251,7 +252,7 @@ impl MessageHistoryStore {
                 return Some(pin.clone());
             }
         }
-        
+
         None
     }
 
@@ -262,10 +263,7 @@ impl MessageHistoryStore {
         message_id: &str,
     ) -> Option<Vec<MessageEditRecord>> {
         let edits = self.edits.read().await;
-        edits
-            .get(channel_id)?
-            .get(message_id)
-            .cloned()
+        edits.get(channel_id)?.get(message_id).cloned()
     }
 
     /// Get all edits for a channel
@@ -280,27 +278,25 @@ impl MessageHistoryStore {
     /// Get deletion records for a channel
     pub async fn get_channel_deletions(&self, channel_id: &str) -> Vec<MessageDeletionRecord> {
         let deletions = self.deletions.read().await;
-        deletions
-            .get(channel_id)
-            .cloned()
-            .unwrap_or_default()
+        deletions.get(channel_id).cloned().unwrap_or_default()
     }
 
     /// Get pin records for a channel
     pub async fn get_channel_pins(&self, channel_id: &str) -> Vec<MessagePinRecord> {
         let pins = self.pins.read().await;
-        pins
-            .get(channel_id)
-            .cloned()
-            .unwrap_or_default()
+        pins.get(channel_id).cloned().unwrap_or_default()
     }
 
     /// Get currently pinned messages
     pub async fn get_currently_pinned(&self, channel_id: &str) -> Vec<MessagePinRecord> {
         let pins = self.pins.read().await;
-        pins
-            .get(channel_id)
-            .map(|v| v.iter().filter(|p| p.is_currently_pinned).cloned().collect())
+        pins.get(channel_id)
+            .map(|v| {
+                v.iter()
+                    .filter(|p| p.is_currently_pinned)
+                    .cloned()
+                    .collect()
+            })
             .unwrap_or_default()
     }
 
@@ -311,10 +307,7 @@ impl MessageHistoryStore {
         message_id: &str,
     ) -> Option<Vec<MessageSnapshot>> {
         let snapshots = self.snapshots.read().await;
-        snapshots
-            .get(channel_id)?
-            .get(message_id)
-            .cloned()
+        snapshots.get(channel_id)?.get(message_id).cloned()
     }
 
     /// Reconstruct message at a specific version
@@ -335,11 +328,12 @@ impl MessageHistoryStore {
         let mut pins = Vec::new();
 
         // Query edits
-        if query.operation_type.is_none() 
-            || query.operation_type == Some(OperationType::Edit) 
-            || query.operation_type == Some(OperationType::All) {
+        if query.operation_type.is_none()
+            || query.operation_type == Some(OperationType::Edit)
+            || query.operation_type == Some(OperationType::All)
+        {
             let all_edits = self.edits.read().await;
-            
+
             let channels_to_check: Vec<String> = query
                 .channel_id
                 .as_ref()
@@ -349,7 +343,12 @@ impl MessageHistoryStore {
             for channel_id in channels_to_check {
                 if let Some(channel_edits) = all_edits.get(&channel_id) {
                     for (msg_id, msg_edits) in channel_edits {
-                        if query.message_id.as_ref().map(|id| id == msg_id).unwrap_or(true) {
+                        if query
+                            .message_id
+                            .as_ref()
+                            .map(|id| id == msg_id)
+                            .unwrap_or(true)
+                        {
                             for edit in msg_edits {
                                 if Self::matches_query(edit, &query) {
                                     edits.push(edit.clone());
@@ -362,11 +361,12 @@ impl MessageHistoryStore {
         }
 
         // Query deletions
-        if query.operation_type.is_none() 
+        if query.operation_type.is_none()
             || query.operation_type == Some(OperationType::Delete)
-            || query.operation_type == Some(OperationType::All) {
+            || query.operation_type == Some(OperationType::All)
+        {
             let all_deletions = self.deletions.read().await;
-            
+
             let channels_to_check: Vec<String> = query
                 .channel_id
                 .as_ref()
@@ -376,7 +376,12 @@ impl MessageHistoryStore {
             for channel_id in channels_to_check {
                 if let Some(channel_deletions) = all_deletions.get(&channel_id) {
                     for deletion in channel_deletions {
-                        if query.message_id.as_ref().map(|id| id == &deletion.message_id).unwrap_or(true) {
+                        if query
+                            .message_id
+                            .as_ref()
+                            .map(|id| id == &deletion.message_id)
+                            .unwrap_or(true)
+                        {
                             if Self::deletion_matches_query(deletion, &query) {
                                 deletions.push(deletion.clone());
                             }
@@ -387,12 +392,13 @@ impl MessageHistoryStore {
         }
 
         // Query pins
-        if query.operation_type == Some(OperationType::Pin) 
-            || query.operation_type == Some(OperationType::Unpin) 
+        if query.operation_type == Some(OperationType::Pin)
+            || query.operation_type == Some(OperationType::Unpin)
             || query.operation_type.is_none()
-            || query.operation_type == Some(OperationType::All) {
+            || query.operation_type == Some(OperationType::All)
+        {
             let all_pins = self.pins.read().await;
-            
+
             let channels_to_check: Vec<String> = query
                 .channel_id
                 .as_ref()
@@ -402,7 +408,12 @@ impl MessageHistoryStore {
             for channel_id in channels_to_check {
                 if let Some(channel_pins) = all_pins.get(&channel_id) {
                     for pin in channel_pins {
-                        if query.message_id.as_ref().map(|id| id == &pin.message_id).unwrap_or(true) {
+                        if query
+                            .message_id
+                            .as_ref()
+                            .map(|id| id == &pin.message_id)
+                            .unwrap_or(true)
+                        {
                             if Self::pin_matches_query(pin, &query) {
                                 pins.push(pin.clone());
                             }
@@ -597,12 +608,12 @@ impl MessageHistoryStore {
     fn is_major_edit(old_content: &str, new_content: &str) -> bool {
         let old_len = old_content.len();
         let new_len = new_content.len();
-        
+
         // Consider major if length changes by more than 50%
         if old_len == 0 {
             return new_len > 10;
         }
-        
+
         let change_ratio = (new_len as f64 - old_len as f64).abs() / old_len as f64;
         change_ratio > 0.5
     }
@@ -654,14 +665,16 @@ mod tests {
         let channel_id = "channel-1";
         let message_id = "msg-1";
 
-        let record = store.record_edit(
-            message_id,
-            channel_id,
-            "user-1",
-            "Hello",
-            "Hello World",
-            Some("Added more content"),
-        ).await;
+        let record = store
+            .record_edit(
+                message_id,
+                channel_id,
+                "user-1",
+                "Hello",
+                "Hello World",
+                Some("Added more content"),
+            )
+            .await;
 
         assert_eq!(record.version, 1);
         assert!(record.is_major_edit);
@@ -699,10 +712,14 @@ mod tests {
     #[tokio::test]
     async fn test_query_history() {
         let store = MessageHistoryStore::new();
-        
+
         // Add some records
-        store.record_edit("msg-1", "channel-1", "user-1", "A", "B", None).await;
-        store.record_edit("msg-2", "channel-1", "user-2", "C", "D", None).await;
+        store
+            .record_edit("msg-1", "channel-1", "user-1", "A", "B", None)
+            .await;
+        store
+            .record_edit("msg-2", "channel-1", "user-2", "C", "D", None)
+            .await;
         store.record_pin("msg-1", "channel-1", "admin-1").await;
 
         // Query all for channel
@@ -723,9 +740,27 @@ mod tests {
     #[tokio::test]
     async fn test_search_content() {
         let store = MessageHistoryStore::new();
-        
-        store.record_edit("msg-1", "channel-1", "user-1", "Hello World", "Hello Universe", None).await;
-        store.record_edit("msg-2", "channel-1", "user-2", "Test message", "Updated test", None).await;
+
+        store
+            .record_edit(
+                "msg-1",
+                "channel-1",
+                "user-1",
+                "Hello World",
+                "Hello Universe",
+                None,
+            )
+            .await;
+        store
+            .record_edit(
+                "msg-2",
+                "channel-1",
+                "user-2",
+                "Test message",
+                "Updated test",
+                None,
+            )
+            .await;
 
         let results = store.search_content("Universe", Some("channel-1")).await;
         assert_eq!(results.len(), 1);
@@ -734,8 +769,17 @@ mod tests {
 
     #[test]
     fn test_is_major_edit() {
-        assert!(MessageHistoryStore::is_major_edit("Hi", "Hello World this is a long message"));
-        assert!(!MessageHistoryStore::is_major_edit("Hello World", "Hello World!"));
-        assert!(MessageHistoryStore::is_major_edit("", "This is a new message with content"));
+        assert!(MessageHistoryStore::is_major_edit(
+            "Hi",
+            "Hello World this is a long message"
+        ));
+        assert!(!MessageHistoryStore::is_major_edit(
+            "Hello World",
+            "Hello World!"
+        ));
+        assert!(MessageHistoryStore::is_major_edit(
+            "",
+            "This is a new message with content"
+        ));
     }
 }

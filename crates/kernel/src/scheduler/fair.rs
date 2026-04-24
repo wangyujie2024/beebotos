@@ -2,9 +2,10 @@
 //!
 //! Fair scheduling algorithm for agent tasks.
 
-use super::{Task, TaskId};
 use std::collections::BTreeMap;
 use std::time::Duration;
+
+use super::{Task, TaskId};
 
 /// CFS Scheduler
 pub struct CFSScheduler {

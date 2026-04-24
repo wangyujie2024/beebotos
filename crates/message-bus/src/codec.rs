@@ -71,8 +71,9 @@ impl MessageCodec for MsgPackCodec {
     }
 
     fn decode(&self, data: &[u8]) -> Result<crate::Message> {
-        rmp_serde::from_slice(data)
-            .map_err(|e| MessageBusError::Deserialization(format!("MessagePack decode error: {}", e)))
+        rmp_serde::from_slice(data).map_err(|e| {
+            MessageBusError::Deserialization(format!("MessagePack decode error: {}", e))
+        })
     }
 
     fn name(&self) -> &'static str {
@@ -263,13 +264,19 @@ mod tests {
             .with_correlation_id("corr-123")
             .with_priority(8);
 
-        message.metadata.headers.insert("x-custom".to_string(), "value".to_string());
+        message
+            .metadata
+            .headers
+            .insert("x-custom".to_string(), "value".to_string());
 
         let encoded = codec.encode(&message).unwrap();
         let decoded = codec.decode(&encoded).unwrap();
 
         assert_eq!(decoded.topic(), "agent/123/task/start");
-        assert_eq!(decoded.metadata.correlation_id, Some("corr-123".to_string()));
+        assert_eq!(
+            decoded.metadata.correlation_id,
+            Some("corr-123".to_string())
+        );
         assert_eq!(decoded.metadata.priority, 8);
         assert_eq!(decoded.metadata.get_header("x-custom"), Some("value"));
     }

@@ -181,8 +181,9 @@ pub trait SyscallHandler: Send + Sync {
     async fn handle(&self, args: SyscallArgs, ctx: &SyscallContext) -> SyscallResult;
 }
 
-use crate::memory::ProcessMemorySpace;
 use std::sync::Arc;
+
+use crate::memory::ProcessMemorySpace;
 
 /// Syscall context for handlers
 #[derive(Debug, Clone)]
@@ -246,7 +247,8 @@ impl SyscallDispatcher {
     /// Dispatch syscall (legacy compatibility)
     ///
     /// Note: This method creates a minimal context without memory isolation.
-    /// For production use, use `dispatch_with_context` with proper memory space.
+    /// For production use, use `dispatch_with_context` with proper memory
+    /// space.
     pub async fn dispatch(
         &self,
         num: u64,

@@ -3,10 +3,11 @@
 //! Parses and formats content from QQ messages.
 //! Supports CQ codes, mentions, and OneBot message formats.
 
+use serde::{Deserialize, Serialize};
+
 use crate::communication::channel::content::{
     ContentType as UnifiedContentType, MediaContent, PlatformContent,
 };
-use serde::{Deserialize, Serialize};
 
 /// QQ message types
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -299,17 +300,20 @@ impl QQContentParser {
             match segment {
                 QQSegment::Text { data } => {
                     let text = &data.text;
-                    
+
                     // Parse commands (format: /command arg1 arg2)
                     if text.starts_with('/') {
                         let parts: Vec<&str> = text.split_whitespace().collect();
                         if !parts.is_empty() {
                             let cmd_name = parts[0].trim_start_matches('/').to_string();
                             let args = parts[1..].iter().map(|s| s.to_string()).collect();
-                            commands.push(QQCommand { name: cmd_name, args });
+                            commands.push(QQCommand {
+                                name: cmd_name,
+                                args,
+                            });
                         }
                     }
-                    
+
                     text_parts.push(text.clone());
                 }
                 QQSegment::At { data } => {
@@ -383,7 +387,7 @@ impl QQContentParser {
         let mut replies_to = None;
 
         let mut remaining = raw_message;
-        
+
         while let Some(start) = remaining.find("[CQ:") {
             // Add text before CQ code
             if start > 0 {
@@ -439,7 +443,7 @@ impl QQContentParser {
     fn parse_cq_segment(&self, cq_code: &str) -> Option<CQContent> {
         // Remove [CQ: and ]
         let inner = cq_code.trim_start_matches("[CQ:").trim_end_matches(']');
-        
+
         // Split type and params
         let parts: Vec<&str> = inner.splitn(2, ',').collect();
         let cq_type = parts.first()?;
@@ -466,7 +470,10 @@ impl QQContentParser {
             "text" => {
                 let text = self.extract_cq_param(params, "text").unwrap_or_default();
                 // Unescape special characters
-                let text = text.replace("&#91;", "[").replace("&#93;", "]").replace("&#44;", ",");
+                let text = text
+                    .replace("&#91;", "[")
+                    .replace("&#93;", "]")
+                    .replace("&#44;", ",");
                 Some(CQContent::Text(text))
             }
             _ => None,
@@ -501,7 +508,9 @@ impl QQContentParser {
     /// Build @all segment
     pub fn build_at_all(&self) -> QQSegment {
         QQSegment::At {
-            data: QQAtData { qq: "all".to_string() },
+            data: QQAtData {
+                qq: "all".to_string(),
+            },
         }
     }
 
@@ -519,7 +528,9 @@ impl QQContentParser {
     /// Build reply segment
     pub fn build_reply(&self, message_id: impl Into<String>) -> QQSegment {
         QQSegment::Reply {
-            data: QQReplyData { id: message_id.into() },
+            data: QQReplyData {
+                id: message_id.into(),
+            },
         }
     }
 
@@ -549,27 +560,34 @@ impl QQContentParser {
 
     /// Convert to CQ code format
     pub fn to_cq_code(&self, segments: &[QQSegment]) -> String {
-        segments.iter().map(|seg| match seg {
-            QQSegment::Text { data } => {
-                // Escape special characters
-                let text = data.text.replace("[", "&#91;").replace("]", "&#93;").replace(",", "&#44;");
-                format!("[CQ:text,text={}]", text)
-            }
-            QQSegment::At { data } => format!("[CQ:at,qq={}]", data.qq),
-            QQSegment::Image { data } => {
-                if let Some(url) = &data.url {
-                    format!("[CQ:image,file={},url={}]", data.file, url)
-                } else {
-                    format!("[CQ:image,file={}]", data.file)
+        segments
+            .iter()
+            .map(|seg| match seg {
+                QQSegment::Text { data } => {
+                    // Escape special characters
+                    let text = data
+                        .text
+                        .replace("[", "&#91;")
+                        .replace("]", "&#93;")
+                        .replace(",", "&#44;");
+                    format!("[CQ:text,text={}]", text)
                 }
-            }
-            QQSegment::Face { data } => format!("[CQ:face,id={}]", data.id),
-            QQSegment::Reply { data } => format!("[CQ:reply,id={}]", data.id),
-            QQSegment::Share { data } => {
-                format!("[CQ:share,url={},title={}]", data.url, data.title)
-            }
-            _ => String::new(),
-        }).collect()
+                QQSegment::At { data } => format!("[CQ:at,qq={}]", data.qq),
+                QQSegment::Image { data } => {
+                    if let Some(url) = &data.url {
+                        format!("[CQ:image,file={},url={}]", data.file, url)
+                    } else {
+                        format!("[CQ:image,file={}]", data.file)
+                    }
+                }
+                QQSegment::Face { data } => format!("[CQ:face,id={}]", data.id),
+                QQSegment::Reply { data } => format!("[CQ:reply,id={}]", data.id),
+                QQSegment::Share { data } => {
+                    format!("[CQ:share,url={},title={}]", data.url, data.title)
+                }
+                _ => String::new(),
+            })
+            .collect()
     }
 }
 
@@ -629,7 +647,7 @@ mod tests {
     fn test_parse_cq_code_at() {
         let parser = QQContentParser::new();
         let raw = "Hello [CQ:at,qq=123456]!";
-        
+
         let content = parser.parse_cq_code(raw);
         assert_eq!(content.mentions.len(), 1);
         assert_eq!(content.mentions[0].qq_id, "123456");
@@ -639,7 +657,7 @@ mod tests {
     fn test_build_text() {
         let parser = QQContentParser::new();
         let seg = parser.build_text("Test");
-        
+
         match seg {
             QQSegment::Text { data } => assert_eq!(data.text, "Test"),
             _ => panic!("Expected text segment"),
@@ -649,10 +667,7 @@ mod tests {
     #[test]
     fn test_to_cq_code() {
         let parser = QQContentParser::new();
-        let segments = vec![
-            parser.build_text("Hello "),
-            parser.build_at("123456"),
-        ];
+        let segments = vec![parser.build_text("Hello "), parser.build_at("123456")];
 
         let cq = parser.to_cq_code(&segments);
         assert!(cq.contains("[CQ:text,text=Hello ]"));

@@ -6,8 +6,9 @@
 //! - Shared memory support
 //! - Memory mapping
 
-use crate::error::{KernelError, Result};
 use tracing::trace;
+
+use crate::error::{KernelError, Result};
 
 /// WASM page size (64KB)
 pub const PAGE_SIZE: usize = 64 * 1024;
@@ -218,9 +219,9 @@ impl MemoryGuard {
     }
 }
 
-// SAFETY: MemoryGuard doesn't implement Send/Sync by default because it contains
-// a raw pointer, but it's safe to send between threads if the underlying
-// memory is properly synchronized (which it is in wasmtime).
+// SAFETY: MemoryGuard doesn't implement Send/Sync by default because it
+// contains a raw pointer, but it's safe to send between threads if the
+// underlying memory is properly synchronized (which it is in wasmtime).
 unsafe impl Send for MemoryGuard {}
 unsafe impl Sync for MemoryGuard {}
 

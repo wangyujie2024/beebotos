@@ -1,7 +1,9 @@
 //! BeeHub - Skill Marketplace for BeeBotOS
 
-use axum::{routing::get, Router};
 use std::net::SocketAddr;
+
+use axum::routing::get;
+use axum::Router;
 
 mod handlers;
 mod models;

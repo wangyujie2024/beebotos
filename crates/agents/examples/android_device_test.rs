@@ -9,11 +9,12 @@
 //! cargo run -p beebotos-agents --example android_device_test
 //! ```
 
+use std::time::Duration;
+
 use beebotos_agents::device::{
     AndroidController, AndroidDevice, AppLifecycle, DeviceAutomation, ElementLocator,
     HardwareButton, LocatorType, SwipeDirection,
 };
-use std::time::Duration;
 use tokio::time::sleep;
 
 #[tokio::main]
@@ -40,18 +41,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 2. 对每台设备顺序执行测试
     let total = devices.len();
     for (idx, serial) in devices.iter().enumerate() {
-        println!(
-            "\n╔════════════════════════════════════════════════════════╗"
-        );
-        println!(
-            "║  开始测试设备 [{}/{}]: {}  ║",
-            idx + 1,
-            total,
-            serial
-        );
-        println!(
-            "╚════════════════════════════════════════════════════════╝\n"
-        );
+        println!("\n╔════════════════════════════════════════════════════════╗");
+        println!("║  开始测试设备 [{}/{}]: {}  ║", idx + 1, total, serial);
+        println!("╚════════════════════════════════════════════════════════╝\n");
 
         if let Err(e) = run_test_for_device(serial).await {
             eprintln!("\n❌ 设备 {} 测试失败: {}", serial, e);
@@ -132,7 +124,11 @@ async fn run_test_for_device(serial: &str) -> Result<(), Box<dyn std::error::Err
     let screenshot = device.take_screenshot().await?;
     let screenshot_path = format!("android_screenshot_{}.png", serial.replace(':', "_"));
     tokio::fs::write(&screenshot_path, &screenshot).await?;
-    println!("✅ 截图已保存到: {} ({} bytes)\n", screenshot_path, screenshot.len());
+    println!(
+        "✅ 截图已保存到: {} ({} bytes)\n",
+        screenshot_path,
+        screenshot.len()
+    );
 
     // 5. 基础手势测试
     println!("执行基础手势测试...");
@@ -155,7 +151,9 @@ async fn run_test_for_device(serial: &str) -> Result<(), Box<dyn std::error::Err
     println!("  ⬆️ 向上滑动");
 
     sleep(Duration::from_millis(500)).await;
-    device.swipe_direction(SwipeDirection::Down, 600, 300).await?;
+    device
+        .swipe_direction(SwipeDirection::Down, 600, 300)
+        .await?;
     println!("  ⬇️ 向下滑动\n");
 
     // 6. 按键测试
@@ -184,7 +182,10 @@ async fn run_test_for_device(serial: &str) -> Result<(), Box<dyn std::error::Err
         println!("  运行中: {}", running);
 
         let screenshot2 = device.take_screenshot().await?;
-        let settings_name = format!("android_settings_screenshot_{}.png", serial.replace(':', "_"));
+        let settings_name = format!(
+            "android_settings_screenshot_{}.png",
+            serial.replace(':', "_")
+        );
         tokio::fs::write(&settings_name, &screenshot2).await?;
         println!("  ✅ 设置应用截图已保存");
 
@@ -201,7 +202,11 @@ async fn run_test_for_device(serial: &str) -> Result<(), Box<dyn std::error::Err
                         let start = line.find("text=\"")? + 6;
                         let end = line[start..].find("\"")?;
                         let text = &line[start..start + end];
-                        if !text.is_empty() { Some(text.to_string()) } else { None }
+                        if !text.is_empty() {
+                            Some(text.to_string())
+                        } else {
+                            None
+                        }
                     })
                     .take(20)
                     .collect();
@@ -214,14 +219,38 @@ async fn run_test_for_device(serial: &str) -> Result<(), Box<dyn std::error::Err
 
         // 尝试多种常见关键词组合（覆盖不同厂商 ROM 的命名差异）
         let locators = vec![
-            ("WLAN/Wi-Fi", ElementLocator::new(LocatorType::PartialText, "WLAN")),
-            ("Wi-Fi", ElementLocator::new(LocatorType::PartialText, "Wi-Fi")),
-            ("无线网络", ElementLocator::new(LocatorType::PartialText, "无线")),
-            ("网络", ElementLocator::new(LocatorType::PartialText, "网络")),
-            ("连接", ElementLocator::new(LocatorType::PartialText, "连接")),
-            ("蓝牙", ElementLocator::new(LocatorType::PartialText, "蓝牙")),
-            ("显示", ElementLocator::new(LocatorType::PartialText, "显示")),
-            ("设置标题", ElementLocator::new(LocatorType::PartialText, "设置")),
+            (
+                "WLAN/Wi-Fi",
+                ElementLocator::new(LocatorType::PartialText, "WLAN"),
+            ),
+            (
+                "Wi-Fi",
+                ElementLocator::new(LocatorType::PartialText, "Wi-Fi"),
+            ),
+            (
+                "无线网络",
+                ElementLocator::new(LocatorType::PartialText, "无线"),
+            ),
+            (
+                "网络",
+                ElementLocator::new(LocatorType::PartialText, "网络"),
+            ),
+            (
+                "连接",
+                ElementLocator::new(LocatorType::PartialText, "连接"),
+            ),
+            (
+                "蓝牙",
+                ElementLocator::new(LocatorType::PartialText, "蓝牙"),
+            ),
+            (
+                "显示",
+                ElementLocator::new(LocatorType::PartialText, "显示"),
+            ),
+            (
+                "设置标题",
+                ElementLocator::new(LocatorType::PartialText, "设置"),
+            ),
         ];
 
         let mut clicked = false;
@@ -246,7 +275,11 @@ async fn run_test_for_device(serial: &str) -> Result<(), Box<dyn std::error::Err
         if !clicked {
             println!("  ⚠️ 未找到预设元素，改用坐标点击屏幕中央作为演示");
             device.tap(center_x, info.screen_height as i32 / 2).await?;
-            println!("     👆 已点击屏幕中央 ({}, {})", center_x, info.screen_height as i32 / 2);
+            println!(
+                "     👆 已点击屏幕中央 ({}, {})",
+                center_x,
+                info.screen_height as i32 / 2
+            );
             sleep(Duration::from_millis(1000)).await;
         }
 

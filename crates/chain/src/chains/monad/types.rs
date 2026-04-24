@@ -1,8 +1,9 @@
-use crate::chains::common::token::{chain_formatters, parse_native_amount};
 use alloy_consensus::Transaction as _;
 use alloy_primitives::U256;
 use alloy_rpc_types::{Block, Log, Transaction, TransactionReceipt};
 use serde::{Deserialize, Serialize};
+
+use crate::chains::common::token::{chain_formatters, parse_native_amount};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MonadBlock {
@@ -117,7 +118,8 @@ impl From<Log> for MonadEvent {
 
 /// Format MONAD amount (18 decimals)
 ///
-/// DEPRECATED: Use `chains::common::token::chain_formatters::format_monad` instead
+/// DEPRECATED: Use `chains::common::token::chain_formatters::format_monad`
+/// instead
 pub fn format_eth(wei: U256) -> String {
     chain_formatters::format_monad(wei)
 }

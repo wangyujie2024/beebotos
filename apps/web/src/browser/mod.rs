@@ -8,8 +8,9 @@
 //!
 //! 兼容 OpenClaw V2026.3.13 的浏览器自动化功能
 
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+
+use serde::{Deserialize, Serialize};
 
 pub mod automation;
 pub mod cdp;
@@ -19,10 +20,17 @@ pub mod sandbox;
 pub use automation::{BatchOperation, BrowserAction, BrowserAutomation, SelectorChain};
 pub use cdp::{CdpClient, CdpConnection};
 pub use debugger::{
-    BrowserDebugger, BrowserLogEntry, LogLevel, LogSource, LogMetadata,
-    DebugReport, DebugStatistics, SessionInfo, ErrorSummary,
+    sanitize_for_log, // 安全规范 10.1
+    BrowserDebugger,
+    BrowserLogEntry,
+    DebugReport,
+    DebugStatistics,
+    ErrorSummary,
+    LogLevel,
+    LogMetadata,
+    LogSource,
     PerformanceMetrics, // 规范 9.2
-    sanitize_for_log,   // 安全规范 10.1
+    SessionInfo,
 };
 pub use sandbox::{BrowserSandbox, ResourceLimits, SandboxManager};
 
@@ -326,7 +334,9 @@ impl BrowserError {
 
     pub fn timeout(waited_ms: u64, condition: &str) -> Self {
         Self {
-            error_type: BrowserErrorType::Timeout { waited_for_ms: waited_ms },
+            error_type: BrowserErrorType::Timeout {
+                waited_for_ms: waited_ms,
+            },
             message: format!("等待条件超时: {}，等待了 {}ms", condition, waited_ms),
             current_url: None,
             screenshot_path: None,
@@ -523,7 +533,9 @@ mod tests {
         );
 
         match error.error_type {
-            BrowserErrorType::ElementNotFound { attempted_selectors } => {
+            BrowserErrorType::ElementNotFound {
+                attempted_selectors,
+            } => {
                 assert_eq!(attempted_selectors.len(), 2);
             }
             _ => panic!("Expected ElementNotFound error"),

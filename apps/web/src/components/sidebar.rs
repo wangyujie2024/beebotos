@@ -1,8 +1,9 @@
-use crate::i18n::{I18nContext, Locale};
-use crate::state::use_app_state;
 use leptos::prelude::*;
 use leptos_router::components::A;
 use leptos_router::hooks::{use_location, use_navigate};
+
+use crate::i18n::{I18nContext, Locale};
+use crate::state::use_app_state;
 
 #[component]
 pub fn Sidebar() -> impl IntoView {
@@ -12,9 +13,7 @@ pub fn Sidebar() -> impl IntoView {
     let app_state = use_app_state();
 
     // Get current path
-    let current_path = Signal::derive(move || {
-        location.pathname.get()
-    });
+    let current_path = Signal::derive(move || location.pathname.get());
 
     // Collapsible group states
     let chat_collapsed = RwSignal::new(false);
@@ -152,8 +151,7 @@ pub fn Sidebar() -> impl IntoView {
 fn NavItem(
     href: &'static str,
     icon: &'static str,
-    #[prop(into)]
-    label: Signal<String>,
+    #[prop(into)] label: Signal<String>,
     current_path: Signal<String>,
 ) -> impl IntoView {
     let is_active = Signal::derive(move || {
@@ -184,11 +182,9 @@ fn NavItem(
 #[component]
 fn LanguageToggle(i18n: I18nContext) -> impl IntoView {
     let i18n_for_label = i18n.clone();
-    let locale_label = move || {
-        match i18n_for_label.get_locale() {
-            Locale::ZhCN => "🇨🇳 中文",
-            _ => "🇺🇸 EN",
-        }
+    let locale_label = move || match i18n_for_label.get_locale() {
+        Locale::ZhCN => "🇨🇳 中文",
+        _ => "🇺🇸 EN",
     };
 
     view! {
@@ -209,10 +205,7 @@ fn LanguageToggle(i18n: I18nContext) -> impl IntoView {
 }
 
 #[component]
-fn UserMenu(
-    app_state: crate::state::AppState,
-    i18n: I18nContext,
-) -> impl IntoView {
+fn UserMenu(app_state: crate::state::AppState, i18n: I18nContext) -> impl IntoView {
     let app_state_stored = StoredValue::new(app_state);
     let i18n_stored = StoredValue::new(i18n);
     let navigate = use_navigate();

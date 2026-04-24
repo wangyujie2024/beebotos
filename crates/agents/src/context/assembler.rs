@@ -548,7 +548,6 @@ impl Default for ContextAssembler {
 mod tests {
     use super::*;
 
-
     fn create_test_message(role: MessageRole, content: &str, tokens: usize) -> ContextMessage {
         ContextMessage {
             id: uuid::Uuid::new_v4().to_string(),

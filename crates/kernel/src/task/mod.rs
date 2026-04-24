@@ -15,7 +15,9 @@ pub use thread::Thread;
 use crate::error::Result;
 
 /// Task ID - unique identifier for a task/process
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub struct TaskId(pub u64);
 
 impl TaskId {

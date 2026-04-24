@@ -2,16 +2,15 @@
 //!
 //! Provides configuration export and hot-reload for operators.
 
+use std::sync::Arc;
+
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::Json;
-use gateway::{
-    error::GatewayError,
-    middleware::{require_any_role, AuthUser},
-};
+use gateway::error::GatewayError;
+use gateway::middleware::{require_any_role, AuthUser};
 use serde_json::json;
-use std::sync::Arc;
 
 use crate::AppState;
 

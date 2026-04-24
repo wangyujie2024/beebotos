@@ -1,7 +1,8 @@
 //! Dynamic Skills
 
-use crate::error::Result;
 use std::collections::HashMap;
+
+use crate::error::Result;
 
 /// Dynamic skill loaded at runtime
 #[derive(Debug)]
@@ -29,7 +30,7 @@ impl DynamicSkillLoader {
             wasm_bytes,
             config: HashMap::new(),
         };
-        
+
         self.cache.insert(name.to_string(), skill.clone());
         Ok(skill)
     }

@@ -7,8 +7,9 @@
 //!   cargo run --bin web-server -- --config data/web-server.toml
 //!   cargo run --bin web-server -- --host 127.0.0.1 --port 8080
 
-use clap::Parser;
 use std::path::PathBuf;
+
+use clap::Parser;
 
 /// 命令行参数
 #[derive(Parser, Debug)]
@@ -47,9 +48,7 @@ async fn main() -> anyhow::Result<()> {
     let args = Args::parse();
 
     // 加载配置
-    let mut config = beebotos_web::server::config::AppConfig::load(
-        args.config.as_deref(),
-    )?;
+    let mut config = beebotos_web::server::config::AppConfig::load(args.config.as_deref())?;
 
     // 命令行参数覆盖配置文件
     if let Some(host) = args.host {

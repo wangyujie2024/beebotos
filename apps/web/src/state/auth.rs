@@ -46,44 +46,6 @@ pub struct User {
     pub email: Option<String>,
     pub avatar: Option<String>,
     pub wallet_address: Option<String>,
-    pub roles: Vec<Role>,
-    pub permissions: Vec<Permission>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum Role {
-    Admin,
-    Operator,
-    Member,
-    Guest,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum Permission {
-    // Agent permissions
-    AgentCreate,
-    AgentRead,
-    AgentUpdate,
-    AgentDelete,
-    AgentStart,
-    AgentStop,
-
-    // DAO permissions
-    DaoVote,
-    DaoCreateProposal,
-    DaoExecute,
-
-    // Treasury permissions
-    TreasuryView,
-    TreasuryDeposit,
-    TreasuryWithdraw,
-
-    // System permissions
-    SettingsRead,
-    SettingsWrite,
-    UserManage,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -123,44 +85,13 @@ impl AuthState {
         })
     }
 
-    /// Check if user has specific role
-    pub fn has_role(&self, role: &Role) -> bool {
-        self.user.with(|u| {
-            u.as_ref()
-                .map(|user| user.roles.contains(role))
-                .unwrap_or(false)
-        })
-    }
-
-    /// Check if user has any of the given roles
-    pub fn has_any_role(&self, roles: &[Role]) -> bool {
-        roles.iter().any(|r| self.has_role(r))
-    }
-
-    /// Check if user has specific permission
-    pub fn has_permission(&self, permission: &Permission) -> bool {
-        self.user.with(|u| {
-            u.as_ref()
-                .map(|user| user.permissions.contains(permission))
-                .unwrap_or(false)
-        })
-    }
-
-    /// Check if user has any of the given permissions
-    pub fn has_any_permission(&self, permissions: &[Permission]) -> bool {
-        permissions.iter().any(|p| self.has_permission(p))
-    }
-
-    /// Check if user has all of the given permissions
-    pub fn has_all_permissions(&self, permissions: &[Permission]) -> bool {
-        permissions.iter().all(|p| self.has_permission(p))
-    }
 
     /// Set authenticated user with tokens
     ///
     /// # Security
     /// - Access token is stored in memory and localStorage
-    /// - Refresh token is stored in memory and localStorage for session persistence
+    /// - Refresh token is stored in memory and localStorage for session
+    ///   persistence
     /// - Token refresh interval is started automatically
     pub fn set_authenticated(
         &self,
@@ -192,9 +123,7 @@ impl AuthState {
     ) {
         let expires_at = chrono::Utc::now().timestamp() + expires_in_secs;
         self.token.set(Some(token.clone()));
-        let rt = refresh_token.unwrap_or_else(|| {
-            self.refresh_token.get().unwrap_or_default()
-        });
+        let rt = refresh_token.unwrap_or_else(|| self.refresh_token.get().unwrap_or_default());
         self.refresh_token.set(Some(rt.clone()));
         self.token_expires_at.set(Some(expires_at));
 
@@ -269,7 +198,9 @@ impl AuthState {
                     // or if it's a demo token
                     use crate::api::ApiError;
                     if matches!(e, ApiError::NotFound) {
-                        let _ = web_sys::console::log_1(&"Refresh endpoint not found, keeping current session".into());
+                        let _ = web_sys::console::log_1(
+                            &"Refresh endpoint not found, keeping current session".into(),
+                        );
                         return;
                     }
                     // Clear authentication on refresh failure
@@ -316,7 +247,8 @@ impl AuthState {
     fn persist_auth(&self, token: &str, refresh_token: &str, expires_at: i64) {
         let _ = gloo_storage::LocalStorage::raw().set_item("auth_token", token);
         let _ = gloo_storage::LocalStorage::raw().set_item("auth_refresh_token", refresh_token);
-        let _ = gloo_storage::LocalStorage::raw().set_item("auth_expires_at", &expires_at.to_string());
+        let _ =
+            gloo_storage::LocalStorage::raw().set_item("auth_expires_at", &expires_at.to_string());
         // Persist user info
         if let Some(ref user) = self.user.get() {
             if let Ok(user_json) = serde_json::to_string(user) {
@@ -354,7 +286,9 @@ impl AuthState {
                     self.token.set(Some(token));
                     self.token_expires_at.set(Some(expires_at));
                     // Try to restore refresh token too
-                    if let Ok(Some(refresh)) = gloo_storage::LocalStorage::raw().get_item("auth_refresh_token") {
+                    if let Ok(Some(refresh)) =
+                        gloo_storage::LocalStorage::raw().get_item("auth_refresh_token")
+                    {
                         self.refresh_token.set(Some(refresh));
                     }
                     // Start refresh interval
@@ -397,60 +331,4 @@ mod tests {
         assert!(auth.get_token().is_none());
     }
 
-    #[test]
-    #[cfg(target_arch = "wasm32")]
-    fn test_role_check() {
-        let auth = AuthState::new();
-        let user = User {
-            id: "1".to_string(),
-            name: "Test".to_string(),
-            email: None,
-            avatar: None,
-            wallet_address: None,
-            roles: vec![Role::Admin, Role::Operator],
-            permissions: vec![],
-        };
-        auth.set_authenticated(user, "token".to_string(), "refresh_token".to_string(), 3600);
-
-        assert!(auth.has_role(&Role::Admin));
-        assert!(auth.has_role(&Role::Operator));
-        assert!(!auth.has_role(&Role::Member));
-    }
-
-    #[test]
-    #[cfg(not(target_arch = "wasm32"))]
-    fn test_role_check_stub() {
-        // set_authenticated uses LocalStorage which only works in WASM
-        assert!(true);
-    }
-
-    #[test]
-    #[cfg(target_arch = "wasm32")]
-    fn test_permission_check() {
-        let auth = AuthState::new();
-        let user = User {
-            id: "1".to_string(),
-            name: "Test".to_string(),
-            email: None,
-            avatar: None,
-            wallet_address: None,
-            roles: vec![],
-            permissions: vec![Permission::AgentRead, Permission::AgentCreate],
-        };
-        auth.set_authenticated(user, "token".to_string(), "refresh_token".to_string(), 3600);
-
-        assert!(auth.has_permission(&Permission::AgentRead));
-        assert!(auth.has_permission(&Permission::AgentCreate));
-        assert!(!auth.has_permission(&Permission::AgentDelete));
-
-        assert!(auth.has_any_permission(&[Permission::AgentRead, Permission::AgentDelete]));
-        assert!(!auth.has_all_permissions(&[Permission::AgentRead, Permission::AgentDelete]));
-    }
-
-    #[test]
-    #[cfg(not(target_arch = "wasm32"))]
-    fn test_permission_check_stub() {
-        // set_authenticated uses LocalStorage which only works in WASM
-        assert!(true);
-    }
 }

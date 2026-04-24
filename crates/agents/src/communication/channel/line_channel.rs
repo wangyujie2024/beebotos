@@ -12,18 +12,18 @@
 //! # API Reference
 //! - <https://developers.line.biz/en/reference/messaging-api/>
 
+use async_trait::async_trait;
+use reqwest::Client;
+use serde::{Deserialize, Serialize};
+use tokio::sync::mpsc;
+use tracing::{debug, info};
+
 use super::r#trait::{
     BaseChannelConfig, Channel, ChannelConfig, ChannelEvent, ChannelInfo, ConnectionMode,
     ContentType, MemberInfo,
 };
 use crate::communication::{Message, MessageType, PlatformType};
 use crate::error::{AgentError, Result};
-use async_trait::async_trait;
-use reqwest::Client;
-use serde::{Deserialize, Serialize};
-
-use tokio::sync::mpsc;
-use tracing::{debug, info};
 
 /// LINE Messaging API base URL
 const LINE_API_BASE: &str = "https://api.line.me/v2";
@@ -75,7 +75,7 @@ impl Default for LineConfig {
         let mut base = BaseChannelConfig::default();
         // LINE defaults to Webhook mode
         base.connection_mode = ConnectionMode::Webhook;
-        
+
         Self {
             channel_access_token: String::new(),
             channel_secret: None,
@@ -118,13 +118,35 @@ impl ChannelConfig for LineConfig {
 #[serde(rename_all = "camelCase")]
 #[allow(dead_code)]
 enum LineMessageType {
-    Text { text: String },
-    Image { original_content_url: String, preview_image_url: String },
-    Video { original_content_url: String, preview_image_url: String },
-    Audio { original_content_url: String, duration: i32 },
-    File { original_content_url: String, file_name: String },
-    Location { title: String, address: String, latitude: f64, longitude: f64 },
-    Sticker { package_id: String, sticker_id: String },
+    Text {
+        text: String,
+    },
+    Image {
+        original_content_url: String,
+        preview_image_url: String,
+    },
+    Video {
+        original_content_url: String,
+        preview_image_url: String,
+    },
+    Audio {
+        original_content_url: String,
+        duration: i32,
+    },
+    File {
+        original_content_url: String,
+        file_name: String,
+    },
+    Location {
+        title: String,
+        address: String,
+        latitude: f64,
+        longitude: f64,
+    },
+    Sticker {
+        package_id: String,
+        sticker_id: String,
+    },
 }
 
 /// LINE message request
@@ -154,7 +176,9 @@ impl LineChannel {
         let client = Client::builder()
             .timeout(std::time::Duration::from_secs(30))
             .build()
-            .map_err(|e| AgentError::configuration(format!("Failed to create HTTP client: {}", e)))?;
+            .map_err(|e| {
+                AgentError::configuration(format!("Failed to create HTTP client: {}", e))
+            })?;
 
         Ok(Self {
             config,
@@ -208,7 +232,10 @@ impl LineChannel {
         let response = self
             .client
             .post(&url)
-            .header("Authorization", format!("Bearer {}", self.config.channel_access_token))
+            .header(
+                "Authorization",
+                format!("Bearer {}", self.config.channel_access_token),
+            )
             .json(&request)
             .send()
             .await
@@ -241,7 +268,10 @@ impl LineChannel {
         let response = self
             .client
             .post(&url)
-            .header("Authorization", format!("Bearer {}", self.config.channel_access_token))
+            .header(
+                "Authorization",
+                format!("Bearer {}", self.config.channel_access_token),
+            )
             .json(&request)
             .send()
             .await
@@ -272,7 +302,10 @@ impl LineChannel {
         let response = self
             .client
             .post(&url)
-            .header("Authorization", format!("Bearer {}", self.config.channel_access_token))
+            .header(
+                "Authorization",
+                format!("Bearer {}", self.config.channel_access_token),
+            )
             .json(&request)
             .send()
             .await
@@ -298,7 +331,10 @@ impl LineChannel {
         let response = self
             .client
             .get(&url)
-            .header("Authorization", format!("Bearer {}", self.config.channel_access_token))
+            .header(
+                "Authorization",
+                format!("Bearer {}", self.config.channel_access_token),
+            )
             .send()
             .await
             .map_err(|e| AgentError::platform(format!("Failed to get profile: {}", e)))?;
@@ -347,7 +383,10 @@ impl LineChannel {
         let response = self
             .client
             .post(&url)
-            .header("Authorization", format!("Bearer {}", self.config.channel_access_token))
+            .header(
+                "Authorization",
+                format!("Bearer {}", self.config.channel_access_token),
+            )
             .json(&request)
             .send()
             .await
@@ -411,7 +450,10 @@ impl Channel for LineChannel {
         let response = self
             .client
             .get(&url)
-            .header("Authorization", format!("Bearer {}", self.config.channel_access_token))
+            .header(
+                "Authorization",
+                format!("Bearer {}", self.config.channel_access_token),
+            )
             .send()
             .await
             .map_err(|e| AgentError::platform(format!("Failed to connect: {}", e)))?;
@@ -577,10 +619,9 @@ impl LineWebhookHandler {
                             ),
                         };
 
-                        self.event_sender
-                            .send(channel_event)
-                            .await
-                            .map_err(|e| AgentError::platform(format!("Failed to send event: {}", e)))?;
+                        self.event_sender.send(channel_event).await.map_err(|e| {
+                            AgentError::platform(format!("Failed to send event: {}", e))
+                        })?;
                     }
                 }
                 "follow" => {

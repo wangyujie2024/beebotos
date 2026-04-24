@@ -2,6 +2,9 @@
 //!
 //! Tests for memory allocator, safety tracker, isolation, and VM management.
 
+use std::alloc::{GlobalAlloc, Layout};
+use std::sync::Arc;
+
 use beebotos_kernel::memory::isolation::{MemoryIsolation, MemoryPermissions, ProcessMemorySpace};
 use beebotos_kernel::memory::safety::{MemoryGuard, MemorySafetyTracker};
 use beebotos_kernel::memory::slab::SlabAllocator;
@@ -9,9 +12,6 @@ use beebotos_kernel::memory::{
     allocator, check_pressure, MemoryConfig, MemoryPressure, MemoryRegion, MemoryRegionType,
     MemorySnapshot, MemoryStats,
 };
-
-use std::alloc::{GlobalAlloc, Layout};
-use std::sync::Arc;
 
 /// Test memory statistics tracking
 #[test]

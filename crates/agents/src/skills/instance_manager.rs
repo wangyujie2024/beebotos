@@ -1,10 +1,11 @@
 //! Skill Instance Manager
 //!
-//! Manages skill instance lifecycle: creation, status transitions, config updates,
-//! and usage tracking. Each instance is a runtime binding of a Skill to an Agent
-//! with independent configuration and state.
+//! Manages skill instance lifecycle: creation, status transitions, config
+//! updates, and usage tracking. Each instance is a runtime binding of a Skill
+//! to an Agent with independent configuration and state.
 
 use std::collections::HashMap;
+
 use tokio::sync::RwLock;
 
 /// Instance lifecycle status
@@ -237,8 +238,14 @@ impl InstanceManager {
         let mut results: Vec<SkillInstance> = instances
             .values()
             .filter(|i| {
-                filter.agent_id.as_ref().map_or(true, |id| &i.agent_id == id)
-                    && filter.skill_id.as_ref().map_or(true, |id| &i.skill_id == id)
+                filter
+                    .agent_id
+                    .as_ref()
+                    .map_or(true, |id| &i.agent_id == id)
+                    && filter
+                        .skill_id
+                        .as_ref()
+                        .map_or(true, |id| &i.skill_id == id)
                     && filter.status.map_or(true, |s| i.status == s)
             })
             .cloned()
@@ -247,7 +254,11 @@ impl InstanceManager {
         // Apply pagination if requested
         if filter.page_size > 0 {
             let offset = filter.page * filter.page_size;
-            results = results.into_iter().skip(offset).take(filter.page_size).collect();
+            results = results
+                .into_iter()
+                .skip(offset)
+                .take(filter.page_size)
+                .collect();
         }
         results
     }
@@ -354,12 +365,21 @@ mod tests {
         assert_eq!(instance.skill_id, "skill-1");
         assert_eq!(instance.status, InstanceStatus::Pending);
 
-        manager.update_status(&id, InstanceStatus::Running).await.unwrap();
+        manager
+            .update_status(&id, InstanceStatus::Running)
+            .await
+            .unwrap();
         let instance = manager.get(&id).await.unwrap();
         assert_eq!(instance.status, InstanceStatus::Running);
 
-        manager.update_status(&id, InstanceStatus::Paused).await.unwrap();
-        manager.update_status(&id, InstanceStatus::Running).await.unwrap();
+        manager
+            .update_status(&id, InstanceStatus::Paused)
+            .await
+            .unwrap();
+        manager
+            .update_status(&id, InstanceStatus::Running)
+            .await
+            .unwrap();
 
         manager.delete(&id).await.unwrap();
         assert_eq!(manager.count().await, 0);
@@ -368,7 +388,10 @@ mod tests {
     #[tokio::test]
     async fn test_invalid_transition() {
         let manager = InstanceManager::new();
-        let id = manager.create("skill-1", "agent-1", HashMap::new()).await.unwrap();
+        let id = manager
+            .create("skill-1", "agent-1", HashMap::new())
+            .await
+            .unwrap();
 
         let result = manager.update_status(&id, InstanceStatus::Paused).await;
         assert!(result.is_err());
@@ -377,7 +400,10 @@ mod tests {
     #[tokio::test]
     async fn test_usage_stats() {
         let manager = InstanceManager::new();
-        let id = manager.create("skill-1", "agent-1", HashMap::new()).await.unwrap();
+        let id = manager
+            .create("skill-1", "agent-1", HashMap::new())
+            .await
+            .unwrap();
 
         manager.record_execution(&id, true, 100.0).await.unwrap();
         manager.record_execution(&id, false, 200.0).await.unwrap();
@@ -393,13 +419,31 @@ mod tests {
     #[tokio::test]
     async fn test_list_filtering() {
         let manager = InstanceManager::new();
-        let id1 = manager.create("skill-a", "agent-1", HashMap::new()).await.unwrap();
-        let id2 = manager.create("skill-b", "agent-1", HashMap::new()).await.unwrap();
-        let _id3 = manager.create("skill-a", "agent-2", HashMap::new()).await.unwrap();
+        let id1 = manager
+            .create("skill-a", "agent-1", HashMap::new())
+            .await
+            .unwrap();
+        let id2 = manager
+            .create("skill-b", "agent-1", HashMap::new())
+            .await
+            .unwrap();
+        let _id3 = manager
+            .create("skill-a", "agent-2", HashMap::new())
+            .await
+            .unwrap();
 
-        manager.update_status(&id1, InstanceStatus::Running).await.unwrap();
-        manager.update_status(&id2, InstanceStatus::Running).await.unwrap();
-        manager.update_status(&id2, InstanceStatus::Stopped).await.unwrap();
+        manager
+            .update_status(&id1, InstanceStatus::Running)
+            .await
+            .unwrap();
+        manager
+            .update_status(&id2, InstanceStatus::Running)
+            .await
+            .unwrap();
+        manager
+            .update_status(&id2, InstanceStatus::Stopped)
+            .await
+            .unwrap();
 
         let filter = InstanceFilter {
             agent_id: Some("agent-1".to_string()),

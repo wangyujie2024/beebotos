@@ -4,18 +4,16 @@
 //!
 //! 🔒 P0 FIX: Kernel task fault awareness HTTP API.
 
-use axum::extract::{Path, State};
-use axum::Json;
-use serde_json::json;
 use std::sync::Arc;
 
-use gateway::{
-    error::GatewayError,
-    middleware::{require_any_role, AuthUser},
-};
+use axum::extract::{Path, State};
+use axum::Json;
+use gateway::error::GatewayError;
+use gateway::middleware::{require_any_role, AuthUser};
+use serde_json::json;
 
-use crate::AppState;
 use crate::handlers::common::check_ownership;
+use crate::AppState;
 
 /// Get task monitor statistics
 pub async fn get_task_monitor_stats(

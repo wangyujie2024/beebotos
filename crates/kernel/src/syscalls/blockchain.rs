@@ -6,14 +6,15 @@
 //! - SwapToken: DEX token swapping
 //! - StakeToken/UnstakeToken: Staking operations
 
-use crate::capabilities::CapabilityLevel;
-use crate::syscalls::handlers::{read_caller_memory, write_caller_memory};
-use crate::syscalls::{SyscallArgs, SyscallContext, SyscallError, SyscallHandler, SyscallResult};
+use std::sync::Arc;
 
 use async_trait::async_trait;
 use parking_lot::RwLock;
-use std::sync::Arc;
 use tracing::{error, info, trace, warn};
+
+use crate::capabilities::CapabilityLevel;
+use crate::syscalls::handlers::{read_caller_memory, write_caller_memory};
+use crate::syscalls::{SyscallArgs, SyscallContext, SyscallError, SyscallHandler, SyscallResult};
 
 // Global blockchain client reference
 static BLOCKCHAIN_CLIENT: RwLock<Option<Arc<dyn BlockchainClient>>> = RwLock::new(None);

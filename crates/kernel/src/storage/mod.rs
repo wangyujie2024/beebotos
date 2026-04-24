@@ -89,8 +89,9 @@ pub struct EntryMetadata {
 
 /// Backend interface for storage operations
 ///
-/// This trait defines the core operations that all storage backends must implement.
-/// It provides default implementations for some methods to reduce boilerplate.
+/// This trait defines the core operations that all storage backends must
+/// implement. It provides default implementations for some methods to reduce
+/// boilerplate.
 pub trait StorageBackend: Send + Sync + std::fmt::Debug {
     /// Store data with metadata
     fn put(
@@ -111,7 +112,8 @@ pub trait StorageBackend: Send + Sync + std::fmt::Debug {
 
     /// Check if key exists
     ///
-    /// Default implementation uses `get`, backends can override for better performance
+    /// Default implementation uses `get`, backends can override for better
+    /// performance
     fn exists(&self, key: &str) -> std::result::Result<bool, StorageError> {
         Ok(self.get(key)?.is_some())
     }

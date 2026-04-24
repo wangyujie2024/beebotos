@@ -57,39 +57,33 @@ pub mod replanner;
 pub mod storage;
 
 // Re-export core plan types
-pub use plan::{
-    Action, Plan, PlanId, PlanStatus, PlanStep, PlanningError, PlanningResult, Priority,
-    StepStatus, StepType,
-};
-
 // Re-export decomposer types
 pub use decomposer::{
-    CompositeDecomposer, Decomposer, DecompositionContext, DecompositionStrategy,
-    DomainDecomposer, HierarchicalDecomposer, ParallelDecomposer, TaskDecomposer,
+    CompositeDecomposer, Decomposer, DecompositionContext, DecompositionStrategy, DomainDecomposer,
+    HierarchicalDecomposer, ParallelDecomposer, TaskDecomposer,
 };
-
+// Re-export engine types (additional)
+pub use engine::PlannerToolRegistry;
 // Re-export engine types
 pub use engine::{
-    ChainOfThoughtPlanner, GoalBasedPlanner, HybridPlanner, PlanContext, PlanStrategy,
-    Planner, PlanningConfig, PlanningEngine, ReActPlanner,
+    ChainOfThoughtPlanner, GoalBasedPlanner, HybridPlanner, PlanContext, PlanStrategy, Planner,
+    PlanningConfig, PlanningEngine, ReActPlanner,
 };
-
 // Re-export executor types
 pub use executor::{
     ActionHandler, DefaultActionHandler, ExecutionConfig, ExecutionContext, ExecutionEvent,
     ExecutionResult, ExecutionStrategy, ParallelExecutor, PlanExecutor, SequentialExecutor,
     ToolExecutor,
 };
-
-// Re-export engine types (additional)
-pub use engine::PlannerToolRegistry;
-
+pub use plan::{
+    Action, Plan, PlanId, PlanStatus, PlanStep, PlanningError, PlanningResult, Priority,
+    StepStatus, StepType,
+};
 // Re-export replanner types
 pub use replanner::{
     AdaptationResult, AdaptationStrategy, CompositeRePlanner, ConditionRePlanner,
     FeedbackRePlanner, RePlanTrigger, RePlanner, ResourceRePlanner,
 };
-
 // ARCHITECTURE FIX: Re-export storage types
 pub use storage::{
     FilePlanStorage, InMemoryPlanStorage, PlanFilter, PlanStorage, PlanStorageError,

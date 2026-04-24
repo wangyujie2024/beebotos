@@ -1,16 +1,18 @@
 //! Plan Executor
 //!
-//! Executes plans with support for sequential, parallel, and adaptive execution strategies.
-//! Handles step dependencies, retries, and dynamic adaptation.
+//! Executes plans with support for sequential, parallel, and adaptive execution
+//! strategies. Handles step dependencies, retries, and dynamic adaptation.
 
-use super::plan::{Action, Plan, PlanId, PlanningError, PlanningResult};
-use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Duration;
+
+use serde::{Deserialize, Serialize};
 use tokio::sync::{mpsc, RwLock};
 use tokio::time::timeout;
 use tracing::{info, warn};
+
+use super::plan::{Action, Plan, PlanId, PlanningError, PlanningResult};
 
 /// Plan executor
 pub struct PlanExecutor {
@@ -170,7 +172,7 @@ pub trait ActionHandler: Send + Sync {
 }
 
 /// Default action handler with actual tool execution support
-/// 
+///
 /// ARCHITECTURE FIX: Now supports real tool calls through a tool registry.
 /// Tools must be registered before they can be executed.
 pub struct DefaultActionHandler {
@@ -200,13 +202,13 @@ impl DefaultActionHandler {
             tool_registry: Arc::new(RwLock::new(HashMap::new())),
         }
     }
-    
+
     /// Register a tool for execution
     pub async fn register_tool(&self, name: impl Into<String>, executor: Box<dyn ToolExecutor>) {
         let mut registry = self.tool_registry.write().await;
         registry.insert(name.into(), executor);
     }
-    
+
     /// Check if a tool is registered
     pub async fn has_tool(&self, name: &str) -> bool {
         let registry = self.tool_registry.read().await;
@@ -218,9 +220,15 @@ impl DefaultActionHandler {
 impl ActionHandler for DefaultActionHandler {
     async fn execute(&self, action: &Action, context: &ExecutionContext) -> ExecutionResult {
         match action {
-            Action::ToolUse { tool_name, parameters } => {
-                info!("Executing tool: {} with params: {:?}", tool_name, parameters);
-                
+            Action::ToolUse {
+                tool_name,
+                parameters,
+            } => {
+                info!(
+                    "Executing tool: {} with params: {:?}",
+                    tool_name, parameters
+                );
+
                 // ARCHITECTURE FIX: Look up tool in registry and execute if found
                 let registry = self.tool_registry.read().await;
                 if let Some(tool) = registry.get(tool_name) {
@@ -233,13 +241,20 @@ impl ActionHandler for DefaultActionHandler {
                     // Tool not registered - return helpful error
                     let available_tools: Vec<String> = registry.keys().cloned().collect();
                     ExecutionResult::failure(format!(
-                        "Tool '{}' not found. Available tools: {:?}. Register tools using register_tool() before execution.",
+                        "Tool '{}' not found. Available tools: {:?}. Register tools using \
+                         register_tool() before execution.",
                         tool_name, available_tools
                     ))
                 }
             }
-            Action::LLMReasoning { prompt, context: reasoning_context } => {
-                info!("LLM reasoning: {} with context: {:?}", prompt, reasoning_context);
+            Action::LLMReasoning {
+                prompt,
+                context: reasoning_context,
+            } => {
+                info!(
+                    "LLM reasoning: {} with context: {:?}",
+                    prompt, reasoning_context
+                );
                 // In production, this would call the LLM provider
                 ExecutionResult::success(Some(serde_json::json!({
                     "reasoning": "completed",
@@ -249,7 +264,10 @@ impl ActionHandler for DefaultActionHandler {
                 })))
             }
             Action::Wait { condition, timeout } => {
-                info!("Waiting for condition: {} (timeout: {:?})", condition, timeout);
+                info!(
+                    "Waiting for condition: {} (timeout: {:?})",
+                    condition, timeout
+                );
                 // ARCHITECTURE FIX: Actually implement wait with timeout
                 if let Some(duration) = timeout {
                     tokio::time::sleep(*duration).await;
@@ -289,13 +307,14 @@ impl ActionHandler for DefaultActionHandler {
 
     fn can_handle(&self, action: &Action) -> bool {
         // Can handle all action types
-        matches!(action, 
-            Action::ToolUse { .. } | 
-            Action::LLMReasoning { .. } | 
-            Action::Wait { .. } | 
-            Action::UserInteraction { .. } |
-            Action::SubPlan { .. } |
-            Action::Delegate { .. }
+        matches!(
+            action,
+            Action::ToolUse { .. }
+                | Action::LLMReasoning { .. }
+                | Action::Wait { .. }
+                | Action::UserInteraction { .. }
+                | Action::SubPlan { .. }
+                | Action::Delegate { .. }
         )
     }
 }
@@ -352,15 +371,9 @@ impl PlanExecutor {
 
         // Execute based on strategy
         let result = match self.config.strategy {
-            ExecutionStrategy::Sequential => {
-                self.execute_sequential(plan).await
-            }
-            ExecutionStrategy::Parallel => {
-                self.execute_parallel(plan).await
-            }
-            ExecutionStrategy::Adaptive => {
-                self.execute_adaptive(plan).await
-            }
+            ExecutionStrategy::Sequential => self.execute_sequential(plan).await,
+            ExecutionStrategy::Parallel => self.execute_parallel(plan).await,
+            ExecutionStrategy::Adaptive => self.execute_adaptive(plan).await,
         };
 
         // Update plan status
@@ -387,10 +400,7 @@ impl PlanExecutor {
             .await
             .ok();
 
-        info!(
-            "Plan {} execution completed in {:?}",
-            plan.id, duration
-        );
+        info!("Plan {} execution completed in {:?}", plan.id, duration);
 
         result
     }
@@ -519,7 +529,7 @@ impl PlanExecutor {
     ) -> PlanningResult<ExecutionResult> {
         // Get previous results before borrowing step mutably
         let previous_results = self.get_previous_results(plan, step_index).await;
-        
+
         let step = &mut plan.steps[step_index];
 
         info!("Executing step {}: {}", step_index, step.description);

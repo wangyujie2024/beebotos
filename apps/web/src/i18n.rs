@@ -2,8 +2,9 @@
 //!
 //! Provides multi-language support with Chinese (zh-CN) as default
 
-use leptos::prelude::*;
 use std::collections::HashMap;
+
+use leptos::prelude::*;
 
 /// Supported locales
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -59,7 +60,8 @@ impl I18nContext {
 
 /// Initialize i18n context
 pub fn init_i18n() -> I18nContext {
-    let mut translations: HashMap<&'static str, HashMap<&'static str, &'static str>> = HashMap::new();
+    let mut translations: HashMap<&'static str, HashMap<&'static str, &'static str>> =
+        HashMap::new();
 
     // Chinese translations
     let mut zh = HashMap::new();
@@ -133,12 +135,18 @@ pub fn init_i18n() -> I18nContext {
     zh.insert("register-have-account", "已有账户？");
     zh.insert("register-login-link", "立即登录");
     zh.insert("hero-title", "自主 AI 智能体的操作系统");
-    zh.insert("hero-subtitle", "构建、部署和管理具备内置治理功能的智能代理");
+    zh.insert(
+        "hero-subtitle",
+        "构建、部署和管理具备内置治理功能的智能代理",
+    );
     zh.insert("hero-cta-primary", "开始使用");
     zh.insert("hero-cta-secondary", "浏览技能");
     zh.insert("features-title", "核心功能");
     zh.insert("feature-agents-title", "自主智能体");
-    zh.insert("feature-agents-desc", "部署具备内置安全控制的独立运行 AI 智能体");
+    zh.insert(
+        "feature-agents-desc",
+        "部署具备内置安全控制的独立运行 AI 智能体",
+    );
     zh.insert("feature-dao-title", "DAO 治理");
     zh.insert("feature-dao-desc", "通过透明投票机制实现社区驱动决策");
     zh.insert("feature-treasury-title", "安全金库");
@@ -178,7 +186,10 @@ pub fn init_i18n() -> I18nContext {
     zh.insert("status-enabled", "已启用");
     zh.insert("status-disabled", "未启用");
     zh.insert("wechat-login", "微信登录");
-    zh.insert("wechat-login-hint", "使用微信扫描二维码登录，获取 Bot Token");
+    zh.insert(
+        "wechat-login-hint",
+        "使用微信扫描二维码登录，获取 Bot Token",
+    );
     zh.insert("qr-expires-in", "二维码过期时间");
     zh.insert("action-get-qr", "获取二维码");
     zh.insert("action-refresh-qr", "刷新二维码");
@@ -254,8 +265,14 @@ pub fn init_i18n() -> I18nContext {
 
     // English translations
     let mut en = HashMap::new();
-    en.insert("app-title", "BeeBotOS - Web4.0 Autonomous Agent Operating System");
-    en.insert("app-description", "The Operating System for Autonomous AI Agents");
+    en.insert(
+        "app-title",
+        "BeeBotOS - Web4.0 Autonomous Agent Operating System",
+    );
+    en.insert(
+        "app-description",
+        "The Operating System for Autonomous AI Agents",
+    );
     en.insert("nav-home", "Home");
     en.insert("nav-agents", "Agents");
     en.insert("nav-dao", "DAO");
@@ -304,50 +321,101 @@ pub fn init_i18n() -> I18nContext {
     en.insert("login-demo-button", "Demo Login");
     en.insert("login-no-account", "Don't have an account?");
     en.insert("login-register-link", "Register now");
-    en.insert("login-demo-hint", "Demo mode: Enter any username and password to login");
+    en.insert(
+        "login-demo-hint",
+        "Demo mode: Enter any username and password to login",
+    );
     // Register page
     en.insert("register-title", "Create Account");
-    en.insert("register-subtitle", "Register a BeeBotOS account to get started");
+    en.insert(
+        "register-subtitle",
+        "Register a BeeBotOS account to get started",
+    );
     en.insert("register-username", "Username");
     en.insert("register-username-placeholder", "Enter your username");
     en.insert("register-email", "Email");
     en.insert("register-email-placeholder", "Enter your email (optional)");
     en.insert("register-password", "Password");
-    en.insert("register-password-placeholder", "Enter password (at least 6 characters)");
+    en.insert(
+        "register-password-placeholder",
+        "Enter password (at least 6 characters)",
+    );
     en.insert("register-confirm-password", "Confirm Password");
-    en.insert("register-confirm-password-placeholder", "Enter password again");
-    en.insert("register-error-empty", "Username and password cannot be empty");
+    en.insert(
+        "register-confirm-password-placeholder",
+        "Enter password again",
+    );
+    en.insert(
+        "register-error-empty",
+        "Username and password cannot be empty",
+    );
     en.insert("register-error-password-mismatch", "Passwords do not match");
-    en.insert("register-error-password-short", "Password must be at least 6 characters");
+    en.insert(
+        "register-error-password-short",
+        "Password must be at least 6 characters",
+    );
     en.insert("register-error-failed", "Registration failed");
     en.insert("register-or", "OR");
     en.insert("register-demo-button", "Demo Register");
     en.insert("register-have-account", "Already have an account?");
     en.insert("register-login-link", "Login now");
-    en.insert("hero-title", "The Operating System for Autonomous AI Agents");
-    en.insert("hero-subtitle", "Build, deploy, and manage intelligent agents with built-in governance");
+    en.insert(
+        "hero-title",
+        "The Operating System for Autonomous AI Agents",
+    );
+    en.insert(
+        "hero-subtitle",
+        "Build, deploy, and manage intelligent agents with built-in governance",
+    );
     en.insert("hero-cta-primary", "Get Started");
     en.insert("hero-cta-secondary", "Browse Skills");
     en.insert("features-title", "Core Features");
     en.insert("feature-agents-title", "Autonomous Agents");
-    en.insert("feature-agents-desc", "Deploy AI agents that operate independently with built-in safety controls");
+    en.insert(
+        "feature-agents-desc",
+        "Deploy AI agents that operate independently with built-in safety controls",
+    );
     en.insert("feature-dao-title", "DAO Governance");
-    en.insert("feature-dao-desc", "Community-driven decision making with transparent voting mechanisms");
+    en.insert(
+        "feature-dao-desc",
+        "Community-driven decision making with transparent voting mechanisms",
+    );
     en.insert("feature-treasury-title", "Secure Treasury");
-    en.insert("feature-treasury-desc", "Multi-sig treasury management with on-chain transparency");
+    en.insert(
+        "feature-treasury-desc",
+        "Multi-sig treasury management with on-chain transparency",
+    );
     en.insert("feature-skills-title", "Skill Marketplace");
-    en.insert("feature-skills-desc", "Extend agent capabilities with community-built skills");
+    en.insert(
+        "feature-skills-desc",
+        "Extend agent capabilities with community-built skills",
+    );
     en.insert("feature-wasm-title", "WebAssembly Runtime");
-    en.insert("feature-wasm-desc", "High-performance, sandboxed execution environment");
+    en.insert(
+        "feature-wasm-desc",
+        "High-performance, sandboxed execution environment",
+    );
     en.insert("feature-analytics-title", "Real-time Analytics");
-    en.insert("feature-analytics-desc", "Monitor agent performance and system health in real-time");
+    en.insert(
+        "feature-analytics-desc",
+        "Monitor agent performance and system health in real-time",
+    );
     en.insert("quick-actions-title", "Quick Actions");
     en.insert("quick-action-create-agent-title", "Create Agent");
-    en.insert("quick-action-create-agent-desc", "Set up a new autonomous agent");
+    en.insert(
+        "quick-action-create-agent-desc",
+        "Set up a new autonomous agent",
+    );
     en.insert("quick-action-view-proposals-title", "View Proposals");
-    en.insert("quick-action-view-proposals-desc", "Participate in DAO governance");
+    en.insert(
+        "quick-action-view-proposals-desc",
+        "Participate in DAO governance",
+    );
     en.insert("quick-action-install-skills-title", "Install Skills");
-    en.insert("quick-action-install-skills-desc", "Add capabilities to your agents");
+    en.insert(
+        "quick-action-install-skills-desc",
+        "Add capabilities to your agents",
+    );
     en.insert("agents-title", "Agents");
     en.insert("agents-subtitle", "Manage your autonomous AI agents");
     en.insert("agents-create-new", "Create New Agent");
@@ -364,13 +432,19 @@ pub fn init_i18n() -> I18nContext {
     en.insert("status-pending", "Pending");
     // Channels
     en.insert("channels-title", "Channel Management");
-    en.insert("channels-subtitle", "Configure and manage message channel connections");
+    en.insert(
+        "channels-subtitle",
+        "Configure and manage message channel connections",
+    );
     en.insert("channel-status", "Channel Status");
     en.insert("channel-config", "Channel Configuration");
     en.insert("status-enabled", "Enabled");
     en.insert("status-disabled", "Disabled");
     en.insert("wechat-login", "WeChat Login");
-    en.insert("wechat-login-hint", "Scan QR code with WeChat to get Bot Token");
+    en.insert(
+        "wechat-login-hint",
+        "Scan QR code with WeChat to get Bot Token",
+    );
     en.insert("qr-expires-in", "QR expires in");
     en.insert("action-get-qr", "Get QR Code");
     en.insert("action-refresh-qr", "Refresh QR Code");
@@ -420,7 +494,10 @@ pub fn init_i18n() -> I18nContext {
     en.insert("footer-version", "Version");
     en.insert("error-404-title", "404");
     en.insert("error-404-message", "Page not found");
-    en.insert("error-404-description", "The page you're looking for doesn't exist or has been moved.");
+    en.insert(
+        "error-404-description",
+        "The page you're looking for doesn't exist or has been moved.",
+    );
     en.insert("error-go-home", "Go Home");
     en.insert("error-generic", "Something went wrong");
     en.insert("error-retry", "Try Again");
@@ -433,7 +510,10 @@ pub fn init_i18n() -> I18nContext {
     en.insert("stats-uptime", "System Uptime");
     en.insert("stats-members", "Community Members");
     en.insert("quick-action-start-chat-title", "Start Chat");
-    en.insert("quick-action-start-chat-desc", "Start a conversation with AI agents");
+    en.insert(
+        "quick-action-start-chat-desc",
+        "Start a conversation with AI agents",
+    );
     en.insert("nav-section-chat", "Chat");
     en.insert("nav-section-control", "Control");
     en.insert("nav-section-agents", "Agents");

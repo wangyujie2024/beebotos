@@ -2,9 +2,11 @@
 //!
 //! Perception, decision making, and planning.
 
-use crate::utils::compare_f32;
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+
+use serde::{Deserialize, Serialize};
+
+use crate::utils::compare_f32;
 
 pub mod decision;
 pub mod perception;

@@ -293,13 +293,12 @@ impl Metrics {
         )
         .expect("Failed to create agent_lifecycle_events_total counter");
 
-        let message_processing_duration_seconds = prometheus::Histogram::with_opts(
-            prometheus::HistogramOpts::new(
+        let message_processing_duration_seconds =
+            prometheus::Histogram::with_opts(prometheus::HistogramOpts::new(
                 "beebotos_message_processing_duration_seconds",
                 "Message processing duration in seconds",
-            ),
-        )
-        .expect("Failed to create message_processing_duration_seconds histogram");
+            ))
+            .expect("Failed to create message_processing_duration_seconds histogram");
 
         let cache_operations_total = prometheus::CounterVec::new(
             prometheus::Opts::new(

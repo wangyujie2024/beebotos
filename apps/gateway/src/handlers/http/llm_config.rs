@@ -3,17 +3,16 @@
 //! Provides read-only access to the current global LLM configuration.
 //! Sensitive fields (API keys) are masked for security.
 
-use axum::extract::State;
-use axum::Json;
-use gateway::{
-    error::GatewayError,
-    middleware::{require_any_role, AuthUser},
-};
-use serde::Serialize;
 use std::sync::Arc;
 
-use crate::AppState;
+use axum::extract::State;
+use axum::Json;
+use gateway::error::GatewayError;
+use gateway::middleware::{require_any_role, AuthUser};
+use serde::Serialize;
+
 use crate::services::llm_provider_db as db;
+use crate::AppState;
 
 /// Global LLM configuration response
 #[derive(Debug, Serialize)]

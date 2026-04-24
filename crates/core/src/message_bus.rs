@@ -3,6 +3,7 @@
 //! Provides integration between Core module events and the unified Message Bus.
 
 use std::sync::Arc;
+
 use beebotos_message_bus::{Message, MessageBus, Result as BusResult};
 
 use crate::event::Event;
@@ -27,7 +28,12 @@ impl<B: MessageBus> CoreMessageBus<B> {
     }
 
     /// Subscribe to Core events
-    pub async fn subscribe(&self) -> BusResult<(beebotos_message_bus::SubscriptionId, beebotos_message_bus::MessageStream)> {
+    pub async fn subscribe(
+        &self,
+    ) -> BusResult<(
+        beebotos_message_bus::SubscriptionId,
+        beebotos_message_bus::MessageStream,
+    )> {
         self.bus.subscribe("core/#").await
     }
 
@@ -64,15 +70,17 @@ impl<B: MessageBus> Clone for CoreMessageBus<B> {
 use std::sync::OnceLock;
 
 /// Global Message Bus handle for Core module
-/// 
-/// SECURITY FIX: Replaced `static mut` with `OnceLock` for thread-safe initialization
+///
+/// SECURITY FIX: Replaced `static mut` with `OnceLock` for thread-safe
+/// initialization
 static CORE_MESSAGE_BUS: OnceLock<Arc<dyn MessageBus>> = OnceLock::new();
 
 /// Initialize Core Message Bus
-/// 
+///
 /// This function is thread-safe and can only be called once.
 pub fn init_message_bus<B: MessageBus + 'static>(bus: Arc<B>) -> Result<(), &'static str> {
-    CORE_MESSAGE_BUS.set(bus)
+    CORE_MESSAGE_BUS
+        .set(bus)
         .map_err(|_| "Core message bus already initialized")
 }
 
@@ -83,8 +91,9 @@ pub fn message_bus() -> Option<Arc<dyn MessageBus>> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use beebotos_message_bus::{DefaultMessageBus, JsonCodec, MemoryTransport};
+
+    use super::*;
     use crate::types::{AgentId, AgentStatus, Timestamp};
 
     #[tokio::test]

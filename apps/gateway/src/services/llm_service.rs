@@ -5,8 +5,8 @@
 //! Supports fallback chain: if primary provider fails, try next in chain.
 
 use std::collections::HashMap;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 
 use beebotos_agents::communication::Message as ChannelMessage;
@@ -50,13 +50,14 @@ impl LlmMetrics {
     pub async fn record_success(&self, latency_ms: u64, input_tokens: u32, output_tokens: u32) {
         self.total_requests.fetch_add(1, Ordering::Relaxed);
         self.successful_requests.fetch_add(1, Ordering::Relaxed);
-        self.total_latency_ms.fetch_add(latency_ms, Ordering::Relaxed);
-        self.input_tokens.fetch_add(input_tokens as u64, Ordering::Relaxed);
-        self.output_tokens.fetch_add(output_tokens as u64, Ordering::Relaxed);
-        self.total_tokens.fetch_add(
-            (input_tokens + output_tokens) as u64,
-            Ordering::Relaxed,
-        );
+        self.total_latency_ms
+            .fetch_add(latency_ms, Ordering::Relaxed);
+        self.input_tokens
+            .fetch_add(input_tokens as u64, Ordering::Relaxed);
+        self.output_tokens
+            .fetch_add(output_tokens as u64, Ordering::Relaxed);
+        self.total_tokens
+            .fetch_add((input_tokens + output_tokens) as u64, Ordering::Relaxed);
 
         // Add to latency histogram
         let mut hist = self.latency_histogram.write().await;
@@ -237,13 +238,14 @@ impl LlmService {
                     _ => "gpt-4o-mini".to_string(),
                 });
 
-            let base_url = provider
-                .base_url
-                .clone()
-                .unwrap_or_else(|| match provider.protocol.as_str() {
-                    "anthropic" => "https://api.anthropic.com/v1".to_string(),
-                    _ => "https://api.openai.com/v1".to_string(),
-                });
+            let base_url =
+                provider
+                    .base_url
+                    .clone()
+                    .unwrap_or_else(|| match provider.protocol.as_str() {
+                        "anthropic" => "https://api.anthropic.com/v1".to_string(),
+                        _ => "https://api.openai.com/v1".to_string(),
+                    });
 
             match Self::create_provider_from_db(
                 &provider.protocol,
@@ -269,9 +271,18 @@ impl LlmService {
             }
         }
 
-        let primary = primary.ok_or_else(|| {
-            GatewayError::internal("No primary LLM provider available".to_string())
-        })?;
+        // If no primary was set but we have fallbacks, use the first fallback as primary
+        let primary = if let Some(p) = primary {
+            p
+        } else if !fallbacks.is_empty() {
+            let p = fallbacks.remove(0);
+            info!("Using fallback provider as primary since default provider is unavailable");
+            p
+        } else {
+            return Err(GatewayError::internal(
+                "No primary LLM provider available".to_string(),
+            ));
+        };
 
         // Build failover provider
         let mut builder = FailoverProviderBuilder::new()
@@ -361,10 +372,7 @@ impl LlmService {
     }
 
     /// Process an incoming message and generate a response
-    pub async fn process_message(
-        &self,
-        message: &ChannelMessage,
-    ) -> Result<String, GatewayError> {
+    pub async fn process_message(&self, message: &ChannelMessage) -> Result<String, GatewayError> {
         let multimodal_content = self
             .multimodal_processor
             .process_message(message, message.platform, None)
@@ -379,7 +387,11 @@ impl LlmService {
 
         let request_config = RequestConfig {
             model: self.get_default_model().await,
-            temperature: Some(0.7),
+            // 🟢 P1 FIX: Don't hardcode temperature — let the provider API use its
+            // own default. Some models (e.g. kimi-k2.5) only accept specific
+            // temperature values, and sending an incompatible value causes the
+            // request to fail with "invalid temperature".
+            temperature: None,
             max_tokens: Some(4096),
             stream: Some(false),
             ..Default::default()
@@ -402,10 +414,10 @@ impl LlmService {
                     .map(|choice| choice.message.text_content())
                     .unwrap_or_default();
 
-                let (input_tokens, output_tokens) =
-                    response.usage.as_ref().map_or((0, 0), |u| {
-                        (u.prompt_tokens, u.completion_tokens)
-                    });
+                let (input_tokens, output_tokens) = response
+                    .usage
+                    .as_ref()
+                    .map_or((0, 0), |u| (u.prompt_tokens, u.completion_tokens));
 
                 self.metrics
                     .record_success(latency_ms, input_tokens, output_tokens)
@@ -441,7 +453,10 @@ impl LlmService {
 
         // Handle multimodal processing result
         let multimodal_content = multimodal_result.unwrap_or_else(|e| {
-            warn!("Failed to process multimodal content: {}, using text only", e);
+            warn!(
+                "Failed to process multimodal content: {}, using text only",
+                e
+            );
             MultimodalContent {
                 text: fallback_text,
                 images: vec![],
@@ -451,11 +466,7 @@ impl LlmService {
 
         info!(
             "Processing LLM request: text='{}...', images={}",
-            multimodal_content
-                .text
-                .chars()
-                .take(50)
-                .collect::<String>(),
+            multimodal_content.text.chars().take(50).collect::<String>(),
             multimodal_content.images.len()
         );
 
@@ -514,10 +525,10 @@ impl LlmService {
                     .map(|choice| choice.message.text_content())
                     .unwrap_or_default();
 
-                let (input_tokens, output_tokens) =
-                    response.usage.as_ref().map_or((0, 0), |u| {
-                        (u.prompt_tokens, u.completion_tokens)
-                    });
+                let (input_tokens, output_tokens) = response
+                    .usage
+                    .as_ref()
+                    .map_or((0, 0), |u| (u.prompt_tokens, u.completion_tokens));
 
                 self.metrics
                     .record_success(latency_ms, input_tokens, output_tokens)
@@ -555,7 +566,10 @@ impl LlmService {
             .process_message(message, message.platform, None)
             .await
             .unwrap_or_else(|e| {
-                warn!("Failed to process multimodal content: {}, using text only", e);
+                warn!(
+                    "Failed to process multimodal content: {}, using text only",
+                    e
+                );
                 MultimodalContent {
                     text: message.content.clone(),
                     images: vec![],
@@ -604,12 +618,14 @@ impl LlmService {
 
         // Execute streaming request
         let failover = self.failover_provider.read().await.clone();
-        let mut stream_rx = failover.complete_stream(request).await.map_err(|e| {
-            GatewayError::Internal {
-                message: format!("LLM streaming request failed: {}", e),
-                correlation_id: uuid::Uuid::new_v4().to_string(),
-            }
-        })?;
+        let mut stream_rx =
+            failover
+                .complete_stream(request)
+                .await
+                .map_err(|e| GatewayError::Internal {
+                    message: format!("LLM streaming request failed: {}", e),
+                    correlation_id: uuid::Uuid::new_v4().to_string(),
+                })?;
 
         // Create output channel
         let (tx, rx) = tokio::sync::mpsc::channel(100);
@@ -650,7 +666,9 @@ impl LlmService {
     ) -> Result<(), GatewayError> {
         debug!(
             "Sending reply to {:?} channel {}: content_length={}",
-            platform, channel_id, content.len()
+            platform,
+            channel_id,
+            content.len()
         );
 
         info!(
@@ -680,12 +698,36 @@ impl LlmService {
     }
 
     /// Get default model from database
+    ///
+    /// 🟢 P1 FIX: Fallback to the provider's first available model instead of
+    /// hardcoded "gpt-4o-mini", which may not exist in the provider.
     async fn get_default_model(&self) -> String {
         match db::get_default_provider(&self.db).await.ok().flatten() {
             Some(provider) => {
-                match db::get_default_model(&self.db, provider.id).await.ok().flatten() {
+                match db::get_default_model(&self.db, provider.id)
+                    .await
+                    .ok()
+                    .flatten()
+                {
                     Some(model) => model.name,
-                    None => "gpt-4o-mini".to_string(),
+                    None => {
+                        // Fallback: use the first available model for this provider
+                        match db::get_models_for_provider(&self.db, provider.id)
+                            .await
+                            .ok()
+                            .and_then(|models| models.into_iter().next())
+                        {
+                            Some(first_model) => first_model.name,
+                            None => {
+                                warn!(
+                                    "No models found for default provider '{}', falling back to \
+                                     generic model name",
+                                    provider.provider_id
+                                );
+                                "gpt-4o-mini".to_string()
+                            }
+                        }
+                    }
                 }
             }
             None => "gpt-4o-mini".to_string(),

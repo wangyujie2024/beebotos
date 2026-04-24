@@ -3,7 +3,9 @@
 //! 🔧 P1 FIX: Template system for WeChat and other channels
 
 use std::collections::HashMap;
+
 use regex::Regex;
+
 use crate::error::{AgentError, Result};
 
 /// Message template with variable substitution
@@ -47,7 +49,10 @@ impl MessageTemplate {
             .replace_all(&result, |caps: &regex::Captures| {
                 let var_name = &caps[1];
                 let default_value = caps.get(2).map(|m| m.as_str()).unwrap_or("");
-                merged.get(var_name).cloned().unwrap_or_else(|| default_value.to_string())
+                merged
+                    .get(var_name)
+                    .cloned()
+                    .unwrap_or_else(|| default_value.to_string())
             })
             .to_string();
 
@@ -56,7 +61,7 @@ impl MessageTemplate {
 
     fn process_functions(&self, content: &str) -> String {
         let mut result = content.to_string();
-        
+
         // {{date}} - Current date
         let date_regex = Regex::new(r"\{\{date\}\}").unwrap();
         let today = chrono::Local::now().format("%Y-%m-%d").to_string();
@@ -139,8 +144,9 @@ impl TemplateManager {
     }
 
     pub fn render(&self, template_id: &str, vars: &HashMap<String, String>) -> Result<String> {
-        let template = self.templates.get(template_id)
-            .ok_or_else(|| AgentError::not_found(format!("Template '{}' not found", template_id)))?;
+        let template = self.templates.get(template_id).ok_or_else(|| {
+            AgentError::not_found(format!("Template '{}' not found", template_id))
+        })?;
 
         let mut merged = self.global_defaults.clone();
         merged.extend(vars.clone());
@@ -159,25 +165,30 @@ impl TemplateManager {
     /// Register default templates
     fn register_defaults(&mut self) {
         self.register(
-            MessageTemplate::new("welcome",
-                "Welcome to {{service_name}}!\n\nHello {{user_name}}, I'm your AI assistant.\n\nI can help you:\n• Answer questions\n• Summarize links\n• Execute tasks\n\nSend /help for available commands.")
-            .with_default("service_name", "BeeBotOS")
+            MessageTemplate::new(
+                "welcome",
+                "Welcome to {{service_name}}!\n\nHello {{user_name}}, I'm your AI assistant.\n\nI \
+                 can help you:\n• Answer questions\n• Summarize links\n• Execute tasks\n\nSend \
+                 /help for available commands.",
+            )
+            .with_default("service_name", "BeeBotOS"),
         );
 
-        self.register(
-            MessageTemplate::new("task_complete",
-                "Task Complete: {{task_name}}\nStatus: {{status}}\nTime: {{datetime}}")
-        );
+        self.register(MessageTemplate::new(
+            "task_complete",
+            "Task Complete: {{task_name}}\nStatus: {{status}}\nTime: {{datetime}}",
+        ));
 
-        self.register(
-            MessageTemplate::new("status_report",
-                "System Status Report\nTime: {{datetime}}\nAgents: {{agent_count}}\nTasks: {{task_count}}")
-        );
+        self.register(MessageTemplate::new(
+            "status_report",
+            "System Status Report\nTime: {{datetime}}\nAgents: {{agent_count}}\nTasks: \
+             {{task_count}}",
+        ));
 
-        self.register(
-            MessageTemplate::new("link_summary",
-                "{{title}}\n\nSummary:\n{{summary}}\n\nURL: {{url}}")
-        );
+        self.register(MessageTemplate::new(
+            "link_summary",
+            "{{title}}\n\nSummary:\n{{summary}}\n\nURL: {{url}}",
+        ));
     }
 }
 

@@ -19,11 +19,11 @@ pub use consolidation::{ConsolidationConfig, ConsolidationEngine};
 pub use episodic::{EmotionalValence, Episode, EpisodicMemory, Location};
 pub use procedural::{ProceduralMemory, Procedure, Step};
 pub use semantic::{Concept, PropertyValue, Relation, RelationType, SemanticMemory};
-pub use short_term::{EmotionalTag, MemoryChunk, Priority, ShortTermMemory};
-// MemoryIndex is re-exported from lib.rs directly
-
-use crate::error::BrainResult;
 use serde::{Deserialize, Serialize};
+pub use short_term::{EmotionalTag, MemoryChunk, Priority, ShortTermMemory};
+
+// MemoryIndex is re-exported from lib.rs directly
+use crate::error::BrainResult;
 
 /// Memory query for searching across all memory types
 #[derive(Debug, Clone, Serialize, Deserialize)]

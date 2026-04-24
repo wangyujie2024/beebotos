@@ -2,8 +2,9 @@
 //!
 //! Fast, volatile storage using HashMap. Data is lost on restart.
 
-use parking_lot::Mutex;
 use std::collections::HashMap;
+
+use parking_lot::Mutex;
 
 use crate::storage::{EntryMetadata, StorageBackend, StorageEntry, StorageError};
 

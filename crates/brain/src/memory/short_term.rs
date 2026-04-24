@@ -2,9 +2,11 @@
 //!
 //! Limited capacity (7±2 items) with rehearsal support.
 
-use crate::utils::current_timestamp_secs;
-use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
+
+use serde::{Deserialize, Serialize};
+
+use crate::utils::current_timestamp_secs;
 
 /// Short-term memory buffer
 #[derive(Debug, Clone, Serialize, Deserialize)]

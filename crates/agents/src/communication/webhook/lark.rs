@@ -4,18 +4,19 @@
 //! Supports signature verification (HMAC-SHA256) and message decryption
 //! (AES-GCM).
 
-
-
 use aes_gcm::aead::{Aead, KeyInit};
 use aes_gcm::{Aes256Gcm, Nonce};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info, warn};
 
+use super::common::{
+    MetadataBuilder, SignatureVerification as CommonSignatureVerification, SignatureVerifier,
+    TokenVerifier,
+};
 use crate::communication::webhook::{
     utils, SignatureVerification, WebhookConfig, WebhookEvent, WebhookEventType, WebhookHandler,
 };
-use super::common::{MetadataBuilder, TokenVerifier, SignatureVerifier, SignatureVerification as CommonSignatureVerification};
 use crate::communication::{AgentMessageDispatcher, Message, MessageType, PlatformType};
 use crate::error::{AgentError, Result};
 
@@ -417,8 +418,9 @@ impl WebhookHandler for LarkWebhookHandler {
                         msg.content, msg.message_type
                     );
 
-                    // P0 FIX: Removed dispatcher.dispatch() to avoid duplicate processing.
-                    // Messages are now routed exclusively through channel_event_bus →
+                    // P0 FIX: Removed dispatcher.dispatch() to avoid duplicate
+                    // processing. Messages are now routed
+                    // exclusively through channel_event_bus →
                     // MessageProcessor → AgentResolver path in webhook_handler.
                     // if let Some(dispatcher) = &self.dispatcher {
                     //     let tenant_key = event.metadata.get("tenant_key")

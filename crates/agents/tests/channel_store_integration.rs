@@ -2,8 +2,6 @@
 
 use std::sync::Arc;
 
-use sqlx::SqlitePool;
-
 use beebotos_agents::communication::agent_channel::{AgentChannelBinding, RoutingRules};
 use beebotos_agents::communication::user_channel::{ChannelBindingStatus, UserChannelBinding};
 use beebotos_agents::communication::PlatformType;
@@ -11,6 +9,7 @@ use beebotos_agents::services::{
     AgentChannelBindingStore, SqliteAgentChannelBindingStore, SqliteUserChannelStore,
     UserChannelStore,
 };
+use sqlx::SqlitePool;
 
 async fn setup_db() -> SqlitePool {
     let db = SqlitePool::connect("sqlite::memory:")
@@ -61,7 +60,11 @@ async fn test_user_channel_store_lifecycle() {
     store.create(&binding, "encrypted-config-42").await.unwrap();
 
     // Get
-    let found = store.get("uc-1").await.unwrap().expect("binding should exist");
+    let found = store
+        .get("uc-1")
+        .await
+        .unwrap()
+        .expect("binding should exist");
     assert_eq!(found.id, "uc-1");
     assert_eq!(found.user_id, "user-1");
     assert_eq!(found.platform, PlatformType::Lark);
@@ -81,7 +84,10 @@ async fn test_user_channel_store_lifecycle() {
     assert_eq!(list[0].id, "uc-1");
 
     // Update status
-    store.update_status("uc-1", ChannelBindingStatus::Paused).await.unwrap();
+    store
+        .update_status("uc-1", ChannelBindingStatus::Paused)
+        .await
+        .unwrap();
     let updated = store.get("uc-1").await.unwrap().unwrap();
     assert_eq!(updated.status, ChannelBindingStatus::Paused);
 
@@ -136,9 +142,14 @@ async fn test_agent_channel_binding_store_lifecycle() {
     assert_eq!(by_channel[0].agent_id, "agent-1");
 
     // Set default
-    agent_store.set_default("uc-lark-1", "agent-1").await.unwrap();
+    agent_store
+        .set_default("uc-lark-1", "agent-1")
+        .await
+        .unwrap();
     let defaults = agent_store.list_by_user_channel("uc-lark-1").await.unwrap();
-    assert!(defaults.iter().all(|b| b.is_default == (b.agent_id == "agent-1")));
+    assert!(defaults
+        .iter()
+        .all(|b| b.is_default == (b.agent_id == "agent-1")));
 
     // Unbind
     agent_store.unbind("agent-1", "uc-lark-1").await.unwrap();
@@ -196,7 +207,10 @@ async fn test_agent_channel_default_only_one_per_channel() {
     agent_store.bind(&b2).await.unwrap();
 
     // Make agent-1 default
-    agent_store.set_default("uc-shared", "agent-1").await.unwrap();
+    agent_store
+        .set_default("uc-shared", "agent-1")
+        .await
+        .unwrap();
     let bindings = agent_store.list_by_user_channel("uc-shared").await.unwrap();
     let a1 = bindings.iter().find(|b| b.agent_id == "agent-1").unwrap();
     let a2 = bindings.iter().find(|b| b.agent_id == "agent-2").unwrap();
@@ -204,7 +218,10 @@ async fn test_agent_channel_default_only_one_per_channel() {
     assert!(!a2.is_default);
 
     // Switch default to agent-2
-    agent_store.set_default("uc-shared", "agent-2").await.unwrap();
+    agent_store
+        .set_default("uc-shared", "agent-2")
+        .await
+        .unwrap();
     let bindings = agent_store.list_by_user_channel("uc-shared").await.unwrap();
     let a1 = bindings.iter().find(|b| b.agent_id == "agent-1").unwrap();
     let a2 = bindings.iter().find(|b| b.agent_id == "agent-2").unwrap();

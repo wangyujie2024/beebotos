@@ -33,7 +33,8 @@ impl ChannelFactory for WeChatFactory {
         super::PlatformType::WeChat
     }
 
-    async fn create(&self,
+    async fn create(
+        &self,
         config: &Value,
     ) -> Result<std::sync::Arc<tokio::sync::RwLock<dyn Channel>>> {
         // Transform config: rename 'secret' to 'corp_secret' if needed
@@ -44,16 +45,15 @@ impl ChannelFactory for WeChatFactory {
             }
         }
 
-        let config: WeChatChannelConfig = serde_json::from_value(config)
-            .map_err(|e| crate::error::AgentError::configuration(format!("Invalid WeChat config: {}", e)))?;
+        let config: WeChatChannelConfig = serde_json::from_value(config).map_err(|e| {
+            crate::error::AgentError::configuration(format!("Invalid WeChat config: {}", e))
+        })?;
 
         let channel = WeChatChannel::new(config);
         Ok(std::sync::Arc::new(tokio::sync::RwLock::new(channel)))
     }
 
-    fn validate_config(&self,
-        config: &Value,
-    ) -> bool {
+    fn validate_config(&self, config: &Value) -> bool {
         // Transform config: rename 'secret' to 'corp_secret' if needed
         let mut config = config.clone();
         if let Some(obj) = config.as_object_mut() {
@@ -65,8 +65,14 @@ impl ChannelFactory for WeChatFactory {
         match serde_json::from_value::<WeChatChannelConfig>(config) {
             Ok(config) => {
                 let valid = config.is_valid();
-                tracing::info!("WeChat config parsed: corp_id={}, agent_id={}, corp_secret_len={}, is_valid={}",
-                    config.corp_id, config.agent_id, config.corp_secret.len(), valid);
+                tracing::info!(
+                    "WeChat config parsed: corp_id={}, agent_id={}, corp_secret_len={}, \
+                     is_valid={}",
+                    config.corp_id,
+                    config.agent_id,
+                    config.corp_secret.len(),
+                    valid
+                );
                 valid
             }
             Err(e) => {

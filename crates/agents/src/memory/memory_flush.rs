@@ -1,7 +1,7 @@
 //! Memory Flush Mechanism
 //!
-//! Prevents "silent forgetting" in long conversations by automatically triggering
-//! memory persistence when the context window approaches its limit.
+//! Prevents "silent forgetting" in long conversations by automatically
+//! triggering memory persistence when the context window approaches its limit.
 //!
 //! # Architecture
 //!
@@ -41,16 +41,18 @@
 //! - Manual: User explicit trigger
 //! - Content-based: Important entity detection
 
-use crate::error::Result;
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::{mpsc, RwLock};
-use tokio::time::{interval, Duration};
 #[allow(unused_imports)]
 use std::time::Instant;
+
+use serde::{Deserialize, Serialize};
+use tokio::sync::{mpsc, RwLock};
+use tokio::time::{interval, Duration};
 use tracing::{info, warn};
 use uuid::Uuid;
+
+use crate::error::Result;
 
 /// Default token threshold percentage (80%)
 pub const DEFAULT_TOKEN_THRESHOLD: f32 = 0.8;
@@ -279,7 +281,7 @@ impl MemoryFlushManager {
     /// Create new memory flush manager
     pub fn new(config: MemoryFlushConfig) -> (Self, mpsc::Receiver<FlushEvent>) {
         let (flush_sender, flush_receiver) = mpsc::channel(100);
-        
+
         let manager = Self {
             config,
             context_states: Arc::new(RwLock::new(HashMap::new())),
@@ -302,25 +304,35 @@ impl MemoryFlushManager {
             session_id.to_string(),
             ContextWindowState::new(self.config.max_context_tokens),
         );
-        info!("Initialized memory flush monitoring for session: {}", session_id);
+        info!(
+            "Initialized memory flush monitoring for session: {}",
+            session_id
+        );
     }
 
     /// Remove session monitoring
     pub async fn remove_session(&self, session_id: &str) {
         let mut states = self.context_states.write().await;
         states.remove(session_id);
-        info!("Removed memory flush monitoring for session: {}", session_id);
+        info!(
+            "Removed memory flush monitoring for session: {}",
+            session_id
+        );
     }
 
     /// Update token usage for a session
-    pub async fn update_token_usage(&self, session_id: &str, content: &str) -> Option<FlushTrigger> {
+    pub async fn update_token_usage(
+        &self,
+        session_id: &str,
+        content: &str,
+    ) -> Option<FlushTrigger> {
         let estimated_tokens = ContextWindowState::estimate_tokens(content);
-        
+
         let mut states = self.context_states.write().await;
         let state = states.get_mut(session_id)?;
-        
+
         state.update_tokens(state.current_tokens + estimated_tokens);
-        
+
         // Check for flush triggers
         if state.is_near_full() {
             Some(FlushTrigger::ContextFull)
@@ -358,43 +370,67 @@ impl MemoryFlushManager {
         let lower = content.to_lowercase();
 
         // Check for user preferences
-        if lower.contains("prefer") || lower.contains("like") || lower.contains("always") 
-            || lower.contains("never") || lower.contains("favorite") {
+        if lower.contains("prefer")
+            || lower.contains("like")
+            || lower.contains("always")
+            || lower.contains("never")
+            || lower.contains("favorite")
+        {
             score += 0.9;
             categories.push(MemoryCategory::UserPreference);
         }
 
         // Check for important facts
-        if lower.contains("i am") || lower.contains("my name") || lower.contains("i work")
-            || lower.contains("my job") || lower.contains("i live") {
+        if lower.contains("i am")
+            || lower.contains("my name")
+            || lower.contains("i work")
+            || lower.contains("my job")
+            || lower.contains("i live")
+        {
             score += 0.85;
             categories.push(MemoryCategory::UserFact);
         }
 
         // Check for project config
-        if lower.contains("project") || lower.contains("config") || lower.contains("setup")
-            || lower.contains("database") || lower.contains("api key") {
+        if lower.contains("project")
+            || lower.contains("config")
+            || lower.contains("setup")
+            || lower.contains("database")
+            || lower.contains("api key")
+        {
             score += 0.8;
             categories.push(MemoryCategory::ProjectConfig);
         }
 
         // Check for tasks/goals
-        if lower.contains("task") || lower.contains("goal") || lower.contains("todo")
-            || lower.contains("deadline") || lower.contains("plan") {
+        if lower.contains("task")
+            || lower.contains("goal")
+            || lower.contains("todo")
+            || lower.contains("deadline")
+            || lower.contains("plan")
+        {
             score += 0.75;
             categories.push(MemoryCategory::TaskGoal);
         }
 
         // Check for decisions
-        if lower.contains("decide") || lower.contains("decision") || lower.contains("choose")
-            || lower.contains("agreed") || lower.contains("conclusion") {
+        if lower.contains("decide")
+            || lower.contains("decision")
+            || lower.contains("choose")
+            || lower.contains("agreed")
+            || lower.contains("conclusion")
+        {
             score += 0.7;
             categories.push(MemoryCategory::Decision);
         }
 
         // Check for technical info
-        if lower.contains("code") || lower.contains("function") || lower.contains("script")
-            || lower.contains("implementation") || lower.contains("algorithm") {
+        if lower.contains("code")
+            || lower.contains("function")
+            || lower.contains("script")
+            || lower.contains("implementation")
+            || lower.contains("algorithm")
+        {
             score += 0.65;
             categories.push(MemoryCategory::Technical);
         }
@@ -427,21 +463,16 @@ impl MemoryFlushManager {
     }
 
     /// Perform memory flush
-    pub async fn perform_flush(
-        &self,
-        session_id: &str,
-        trigger: FlushTrigger,
-    ) -> Result<()> {
+    pub async fn perform_flush(&self, session_id: &str, trigger: FlushTrigger) -> Result<()> {
         info!(
             "Performing memory flush for session: {} (trigger: {})",
             session_id, trigger
         );
 
         let mut states = self.context_states.write().await;
-        let state = states.get_mut(session_id)
-            .ok_or_else(|| crate::error::AgentError::not_found(
-                format!("Session not found: {}", session_id)
-            ))?;
+        let state = states.get_mut(session_id).ok_or_else(|| {
+            crate::error::AgentError::not_found(format!("Session not found: {}", session_id))
+        })?;
 
         let token_usage_before = state.current_tokens;
 
@@ -487,21 +518,17 @@ impl MemoryFlushManager {
     pub fn get_flush_prompt(&self, usage_ratio: f32) -> Option<String> {
         if usage_ratio >= 0.95 {
             Some(format!(
-                "⚠️ **CRITICAL**: Context window is {}% full!\n\
-                Important information may be lost. Please immediately:\n\
-                1. Identify and save critical user preferences\n\
-                2. Save project configurations\n\
-                3. Summarize key decisions made\n\
-                4. Store to appropriate memory files",
+                "⚠️ **CRITICAL**: Context window is {}% full!\nImportant information may be lost. \
+                 Please immediately:\n1. Identify and save critical user preferences\n2. Save \
+                 project configurations\n3. Summarize key decisions made\n4. Store to appropriate \
+                 memory files",
                 (usage_ratio * 100.0) as u32
             ))
         } else if usage_ratio >= self.config.token_threshold {
             Some(format!(
-                "📝 **Memory Flush Recommended**: Context window is {}% full.\n\
-                To prevent silent forgetting, please:\n\
-                1. Review important information from this conversation\n\
-                2. Save user preferences to MEMORY.md\n\
-                3. Log today's activities to memory/{}.md",
+                "📝 **Memory Flush Recommended**: Context window is {}% full.\nTo prevent silent \
+                 forgetting, please:\n1. Review important information from this conversation\n2. \
+                 Save user preferences to MEMORY.md\n3. Log today's activities to memory/{}.md",
                 (usage_ratio * 100.0) as u32,
                 chrono::Local::now().format("%Y-%m-%d")
             ))
@@ -518,10 +545,10 @@ impl MemoryFlushManager {
 
         tokio::spawn(async move {
             let mut interval = interval(Duration::from_secs(self.config.flush_interval_secs));
-            
+
             loop {
                 interval.tick().await;
-                
+
                 let states = self.context_states.read().await;
                 let session_ids: Vec<String> = states.keys().cloned().collect();
                 drop(states);
@@ -545,8 +572,14 @@ impl MemoryFlushManager {
                     };
 
                     if should_flush {
-                        if let Err(e) = self.perform_flush(&session_id, FlushTrigger::TimeBased).await {
-                            warn!("Failed to perform time-based flush for {}: {}", session_id, e);
+                        if let Err(e) = self
+                            .perform_flush(&session_id, FlushTrigger::TimeBased)
+                            .await
+                        {
+                            warn!(
+                                "Failed to perform time-based flush for {}: {}",
+                                session_id, e
+                            );
                         }
                     }
                 }
@@ -557,14 +590,13 @@ impl MemoryFlushManager {
     /// Get flush history
     pub async fn get_flush_history(&self, session_id: Option<&str>) -> Vec<FlushEvent> {
         let history = self.flush_history.read().await;
-        
+
         match session_id {
-            Some(sid) => {
-                history.iter()
-                    .filter(|e| e.session_id == sid)
-                    .cloned()
-                    .collect()
-            }
+            Some(sid) => history
+                .iter()
+                .filter(|e| e.session_id == sid)
+                .cloned()
+                .collect(),
             None => history.clone(),
         }
     }
@@ -581,17 +613,21 @@ impl MemoryFlushManager {
         let states = self.context_states.read().await;
 
         let total_flushes = history.len();
-        let token_threshold_flushes = history.iter()
+        let token_threshold_flushes = history
+            .iter()
             .filter(|e| e.trigger == FlushTrigger::TokenThreshold)
             .count();
-        let time_based_flushes = history.iter()
+        let time_based_flushes = history
+            .iter()
             .filter(|e| e.trigger == FlushTrigger::TimeBased)
             .count();
-        let manual_flushes = history.iter()
+        let manual_flushes = history
+            .iter()
             .filter(|e| e.trigger == FlushTrigger::Manual)
             .count();
 
-        let total_tokens_saved: usize = history.iter()
+        let total_tokens_saved: usize = history
+            .iter()
             .map(|e| e.token_usage_before - e.token_usage_after)
             .sum();
 
@@ -651,7 +687,10 @@ mod tests {
 
     #[test]
     fn test_flush_trigger_display() {
-        assert_eq!(format!("{}", FlushTrigger::TokenThreshold), "token_threshold");
+        assert_eq!(
+            format!("{}", FlushTrigger::TokenThreshold),
+            "token_threshold"
+        );
         assert_eq!(format!("{}", FlushTrigger::Manual), "manual");
     }
 
@@ -659,8 +698,8 @@ mod tests {
     async fn test_memory_flush_manager() {
         // Use smaller max_context to make threshold easier to reach
         let config = MemoryFlushConfig {
-            max_context_tokens: 2000,  // Smaller context
-            token_threshold: 0.5,      // Lower threshold (50%)
+            max_context_tokens: 2000, // Smaller context
+            token_threshold: 0.5,     // Lower threshold (50%)
             ..Default::default()
         };
         let (manager, _receiver) = MemoryFlushManager::new(config);
@@ -669,7 +708,9 @@ mod tests {
         manager.init_session("test-session").await;
 
         // Update token usage - 4000 chars / 4 = 1000 tokens, which is 50% of 2000
-        let trigger = manager.update_token_usage("test-session", "a".repeat(4000).as_str()).await;
+        let trigger = manager
+            .update_token_usage("test-session", "a".repeat(4000).as_str())
+            .await;
         assert!(trigger.is_some(), "Expected trigger but got None");
 
         // Check importance analysis
@@ -683,10 +724,14 @@ mod tests {
 
     #[test]
     fn test_memory_category_importance() {
-        assert!(MemoryCategory::UserPreference.default_importance() > 
-                MemoryCategory::General.default_importance());
-        assert!(MemoryCategory::ProjectConfig.default_importance() > 
-                MemoryCategory::Technical.default_importance());
+        assert!(
+            MemoryCategory::UserPreference.default_importance()
+                > MemoryCategory::General.default_importance()
+        );
+        assert!(
+            MemoryCategory::ProjectConfig.default_importance()
+                > MemoryCategory::Technical.default_importance()
+        );
     }
 
     #[test]

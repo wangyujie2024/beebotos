@@ -274,10 +274,10 @@ pub struct TaskExecutionRequest {
 pub trait TaskExecutor: Send + Sync {
     /// Execute a task
     async fn execute(&self, request: TaskExecutionRequest) -> Result<TaskResult, AgentError>;
-    
+
     /// Check if executor can handle a task
     fn can_execute(&self, task: &DagTask) -> bool;
-    
+
     /// Get executor ID
     fn executor_id(&self) -> &str;
 }
@@ -333,19 +333,43 @@ impl Default for SchedulerConfig {
 #[derive(Debug, Clone)]
 pub enum SchedulerEvent {
     /// Workflow started
-    WorkflowStarted { instance_id: String, workflow_id: String },
+    WorkflowStarted {
+        instance_id: String,
+        workflow_id: String,
+    },
     /// Workflow completed
-    WorkflowCompleted { instance_id: String, workflow_id: String, success: bool },
+    WorkflowCompleted {
+        instance_id: String,
+        workflow_id: String,
+        success: bool,
+    },
     /// Task status changed
-    TaskStatusChanged { instance_id: String, task_id: String, from: TaskExecutionStatus, to: TaskExecutionStatus },
+    TaskStatusChanged {
+        instance_id: String,
+        task_id: String,
+        from: TaskExecutionStatus,
+        to: TaskExecutionStatus,
+    },
     /// Task completed
-    TaskCompleted { instance_id: String, task_id: String, success: bool, duration_ms: u64 },
+    TaskCompleted {
+        instance_id: String,
+        task_id: String,
+        success: bool,
+        duration_ms: u64,
+    },
     /// Task failed (after retries)
-    TaskFailed { instance_id: String, task_id: String, error: String },
+    TaskFailed {
+        instance_id: String,
+        task_id: String,
+        error: String,
+    },
     /// Dynamic replanning triggered
     ReplanningTriggered { instance_id: String, reason: String },
     /// Error occurred
-    Error { instance_id: Option<String>, error: String },
+    Error {
+        instance_id: Option<String>,
+        error: String,
+    },
 }
 
 /// Scheduler metrics
@@ -377,7 +401,7 @@ impl DagScheduler {
     /// Create new DAG scheduler
     pub fn new(config: SchedulerConfig) -> (Self, mpsc::Receiver<SchedulerEvent>) {
         let (event_sender, event_receiver) = mpsc::channel(10000);
-        
+
         let scheduler = Self {
             config: config.clone(),
             executors: Arc::new(RwLock::new(Vec::new())),
@@ -402,16 +426,19 @@ impl DagScheduler {
     /// Start the scheduler
     pub async fn start(&self) {
         info!("Starting DAG scheduler...");
-        
+
         // Start worker tasks
         for i in 0..self.config.max_concurrency {
             self.start_worker(i).await;
         }
-        
+
         // Start health monitor
         self.start_health_monitor().await;
-        
-        info!("DAG scheduler started with {} workers", self.config.max_concurrency);
+
+        info!(
+            "DAG scheduler started with {} workers",
+            self.config.max_concurrency
+        );
     }
 
     /// Start a worker task
@@ -425,7 +452,7 @@ impl DagScheduler {
 
         let handle = tokio::spawn(async move {
             info!("Worker {} started", worker_id);
-            
+
             loop {
                 tokio::select! {
                     _ = shutdown.notified() => {
@@ -435,16 +462,16 @@ impl DagScheduler {
                     _ = async {
                         // Acquire semaphore permit
                         let _permit = semaphore.acquire().await.unwrap();
-                        
+
                         // Get next ready task
                         let request = {
                             let mut queue = ready_queue.lock().await;
                             queue.pop_front()
                         };
-                        
+
                         if let Some(request) = request {
                             debug!("Worker {} executing task {}", worker_id, request.task_id);
-                            
+
                             // Find suitable executor
                             let executor = {
                                 let executors = executors.read().await;
@@ -452,7 +479,7 @@ impl DagScheduler {
                                     .find(|e| e.can_execute(&request.task))
                                     .cloned()
                             };
-                            
+
                             if let Some(executor) = executor {
                                 // Update task status to running
                                 Self::update_task_status(
@@ -463,13 +490,13 @@ impl DagScheduler {
                                     Some(executor.executor_id().to_string()),
                                     &event_sender,
                                 ).await;
-                                
+
                                 let start_time = std::time::Instant::now();
-                                
+
                                 // Execute task
                                 let result = executor.execute(request.clone()).await;
                                 let duration_ms = start_time.elapsed().as_millis() as u64;
-                                
+
                                 match result {
                                     Ok(task_result) => {
                                         Self::complete_task(
@@ -521,7 +548,7 @@ impl DagScheduler {
 
         let handle = tokio::spawn(async move {
             let mut ticker = tokio::time::interval(Duration::from_secs(interval));
-            
+
             loop {
                 tokio::select! {
                     _ = shutdown.notified() => break,
@@ -542,34 +569,36 @@ impl DagScheduler {
     ) {
         let now = Utc::now();
         let mut instances_guard = instances.write().await;
-        
+
         for (instance_id, instance) in instances_guard.iter_mut() {
             if instance.status != WorkflowStatus::Running {
                 continue;
             }
-            
+
             // Check for timed out tasks
             for (task_id, state) in &mut instance.task_states {
                 if state.status == TaskExecutionStatus::Running {
                     if let Some(started_at) = state.started_at {
                         let elapsed = now.signed_duration_since(started_at).num_seconds() as u64;
                         let timeout = instance.workflow.config.task_timeout_sec;
-                        
+
                         if elapsed > timeout {
                             warn!(
                                 "Task {} in workflow {} timed out after {}s",
                                 task_id, instance_id, elapsed
                             );
-                            
+
                             state.status = TaskExecutionStatus::Failed;
                             state.error = Some(format!("Task timed out after {}s", elapsed));
                             state.completed_at = Some(now);
-                            
-                            let _ = event_sender.send(SchedulerEvent::TaskFailed {
-                                instance_id: instance_id.clone(),
-                                task_id: task_id.clone(),
-                                error: "Task timeout".to_string(),
-                            }).await;
+
+                            let _ = event_sender
+                                .send(SchedulerEvent::TaskFailed {
+                                    instance_id: instance_id.clone(),
+                                    task_id: task_id.clone(),
+                                    error: "Task timeout".to_string(),
+                                })
+                                .await;
                         }
                     }
                 }
@@ -578,15 +607,18 @@ impl DagScheduler {
     }
 
     /// Submit a workflow for execution
-    pub async fn submit_workflow(&self, workflow: DagWorkflow) -> Result<WorkflowInstance, SchedulerError> {
+    pub async fn submit_workflow(
+        &self,
+        workflow: DagWorkflow,
+    ) -> Result<WorkflowInstance, SchedulerError> {
         // Validate workflow (check for cycles)
         self.validate_workflow(&workflow)?;
-        
+
         let instance_id = Uuid::new_v4().to_string();
-        
+
         // Build execution graph
         let execution_graph = self.build_execution_graph(&workflow);
-        
+
         // Initialize task states
         let mut task_states = HashMap::new();
         for task in &workflow.tasks {
@@ -604,17 +636,21 @@ impl DagScheduler {
                 },
             );
         }
-        
+
         // Mark tasks with no dependencies as ready
         let mut ready_tasks = Vec::new();
         for task in &workflow.tasks {
-            let deps = workflow.dependencies.get(&task.id).cloned().unwrap_or_default();
+            let deps = workflow
+                .dependencies
+                .get(&task.id)
+                .cloned()
+                .unwrap_or_default();
             if deps.is_empty() {
                 task_states.get_mut(&task.id).unwrap().status = TaskExecutionStatus::Ready;
                 ready_tasks.push(task.id.clone());
             }
         }
-        
+
         let instance = WorkflowInstance {
             instance_id: instance_id.clone(),
             workflow: workflow.clone(),
@@ -624,24 +660,30 @@ impl DagScheduler {
             completed_at: None,
             execution_graph: Some(execution_graph),
         };
-        
+
         // Store instance
         {
             let mut instances = self.instances.write().await;
             instances.insert(instance_id.clone(), instance.clone());
         }
-        
+
         // Emit event
-        let _ = self.event_sender.send(SchedulerEvent::WorkflowStarted {
-            instance_id: instance_id.clone(),
-            workflow_id: workflow.id.clone(),
-        }).await;
-        
-        info!("Submitted workflow {} as instance {}", workflow.id, instance_id);
-        
+        let _ = self
+            .event_sender
+            .send(SchedulerEvent::WorkflowStarted {
+                instance_id: instance_id.clone(),
+                workflow_id: workflow.id.clone(),
+            })
+            .await;
+
+        info!(
+            "Submitted workflow {} as instance {}",
+            workflow.id, instance_id
+        );
+
         // Start execution
         self.start_workflow_execution(&instance_id).await?;
-        
+
         Ok(instance)
     }
 
@@ -649,37 +691,38 @@ impl DagScheduler {
     fn validate_workflow(&self, workflow: &DagWorkflow) -> Result<(), SchedulerError> {
         let mut graph = DiGraph::<&str, ()>::new();
         let mut node_indices = HashMap::new();
-        
+
         // Add nodes
         for task in &workflow.tasks {
             let idx = graph.add_node(task.id.as_str());
             node_indices.insert(task.id.as_str(), idx);
         }
-        
+
         // Add edges
         for (task_id, deps) in &workflow.dependencies {
-            let task_idx = node_indices.get(task_id.as_str())
-                .ok_or_else(|| SchedulerError::InvalidWorkflow(
-                    format!("Task {} not found", task_id)
-                ))?;
-            
+            let task_idx = node_indices.get(task_id.as_str()).ok_or_else(|| {
+                SchedulerError::InvalidWorkflow(format!("Task {} not found", task_id))
+            })?;
+
             for dep in deps {
-                let dep_idx = node_indices.get(dep.as_str())
-                    .ok_or_else(|| SchedulerError::InvalidWorkflow(
-                        format!("Dependency {} not found for task {}", dep, task_id)
-                    ))?;
-                
+                let dep_idx = node_indices.get(dep.as_str()).ok_or_else(|| {
+                    SchedulerError::InvalidWorkflow(format!(
+                        "Dependency {} not found for task {}",
+                        dep, task_id
+                    ))
+                })?;
+
                 graph.add_edge(*dep_idx, *task_idx, ());
             }
         }
-        
+
         // Check for cycles using topological sort
         if petgraph::algo::toposort(&graph, None).is_err() {
             return Err(SchedulerError::InvalidWorkflow(
-                "Workflow contains cycles".to_string()
+                "Workflow contains cycles".to_string(),
             ));
         }
-        
+
         Ok(())
     }
 
@@ -688,14 +731,14 @@ impl DagScheduler {
         let mut graph = DiGraph::<String, ()>::new();
         let mut task_to_node = HashMap::new();
         let mut node_to_task = HashMap::new();
-        
+
         // Add nodes
         for task in &workflow.tasks {
             let idx = graph.add_node(task.id.clone());
             task_to_node.insert(task.id.clone(), idx);
             node_to_task.insert(idx, task.id.clone());
         }
-        
+
         // Add edges (dependency -> task)
         for (task_id, deps) in &workflow.dependencies {
             let task_idx = task_to_node[task_id];
@@ -704,13 +747,16 @@ impl DagScheduler {
                 graph.add_edge(dep_idx, task_idx, ());
             }
         }
-        
+
         // Compute topological order
         let topological_order = match toposort(&graph, None) {
-            Ok(order) => order.iter().map(|node| node_to_task[node].clone()).collect(),
+            Ok(order) => order
+                .iter()
+                .map(|node| node_to_task[node].clone())
+                .collect(),
             Err(_) => Vec::new(), // Cycle detected, will be caught in validation
         };
-        
+
         ExecutionGraph {
             graph,
             node_to_task,
@@ -722,35 +768,39 @@ impl DagScheduler {
     /// Start workflow execution
     async fn start_workflow_execution(&self, instance_id: &str) -> Result<(), SchedulerError> {
         let mut instances = self.instances.write().await;
-        
-        let instance = instances.get_mut(instance_id)
+
+        let instance = instances
+            .get_mut(instance_id)
             .ok_or_else(|| SchedulerError::InstanceNotFound(instance_id.to_string()))?;
-        
+
         instance.status = WorkflowStatus::Running;
         instance.started_at = Some(Utc::now());
-        
+
         // Queue ready tasks
         drop(instances); // Release lock before async operations
-        
+
         self.queue_ready_tasks(instance_id).await?;
-        
+
         Ok(())
     }
 
     /// Queue all ready tasks for execution
     async fn queue_ready_tasks(&self, instance_id: &str) -> Result<(), SchedulerError> {
         let instances = self.instances.read().await;
-        
-        let instance = instances.get(instance_id)
+
+        let instance = instances
+            .get(instance_id)
             .ok_or_else(|| SchedulerError::InstanceNotFound(instance_id.to_string()))?;
-        
-        let ready_tasks: Vec<_> = instance.task_states.iter()
+
+        let ready_tasks: Vec<_> = instance
+            .task_states
+            .iter()
             .filter(|(_, state)| state.status == TaskExecutionStatus::Ready)
             .map(|(id, state)| (id.clone(), state.task.clone()))
             .collect();
-        
+
         drop(instances);
-        
+
         for (task_id, task) in ready_tasks {
             let request = TaskExecutionRequest {
                 instance_id: instance_id.to_string(),
@@ -758,13 +808,13 @@ impl DagScheduler {
                 task,
                 session_key: None, // Could be passed from workflow
             };
-            
+
             let mut queue = self.ready_queue.lock().await;
             queue.push_back(request);
-            
+
             debug!("Queued task {} for execution", task_id);
         }
-        
+
         Ok(())
     }
 
@@ -778,23 +828,25 @@ impl DagScheduler {
         event_sender: &mpsc::Sender<SchedulerEvent>,
     ) {
         let mut instances_guard = instances.write().await;
-        
+
         if let Some(instance) = instances_guard.get_mut(instance_id) {
             if let Some(state) = instance.task_states.get_mut(task_id) {
                 let old_status = state.status;
                 state.status = status;
                 state.assigned_executor = assigned_executor;
-                
+
                 if status == TaskExecutionStatus::Running {
                     state.started_at = Some(Utc::now());
                 }
-                
-                let _ = event_sender.send(SchedulerEvent::TaskStatusChanged {
-                    instance_id: instance_id.to_string(),
-                    task_id: task_id.to_string(),
-                    from: old_status,
-                    to: status,
-                }).await;
+
+                let _ = event_sender
+                    .send(SchedulerEvent::TaskStatusChanged {
+                        instance_id: instance_id.to_string(),
+                        task_id: task_id.to_string(),
+                        from: old_status,
+                        to: status,
+                    })
+                    .await;
             }
         }
     }
@@ -808,27 +860,35 @@ impl DagScheduler {
         event_sender: &mpsc::Sender<SchedulerEvent>,
     ) {
         let mut instances_guard = instances.write().await;
-        
+
         if let Some(instance) = instances_guard.get_mut(&request.instance_id) {
             if let Some(state) = instance.task_states.get_mut(&request.task_id) {
                 state.status = TaskExecutionStatus::Completed;
                 state.completed_at = Some(Utc::now());
                 state.result = Some(result);
-                
-                let _ = event_sender.send(SchedulerEvent::TaskCompleted {
-                    instance_id: request.instance_id.clone(),
-                    task_id: request.task_id.clone(),
-                    success: true,
-                    duration_ms,
-                }).await;
+
+                let _ = event_sender
+                    .send(SchedulerEvent::TaskCompleted {
+                        instance_id: request.instance_id.clone(),
+                        task_id: request.task_id.clone(),
+                        success: true,
+                        duration_ms,
+                    })
+                    .await;
             }
         }
-        
+
         drop(instances_guard);
-        
+
         // Update downstream tasks
-        Self::update_downstream_tasks(instances, &request.instance_id, &request.task_id, event_sender).await;
-        
+        Self::update_downstream_tasks(
+            instances,
+            &request.instance_id,
+            &request.task_id,
+            event_sender,
+        )
+        .await;
+
         // Check if workflow is complete
         Self::check_workflow_completion(instances, &request.instance_id, event_sender).await;
     }
@@ -842,20 +902,28 @@ impl DagScheduler {
         event_sender: &mpsc::Sender<SchedulerEvent>,
     ) {
         let mut instances_guard = instances.write().await;
-        
+
         let should_replan = if let Some(instance) = instances_guard.get_mut(&request.instance_id) {
             if let Some(state) = instance.task_states.get_mut(&request.task_id) {
                 // Check if we should retry
                 if state.retry_count < instance.workflow.config.retry_policy.max_retries {
                     state.retry_count += 1;
                     state.status = TaskExecutionStatus::WaitingRetry;
-                    
+
                     // Schedule retry with backoff
-                    let backoff = instance.workflow.config.retry_policy.initial_backoff_ms 
-                        * (instance.workflow.config.retry_policy.backoff_multiplier.powi(state.retry_count as i32) as u64);
-                    
-                    info!("Scheduling retry {} for task {} in {}ms", state.retry_count, request.task_id, backoff);
-                    
+                    let backoff = instance.workflow.config.retry_policy.initial_backoff_ms
+                        * (instance
+                            .workflow
+                            .config
+                            .retry_policy
+                            .backoff_multiplier
+                            .powi(state.retry_count as i32) as u64);
+
+                    info!(
+                        "Scheduling retry {} for task {} in {}ms",
+                        state.retry_count, request.task_id, backoff
+                    );
+
                     // For simplicity, just mark as ready again
                     state.status = TaskExecutionStatus::Ready;
                     true
@@ -863,14 +931,17 @@ impl DagScheduler {
                     state.status = TaskExecutionStatus::Failed;
                     state.completed_at = Some(Utc::now());
                     state.error = Some(error.clone());
-                    
-                    let _ = event_sender.send(SchedulerEvent::TaskFailed {
-                        instance_id: request.instance_id.clone(),
-                        task_id: request.task_id.clone(),
-                        error: error.clone(),
-                    }).await;
-                    
-                    instance.workflow.config.enable_replanning && !instance.workflow.config.continue_on_failure
+
+                    let _ = event_sender
+                        .send(SchedulerEvent::TaskFailed {
+                            instance_id: request.instance_id.clone(),
+                            task_id: request.task_id.clone(),
+                            error: error.clone(),
+                        })
+                        .await;
+
+                    instance.workflow.config.enable_replanning
+                        && !instance.workflow.config.continue_on_failure
                 }
             } else {
                 false
@@ -878,17 +949,19 @@ impl DagScheduler {
         } else {
             false
         };
-        
+
         drop(instances_guard);
-        
+
         if should_replan {
             // Trigger dynamic replanning
-            let _ = event_sender.send(SchedulerEvent::ReplanningTriggered {
-                instance_id: request.instance_id.clone(),
-                reason: format!("Task {} failed: {}", request.task_id, error),
-            }).await;
+            let _ = event_sender
+                .send(SchedulerEvent::ReplanningTriggered {
+                    instance_id: request.instance_id.clone(),
+                    reason: format!("Task {} failed: {}", request.task_id, error),
+                })
+                .await;
         }
-        
+
         // Check if workflow should fail
         Self::check_workflow_completion(instances, &request.instance_id, event_sender).await;
     }
@@ -901,14 +974,16 @@ impl DagScheduler {
         _event_sender: &mpsc::Sender<SchedulerEvent>,
     ) {
         let instances_guard = instances.read().await;
-        
+
         let downstream_tasks = if let Some(instance) = instances_guard.get(instance_id) {
             if let Some(ref graph) = instance.execution_graph {
                 let completed_node = graph.task_to_node.get(completed_task_id);
-                
+
                 if let Some(&node) = completed_node {
                     // Get neighbors (dependent tasks)
-                    graph.graph.neighbors(node)
+                    graph
+                        .graph
+                        .neighbors(node)
                         .filter_map(|n| graph.node_to_task.get(&n).cloned())
                         .collect::<Vec<_>>()
                 } else {
@@ -920,23 +995,29 @@ impl DagScheduler {
         } else {
             vec![]
         };
-        
-        let ready_tasks: Vec<_> = downstream_tasks.iter()
+
+        let ready_tasks: Vec<_> = downstream_tasks
+            .iter()
             .filter_map(|task_id| {
                 if let Some(instance) = instances_guard.get(instance_id) {
                     if let Some(state) = instance.task_states.get(task_id) {
                         if state.status == TaskExecutionStatus::Pending {
                             // Check if all dependencies are completed
-                            let deps = instance.workflow.dependencies.get(task_id)
+                            let deps = instance
+                                .workflow
+                                .dependencies
+                                .get(task_id)
                                 .cloned()
                                 .unwrap_or_default();
-                            
+
                             let all_deps_completed = deps.iter().all(|dep| {
-                                instance.task_states.get(dep)
+                                instance
+                                    .task_states
+                                    .get(dep)
                                     .map(|s| s.status == TaskExecutionStatus::Completed)
                                     .unwrap_or(false)
                             });
-                            
+
                             if all_deps_completed {
                                 return Some(task_id.clone());
                             }
@@ -946,9 +1027,9 @@ impl DagScheduler {
                 None
             })
             .collect();
-        
+
         drop(instances_guard);
-        
+
         // Mark ready tasks
         let mut instances_guard = instances.write().await;
         for task_id in ready_tasks {
@@ -958,9 +1039,9 @@ impl DagScheduler {
                 }
             }
         }
-        
+
         drop(instances_guard);
-        
+
         // Queue ready tasks
         // This would need the scheduler instance, so we skip for now
     }
@@ -972,28 +1053,37 @@ impl DagScheduler {
         event_sender: &mpsc::Sender<SchedulerEvent>,
     ) {
         let mut instances_guard = instances.write().await;
-        
+
         if let Some(instance) = instances_guard.get_mut(instance_id) {
             let all_completed = instance.task_states.values().all(|s| {
-                matches!(s.status, TaskExecutionStatus::Completed | TaskExecutionStatus::Failed | TaskExecutionStatus::Cancelled)
+                matches!(
+                    s.status,
+                    TaskExecutionStatus::Completed
+                        | TaskExecutionStatus::Failed
+                        | TaskExecutionStatus::Cancelled
+                )
             });
-            
+
             if all_completed {
-                let any_failed = instance.task_states.values()
+                let any_failed = instance
+                    .task_states
+                    .values()
                     .any(|s| s.status == TaskExecutionStatus::Failed);
-                
+
                 instance.status = if any_failed {
                     WorkflowStatus::Failed
                 } else {
                     WorkflowStatus::Completed
                 };
                 instance.completed_at = Some(Utc::now());
-                
-                let _ = event_sender.send(SchedulerEvent::WorkflowCompleted {
-                    instance_id: instance_id.to_string(),
-                    workflow_id: instance.workflow.id.clone(),
-                    success: !any_failed,
-                }).await;
+
+                let _ = event_sender
+                    .send(SchedulerEvent::WorkflowCompleted {
+                        instance_id: instance_id.to_string(),
+                        workflow_id: instance.workflow.id.clone(),
+                        success: !any_failed,
+                    })
+                    .await;
             }
         }
     }
@@ -1008,16 +1098,18 @@ impl DagScheduler {
     pub async fn get_metrics(&self) -> SchedulerMetrics {
         let instances = self.instances.read().await;
         let queue = self.ready_queue.lock().await;
-        
-        let running_workflows = instances.values()
+
+        let running_workflows = instances
+            .values()
             .filter(|i| i.status == WorkflowStatus::Running)
             .count();
-        
-        let running_tasks = instances.values()
+
+        let running_tasks = instances
+            .values()
             .flat_map(|i| i.task_states.values())
             .filter(|s| s.status == TaskExecutionStatus::Running)
             .count();
-        
+
         SchedulerMetrics {
             workflows_submitted: instances.len() as u64,
             running_workflows,
@@ -1030,16 +1122,16 @@ impl DagScheduler {
     /// Graceful shutdown
     pub async fn shutdown(&self) {
         info!("Initiating DAG scheduler graceful shutdown...");
-        
+
         self.shutdown.notify_waiters();
-        
+
         let mut tasks = self.background_tasks.lock().await;
         for handle in tasks.drain(..) {
             if let Err(e) = handle.await {
                 error!("Worker task panicked: {}", e);
             }
         }
-        
+
         info!("DAG scheduler shutdown complete");
     }
 }
@@ -1107,12 +1199,14 @@ impl DagWorkflowBuilder {
     pub fn add_task(mut self, task: DagTask) -> Self {
         let task_id = task.id.clone();
         self.workflow.tasks.push(task);
-        
+
         // Set dependencies if any
         if !self.current_dependencies.is_empty() {
-            self.workflow.dependencies.insert(task_id, self.current_dependencies.clone());
+            self.workflow
+                .dependencies
+                .insert(task_id, self.current_dependencies.clone());
         }
-        
+
         self
     }
 
@@ -1158,19 +1252,19 @@ mod tests {
     #[tokio::test]
     async fn test_dag_scheduler_creation() {
         use tokio::time::{timeout, Duration};
-        
+
         let config = SchedulerConfig {
-            max_concurrency: 1, // Use single worker for faster test
+            max_concurrency: 1,           // Use single worker for faster test
             health_check_interval_sec: 1, // Short health check interval
             ..SchedulerConfig::default()
         };
         let (scheduler, _receiver) = DagScheduler::new(config);
-        
+
         scheduler.start().await;
-        
+
         // Give workers time to start listening for shutdown
         tokio::time::sleep(Duration::from_millis(50)).await;
-        
+
         // Shutdown with timeout
         let result = timeout(Duration::from_secs(5), scheduler.shutdown()).await;
         assert!(result.is_ok(), "shutdown() timed out");
@@ -1180,33 +1274,31 @@ mod tests {
     async fn test_workflow_validation() {
         let config = SchedulerConfig::default();
         let (scheduler, _receiver) = DagScheduler::new(config);
-        
+
         // Valid workflow
         let valid_workflow = DagWorkflow {
             id: "test".to_string(),
             name: "Test".to_string(),
             description: String::new(),
-            tasks: vec![
-                DagTask {
-                    id: "task1".to_string(),
-                    name: "Task 1".to_string(),
-                    description: String::new(),
-                    task_type: TaskType::LlmChat,
-                    parameters: HashMap::new(),
-                    priority: TaskPriority::Normal,
-                    estimated_duration_sec: None,
-                    required_capabilities: vec![],
-                    resource_requirements: ResourceRequirements::default(),
-                },
-            ],
+            tasks: vec![DagTask {
+                id: "task1".to_string(),
+                name: "Task 1".to_string(),
+                description: String::new(),
+                task_type: TaskType::LlmChat,
+                parameters: HashMap::new(),
+                priority: TaskPriority::Normal,
+                estimated_duration_sec: None,
+                required_capabilities: vec![],
+                resource_requirements: ResourceRequirements::default(),
+            }],
             dependencies: HashMap::new(),
             config: WorkflowConfig::default(),
             created_at: Utc::now(),
             session_key: None,
         };
-        
+
         assert!(scheduler.validate_workflow(&valid_workflow).is_ok());
-        
+
         // Invalid workflow (cycle)
         let cyclic_workflow = DagWorkflow {
             id: "test".to_string(),
@@ -1246,7 +1338,7 @@ mod tests {
             created_at: Utc::now(),
             session_key: None,
         };
-        
+
         assert!(scheduler.validate_workflow(&cyclic_workflow).is_err());
     }
 
@@ -1277,7 +1369,7 @@ mod tests {
                 resource_requirements: ResourceRequirements::default(),
             })
             .build();
-        
+
         assert_eq!(workflow.name, "Test Workflow");
         assert_eq!(workflow.tasks.len(), 2);
     }

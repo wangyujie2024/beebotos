@@ -1,6 +1,7 @@
 //! Optimism Module
 //!
-//! Optimism is a Layer 2 scaling solution for Ethereum using Optimistic Rollups.
+//! Optimism is a Layer 2 scaling solution for Ethereum using Optimistic
+//! Rollups.
 //! - Chain ID: 10 (Mainnet), 11155420 (Sepolia Testnet)
 //! - Block Time: ~2 seconds
 //! - Consensus: Optimistic Rollup

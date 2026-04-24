@@ -36,20 +36,22 @@
 //! └─────────────────────────────────────────────────────────────────┘
 //! ```
 
-use crate::error::Result;
-use crate::memory::{
-    markdown_search::{UnifiedMemorySystem, UnifiedMemoryConfig},
-    markdown_storage::{MarkdownMemoryEntry, MemoryFileType},
-    memory_flush::{FlushEvent, FlushStatistics, FlushTrigger, MemoryFlushConfig, MemoryFlushManager},
-};
-use serde::{Deserialize, Serialize};
 #[allow(unused_imports)]
 use std::collections::HashMap;
 use std::sync::Arc;
+
+use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 use tracing::{debug, info};
 #[allow(unused_imports)]
 use uuid::Uuid;
+
+use crate::error::Result;
+use crate::memory::markdown_search::{UnifiedMemoryConfig, UnifiedMemorySystem};
+use crate::memory::markdown_storage::{MarkdownMemoryEntry, MemoryFileType};
+use crate::memory::memory_flush::{
+    FlushEvent, FlushStatistics, FlushTrigger, MemoryFlushConfig, MemoryFlushManager,
+};
 
 /// LLM provider trait for memory analysis
 #[async_trait::async_trait]
@@ -112,7 +114,9 @@ impl LLMProvider for OpenAILLMProvider {
             .json(&request)
             .send()
             .await
-            .map_err(|e| crate::error::AgentError::platform(format!("LLM request failed: {}", e)))?;
+            .map_err(|e| {
+                crate::error::AgentError::platform(format!("LLM request failed: {}", e))
+            })?;
 
         if !response.status().is_success() {
             let error_text = response.text().await.unwrap_or_default();
@@ -253,9 +257,7 @@ impl LLMMemoryFlushOrchestrator {
         memory_config: UnifiedMemoryConfig,
     ) -> Result<Self> {
         let (base_manager, _events) = MemoryFlushManager::new(config.base_config.clone());
-        let memory_system = Arc::new(RwLock::new(
-            UnifiedMemorySystem::new(memory_config).await?
-        ));
+        let memory_system = Arc::new(RwLock::new(UnifiedMemorySystem::new(memory_config).await?));
 
         Ok(Self {
             config: config.clone(),
@@ -268,7 +270,10 @@ impl LLMMemoryFlushOrchestrator {
     /// Initialize session with intelligent monitoring
     pub async fn init_session(&self, session_id: &str) {
         self.base_manager.init_session(session_id).await;
-        info!("Initialized LLM-enhanced memory monitoring for session: {}", session_id);
+        info!(
+            "Initialized LLM-enhanced memory monitoring for session: {}",
+            session_id
+        );
     }
 
     /// Process new message with LLM analysis
@@ -279,14 +284,18 @@ impl LLMMemoryFlushOrchestrator {
         content: &str,
     ) -> Result<Option<FlushEvent>> {
         // Update base context monitoring
-        let flush_trigger = self.base_manager.update_token_usage(session_id, content).await;
+        let flush_trigger = self
+            .base_manager
+            .update_token_usage(session_id, content)
+            .await;
 
         // Perform LLM analysis if enabled
         let should_save = if self.config.enable_llm_analysis {
             let analysis = self.analyze_importance(content).await?;
             analysis.score >= self.config.min_importance_threshold
         } else {
-            self.base_manager.analyze_importance(content).score >= self.config.min_importance_threshold
+            self.base_manager.analyze_importance(content).score
+                >= self.config.min_importance_threshold
         };
 
         // Save to memory if important
@@ -333,13 +342,12 @@ Guidelines:
         let response = self.llm.complete(&prompt).await?;
 
         // Parse JSON response
-        let analysis: LLMImportanceAnalysis = serde_json::from_str(&response)
-            .map_err(|e| {
-                crate::error::AgentError::platform(format!(
-                    "Failed to parse LLM importance analysis: {}. Response: {}",
-                    e, response
-                ))
-            })?;
+        let analysis: LLMImportanceAnalysis = serde_json::from_str(&response).map_err(|e| {
+            crate::error::AgentError::platform(format!(
+                "Failed to parse LLM importance analysis: {}. Response: {}",
+                e, response
+            ))
+        })?;
 
         debug!(
             "LLM importance analysis: score={:.2}, category={}",
@@ -359,7 +367,8 @@ Guidelines:
                 original_tokens: self.estimate_tokens(messages),
                 compressed_tokens: self.estimate_tokens(messages),
                 compression_ratio: 1.0,
-                compressed_content: messages.iter()
+                compressed_content: messages
+                    .iter()
                     .map(|m| format!("{}: {}", m.role, m.content))
                     .collect::<Vec<_>>()
                     .join("\n"),
@@ -401,13 +410,12 @@ Make the summary concise but preserve all important information."#,
             compressed_estimate: usize,
         }
 
-        let llm_result: LLMCompression = serde_json::from_str(&response)
-            .map_err(|e| {
-                crate::error::AgentError::platform(format!(
-                    "Failed to parse LLM compression: {}. Response: {}",
-                    e, response
-                ))
-            })?;
+        let llm_result: LLMCompression = serde_json::from_str(&response).map_err(|e| {
+            crate::error::AgentError::platform(format!(
+                "Failed to parse LLM compression: {}. Response: {}",
+                e, response
+            ))
+        })?;
 
         let compression_ratio = if llm_result.original_estimate > 0 {
             llm_result.compressed_estimate as f32 / llm_result.original_estimate as f32
@@ -430,10 +438,14 @@ Make the summary concise but preserve all important information."#,
         session_id: &str,
         trigger: FlushTrigger,
     ) -> Result<FlushEvent> {
-        info!("Performing intelligent memory flush for session: {}", session_id);
+        info!(
+            "Performing intelligent memory flush for session: {}",
+            session_id
+        );
 
         // Get context state
-        let state = self.base_manager
+        let state = self
+            .base_manager
             .get_context_state(session_id)
             .await
             .ok_or_else(|| crate::error::AgentError::not_found("Session not found".to_string()))?;
@@ -460,12 +472,7 @@ Make the summary concise but preserve all important information."#,
     }
 
     /// Save message to appropriate memory store
-    async fn save_message(
-        &self,
-        session_id: &str,
-        role: &str,
-        content: &str,
-    ) -> Result<()> {
+    async fn save_message(&self, session_id: &str, role: &str, content: &str) -> Result<()> {
         // Analyze for categorization
         let analysis = if self.config.enable_llm_analysis {
             self.analyze_importance(content).await?
@@ -482,14 +489,11 @@ Make the summary concise but preserve all important information."#,
         };
 
         // Create memory entry
-        let entry = MarkdownMemoryEntry::new(
-            &analysis.suggested_title,
-            content.to_string(),
-        )
-        .with_category(&analysis.category.to_lowercase())
-        .with_importance(analysis.score)
-        .with_session_id(session_id)
-        .with_metadata("role", role);
+        let entry = MarkdownMemoryEntry::new(&analysis.suggested_title, content.to_string())
+            .with_category(&analysis.category.to_lowercase())
+            .with_importance(analysis.score)
+            .with_session_id(session_id)
+            .with_metadata("role", role);
 
         // Determine target storage
         let memory = self.memory_system.read().await;
@@ -545,11 +549,11 @@ mod tests {
         // This test requires a real LLM provider
         // Test the LLM importance analyzer directly using the orchestrator
         let memory_config = UnifiedMemoryConfig::default();
-        let orchestrator = LLMMemoryFlushOrchestrator::new(
-            LLMMemoryFlushConfig::default(),
-            memory_config
-        ).await.unwrap();
-        
+        let orchestrator =
+            LLMMemoryFlushOrchestrator::new(LLMMemoryFlushConfig::default(), memory_config)
+                .await
+                .unwrap();
+
         let analysis = orchestrator
             .analyze_importance("I prefer dark mode always")
             .await

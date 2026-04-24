@@ -2,12 +2,14 @@
 //!
 //! AI capabilities: text, image, audio, video, web, embedding
 
-use crate::progress::TaskProgress;
+// io and Write not used - removed
+use std::path::PathBuf;
+
 use anyhow::Result;
 use clap::{Parser, Subcommand, ValueEnum};
 use futures::StreamExt;
-// io and Write not used - removed
-use std::path::PathBuf;
+
+use crate::progress::TaskProgress;
 
 #[derive(Parser)]
 pub struct InferArgs {
@@ -565,13 +567,14 @@ pub async fn execute(args: InferArgs) -> Result<()> {
             progress.finish_success(Some(&format!("{} capabilities", caps.len())));
 
             if verbose {
-                println!("{:<25} {:<15} {:<20} Status", 
-                    "ID", "Category", "Name");
+                println!("{:<25} {:<15} {:<20} Status", "ID", "Category", "Name");
                 println!("{}", "-".repeat(90));
                 for cap in caps {
                     let status_icon = if cap.available { "✓" } else { "✗" };
-                    println!("{:<25} {:<15} {:<20} {}",
-                        cap.id, cap.category, cap.name, status_icon);
+                    println!(
+                        "{:<25} {:<15} {:<20} {}",
+                        cap.id, cap.category, cap.name, status_icon
+                    );
                 }
             } else {
                 println!("{:<25} {:<15} Status", "ID", "Category");
@@ -593,8 +596,15 @@ pub async fn execute(args: InferArgs) -> Result<()> {
             println!("ID: {}", cap.id);
             println!("Category: {}", cap.category);
             println!("Description: {}", cap.description);
-            println!("Status: {}", if cap.available { "Available ✓" } else { "Unavailable ✗" });
-            
+            println!(
+                "Status: {}",
+                if cap.available {
+                    "Available ✓"
+                } else {
+                    "Unavailable ✗"
+                }
+            );
+
             if !cap.models.is_empty() {
                 println!("\nSupported Models:");
                 for model in cap.models {
@@ -608,7 +618,13 @@ pub async fn execute(args: InferArgs) -> Result<()> {
         }
 
         InferCommand::Text(cmd) => match cmd {
-            TextCommand::Run { prompt, model, max_tokens, temperature, stream } => {
+            TextCommand::Run {
+                prompt,
+                model,
+                max_tokens,
+                temperature,
+                stream,
+            } => {
                 let req = TextRequest {
                     prompt,
                     model_id: model,
@@ -632,7 +648,11 @@ pub async fn execute(args: InferArgs) -> Result<()> {
                     println!("{}", response.text);
                 }
             }
-            TextCommand::Summarize { input, length, output } => {
+            TextCommand::Summarize {
+                input,
+                length,
+                output,
+            } => {
                 let text = if std::path::Path::new(&input).exists() {
                     std::fs::read_to_string(&input)?
                 } else {
@@ -640,7 +660,9 @@ pub async fn execute(args: InferArgs) -> Result<()> {
                 };
 
                 let progress = TaskProgress::new("Summarizing");
-                let summary = client.summarize(&text, &format!("{:?}", length).to_lowercase()).await?;
+                let summary = client
+                    .summarize(&text, &format!("{:?}", length).to_lowercase())
+                    .await?;
                 progress.finish_success(None);
 
                 if let Some(path) = output {
@@ -672,7 +694,10 @@ pub async fn execute(args: InferArgs) -> Result<()> {
 
                 println!("🔍 Entities found:");
                 for entity in entities {
-                    println!("  {} [{}]: {}", entity.text, entity.entity_type, entity.confidence);
+                    println!(
+                        "  {} [{}]: {}",
+                        entity.text, entity.entity_type, entity.confidence
+                    );
                 }
             }
             TextCommand::Classify { text, categories } => {
@@ -691,10 +716,17 @@ pub async fn execute(args: InferArgs) -> Result<()> {
                 let translated = client.translate(&text, &to, from.as_deref()).await?;
                 progress.finish_success(None);
                 println!("🌐 Translation:");
-                println!("  {} -> {}", translated.source_language, translated.target_language);
+                println!(
+                    "  {} -> {}",
+                    translated.source_language, translated.target_language
+                );
                 println!("\n{}", translated.text);
             }
-            TextCommand::Ask { question, context, web_search } => {
+            TextCommand::Ask {
+                question,
+                context,
+                web_search,
+            } => {
                 let ctx = if let Some(path) = context {
                     Some(std::fs::read_to_string(&path)?)
                 } else {
@@ -702,12 +734,14 @@ pub async fn execute(args: InferArgs) -> Result<()> {
                 };
 
                 let progress = TaskProgress::new("Finding answer");
-                let answer = client.answer_question(&question, ctx.as_deref(), web_search).await?;
+                let answer = client
+                    .answer_question(&question, ctx.as_deref(), web_search)
+                    .await?;
                 progress.finish_success(None);
 
                 println!("❓ {}", question);
                 println!("\n💡 {}", answer.text);
-                
+
                 if let Some(sources) = answer.sources {
                     println!("\n📚 Sources:");
                     for source in sources {
@@ -718,7 +752,13 @@ pub async fn execute(args: InferArgs) -> Result<()> {
         },
 
         InferCommand::Image(cmd) => match cmd {
-            ImageCommand::Generate { prompt, output, size, n, model } => {
+            ImageCommand::Generate {
+                prompt,
+                output,
+                size,
+                n,
+                model,
+            } => {
                 let progress = TaskProgress::new("Generating image");
                 let req = ImageGenRequest {
                     prompt,
@@ -738,27 +778,46 @@ pub async fn execute(args: InferArgs) -> Result<()> {
                     }
                 }
             }
-            ImageCommand::Edit { image, prompt, output, mask } => {
+            ImageCommand::Edit {
+                image,
+                prompt,
+                output,
+                mask,
+            } => {
                 let progress = TaskProgress::new("Editing image");
-                client.edit_image(&image, &prompt, mask.as_ref(), output.as_ref()).await?;
+                client
+                    .edit_image(&image, &prompt, mask.as_ref(), output.as_ref())
+                    .await?;
                 progress.finish_success(None);
-                
+
                 let out_path = output.unwrap_or_else(|| PathBuf::from("edited.png"));
                 println!("✅ Edited image saved to {}", out_path.display());
             }
             ImageCommand::Vary { image, output, n } => {
                 let progress = TaskProgress::new("Creating variations");
-                let result = client.create_image_variations(&image, n, output.as_ref()).await?;
+                let result = client
+                    .create_image_variations(&image, n, output.as_ref())
+                    .await?;
                 progress.finish_success(None);
                 println!("✅ Created {} variations", result.len());
             }
-            ImageCommand::Describe { image, detail, question } => {
+            ImageCommand::Describe {
+                image,
+                detail,
+                question,
+            } => {
                 let progress = TaskProgress::new("Analyzing image");
-                let analysis = client.describe_image(&image, &format!("{:?}", detail).to_lowercase(), question.as_deref()).await?;
+                let analysis = client
+                    .describe_image(
+                        &image,
+                        &format!("{:?}", detail).to_lowercase(),
+                        question.as_deref(),
+                    )
+                    .await?;
                 progress.finish_success(None);
-                
+
                 println!("🖼️  Image Analysis:\n{}", analysis.description);
-                
+
                 if !analysis.objects.is_empty() {
                     println!("\n📦 Objects detected:");
                     for obj in analysis.objects {
@@ -781,9 +840,17 @@ pub async fn execute(args: InferArgs) -> Result<()> {
         },
 
         InferCommand::Audio(cmd) => match cmd {
-            AudioCommand::Transcribe { file, language, format, output, timestamps } => {
+            AudioCommand::Transcribe {
+                file,
+                language,
+                format,
+                output,
+                timestamps,
+            } => {
                 let progress = TaskProgress::new("Transcribing audio");
-                let result = client.transcribe_audio(&file, language.as_deref(), timestamps).await?;
+                let result = client
+                    .transcribe_audio(&file, language.as_deref(), timestamps)
+                    .await?;
                 progress.finish_success(None);
 
                 let output_text = match format {
@@ -812,18 +879,27 @@ pub async fn execute(args: InferArgs) -> Result<()> {
                     println!("📝 Translation:\n{}", result.text);
                 }
             }
-            AudioCommand::Generate { prompt, output, duration } => {
+            AudioCommand::Generate {
+                prompt,
+                output,
+                duration,
+            } => {
                 let progress = TaskProgress::new("Generating audio");
                 let audio = client.generate_audio(&prompt, duration).await?;
                 progress.finish_success(None);
-                
+
                 std::fs::write(&output, &audio)?;
                 println!("✅ Audio saved to {}", output.display());
             }
         },
 
         InferCommand::Tts(cmd) => match cmd {
-            TtsCommand::Convert { input, output, voice, speed } => {
+            TtsCommand::Convert {
+                input,
+                output,
+                voice,
+                speed,
+            } => {
                 let text = if std::path::Path::new(&input).exists() {
                     std::fs::read_to_string(&input)?
                 } else {
@@ -831,9 +907,11 @@ pub async fn execute(args: InferArgs) -> Result<()> {
                 };
 
                 let progress = TaskProgress::new("Converting to speech");
-                let audio = client.text_to_speech(&text, voice.as_deref(), speed).await?;
+                let audio = client
+                    .text_to_speech(&text, voice.as_deref(), speed)
+                    .await?;
                 progress.finish_success(None);
-                
+
                 std::fs::write(&output, &audio)?;
                 println!("✅ Audio saved to {}", output.display());
             }
@@ -843,29 +921,40 @@ pub async fn execute(args: InferArgs) -> Result<()> {
                 println!("{:<20} {:<15} {:<10} Language", "ID", "Name", "Gender");
                 println!("{}", "-".repeat(70));
                 for voice in voices {
-                    println!("{:<20} {:<15} {:<10} {}",
-                        voice.id, voice.name, voice.gender, voice.language);
+                    println!(
+                        "{:<20} {:<15} {:<10} {}",
+                        voice.id, voice.name, voice.gender, voice.language
+                    );
                 }
             }
             TtsCommand::Preview { voice, text } => {
                 let progress = TaskProgress::new("Generating preview");
                 let audio = client.text_to_speech(&text, Some(&voice), None).await?;
                 progress.finish_success(None);
-                
+
                 let temp_path = std::env::temp_dir().join(format!("tts_preview_{}.mp3", voice));
                 std::fs::write(&temp_path, &audio)?;
                 println!("✅ Preview saved to: {}", temp_path.display());
-                
+
                 // Try to play automatically
                 #[cfg(target_os = "macos")]
-                std::process::Command::new("afplay").arg(&temp_path).spawn()?;
+                std::process::Command::new("afplay")
+                    .arg(&temp_path)
+                    .spawn()?;
                 #[cfg(target_os = "linux")]
-                std::process::Command::new("aplay").arg(&temp_path).spawn()?;
+                std::process::Command::new("aplay")
+                    .arg(&temp_path)
+                    .spawn()?;
             }
         },
 
         InferCommand::Web(cmd) => match cmd {
-            WebCommand::Search { query, limit, full_content, site } => {
+            WebCommand::Search {
+                query,
+                limit,
+                full_content,
+                site,
+            } => {
                 let progress = TaskProgress::new("Searching web");
                 let results = client.web_search(&query, limit, site.as_deref()).await?;
                 progress.finish_success(Some(&format!("{} results", results.len())));
@@ -874,7 +963,7 @@ pub async fn execute(args: InferArgs) -> Result<()> {
                     println!("\n{}. {}", i + 1, result.title);
                     println!("   URL: {}", result.url);
                     println!("   {}", result.snippet);
-                    
+
                     if full_content {
                         if let Some(content) = &result.full_content {
                             println!("\n   Full content:\n{}", content);
@@ -882,13 +971,24 @@ pub async fn execute(args: InferArgs) -> Result<()> {
                     }
                 }
             }
-            WebCommand::Fetch { url, extract, format } => {
+            WebCommand::Fetch {
+                url,
+                extract,
+                format,
+            } => {
                 let progress = TaskProgress::new("Fetching webpage");
-                let content = client.fetch_webpage(&url, extract, &format!("{:?}", format).to_lowercase()).await?;
+                let content = client
+                    .fetch_webpage(&url, extract, &format!("{:?}", format).to_lowercase())
+                    .await?;
                 progress.finish_success(None);
                 println!("{}", content);
             }
-            WebCommand::Crawl { url, max_pages, same_domain, output } => {
+            WebCommand::Crawl {
+                url,
+                max_pages,
+                same_domain,
+                output,
+            } => {
                 let progress = TaskProgress::new("Crawling website");
                 let pages = client.crawl_website(&url, max_pages, same_domain).await?;
                 progress.finish_success(Some(&format!("{} pages", pages.len())));
@@ -909,9 +1009,13 @@ pub async fn execute(args: InferArgs) -> Result<()> {
         },
 
         InferCommand::Embedding(cmd) => match cmd {
-            EmbeddingCommand::Create { input, model, batch_size } => {
+            EmbeddingCommand::Create {
+                input,
+                model,
+                batch_size,
+            } => {
                 let progress = TaskProgress::new("Creating embeddings");
-                
+
                 let texts = if std::path::Path::new(&input).exists() {
                     std::fs::read_to_string(&input)?
                         .lines()
@@ -921,18 +1025,26 @@ pub async fn execute(args: InferArgs) -> Result<()> {
                     vec![input]
                 };
 
-                let embeddings = client.create_embeddings(&texts, model.as_deref(), batch_size).await?;
+                let embeddings = client
+                    .create_embeddings(&texts, model.as_deref(), batch_size)
+                    .await?;
                 progress.finish_success(Some(&format!("{} embeddings", embeddings.len())));
-                
+
                 for (i, emb) in embeddings.iter().enumerate() {
                     println!("Embedding {}: {} dimensions", i + 1, emb.len());
                 }
             }
-            EmbeddingCommand::Similarity { text1, text2, model } => {
+            EmbeddingCommand::Similarity {
+                text1,
+                text2,
+                model,
+            } => {
                 let progress = TaskProgress::new("Calculating similarity");
-                let similarity = client.calculate_similarity(&text1, &text2, model.as_deref()).await?;
+                let similarity = client
+                    .calculate_similarity(&text1, &text2, model.as_deref())
+                    .await?;
                 progress.finish_success(None);
-                
+
                 println!("📊 Similarity: {:.2}%", similarity * 100.0);
                 let description = if similarity > 0.9 {
                     "Very similar"
@@ -945,13 +1057,17 @@ pub async fn execute(args: InferArgs) -> Result<()> {
                 };
                 println!("Interpretation: {}", description);
             }
-            EmbeddingCommand::Cluster { file, clusters, output } => {
+            EmbeddingCommand::Cluster {
+                file,
+                clusters,
+                output,
+            } => {
                 let progress = TaskProgress::new("Clustering texts");
                 let texts: Vec<String> = std::fs::read_to_string(&file)?
                     .lines()
                     .map(|s| s.to_string())
                     .collect();
-                
+
                 let cluster_results = client.cluster_texts(&texts, clusters).await?;
                 progress.finish_success(None);
 
@@ -972,21 +1088,28 @@ pub async fn execute(args: InferArgs) -> Result<()> {
         },
 
         InferCommand::Code(cmd) => match cmd {
-            CodeCommand::Complete { input, language, context } => {
+            CodeCommand::Complete {
+                input,
+                language,
+                context,
+            } => {
                 let code = if std::path::Path::new(&input).exists() {
                     std::fs::read_to_string(&input)?
                 } else {
                     input
                 };
 
-                let ctx: Vec<String> = context.iter()
+                let ctx: Vec<String> = context
+                    .iter()
                     .filter_map(|p| std::fs::read_to_string(p).ok())
                     .collect();
 
                 let progress = TaskProgress::new("Completing code");
-                let completion = client.complete_code(&code, language.as_deref(), &ctx).await?;
+                let completion = client
+                    .complete_code(&code, language.as_deref(), &ctx)
+                    .await?;
                 progress.finish_success(None);
-                
+
                 println!("💻 Code Completion:\n```\n{}\n```", completion);
             }
             CodeCommand::Explain { input, detail } => {
@@ -997,9 +1120,11 @@ pub async fn execute(args: InferArgs) -> Result<()> {
                 };
 
                 let progress = TaskProgress::new("Explaining code");
-                let explanation = client.explain_code(&code, &format!("{:?}", detail).to_lowercase()).await?;
+                let explanation = client
+                    .explain_code(&code, &format!("{:?}", detail).to_lowercase())
+                    .await?;
                 progress.finish_success(None);
-                
+
                 println!("📖 Code Explanation:\n{}", explanation);
             }
             CodeCommand::Review { file, focus } => {
@@ -1007,28 +1132,35 @@ pub async fn execute(args: InferArgs) -> Result<()> {
                 let progress = TaskProgress::new("Reviewing code");
                 let review = client.review_code(&code, &focus).await?;
                 progress.finish_success(Some(&format!("{} issues", review.issues.len())));
-                
+
                 println!("🔍 Code Review for: {}", file.display());
                 println!("Overall: {}\n", review.summary);
-                
+
                 for issue in review.issues {
                     let icon = match issue.severity.as_str() {
                         "error" => "❌",
                         "warning" => "⚠️",
                         _ => "ℹ️",
                     };
-                    println!("{} [{}] Line {}: {}", icon, issue.severity, issue.line, issue.message);
+                    println!(
+                        "{} [{}] Line {}: {}",
+                        icon, issue.severity, issue.line, issue.message
+                    );
                     if let Some(suggestion) = issue.suggestion {
                         println!("   Suggestion: {}", suggestion);
                     }
                 }
             }
-            CodeCommand::Fix { file, issue, output } => {
+            CodeCommand::Fix {
+                file,
+                issue,
+                output,
+            } => {
                 let code = std::fs::read_to_string(&file)?;
                 let progress = TaskProgress::new("Fixing code");
                 let fixed = client.fix_code(&code, issue.as_deref()).await?;
                 progress.finish_success(None);
-                
+
                 if let Some(path) = output {
                     std::fs::write(&path, &fixed)?;
                     println!("✅ Fixed code saved to {}", path.display());
@@ -1036,12 +1168,16 @@ pub async fn execute(args: InferArgs) -> Result<()> {
                     println!("💻 Fixed Code:\n```\n{}\n```", fixed);
                 }
             }
-            CodeCommand::Test { file, framework, output } => {
+            CodeCommand::Test {
+                file,
+                framework,
+                output,
+            } => {
                 let code = std::fs::read_to_string(&file)?;
                 let progress = TaskProgress::new("Generating tests");
                 let tests = client.generate_tests(&code, framework.as_deref()).await?;
                 progress.finish_success(None);
-                
+
                 if let Some(path) = output {
                     std::fs::write(&path, &tests)?;
                     println!("✅ Tests saved to {}", path.display());
@@ -1052,30 +1188,47 @@ pub async fn execute(args: InferArgs) -> Result<()> {
             CodeCommand::Doc { file, format } => {
                 let code = std::fs::read_to_string(&file)?;
                 let progress = TaskProgress::new("Generating documentation");
-                let docs = client.generate_docs(&code, &format!("{:?}", format).to_lowercase()).await?;
+                let docs = client
+                    .generate_docs(&code, &format!("{:?}", format).to_lowercase())
+                    .await?;
                 progress.finish_success(None);
                 println!("{}", docs);
             }
         },
 
         InferCommand::Multimodal(cmd) => match cmd {
-            MultimodalCommand::Chat { image, prompt, model } => {
+            MultimodalCommand::Chat {
+                image,
+                prompt,
+                model,
+            } => {
                 let progress = TaskProgress::new("Processing");
-                let response = client.multimodal_chat(&image, &prompt, model.as_deref()).await?;
+                let response = client
+                    .multimodal_chat(&image, &prompt, model.as_deref())
+                    .await?;
                 progress.finish_success(None);
                 println!("🤖 {}\n", response);
             }
-            MultimodalCommand::Document { file, question, structured } => {
+            MultimodalCommand::Document {
+                file,
+                question,
+                structured,
+            } => {
                 let progress = TaskProgress::new("Analyzing document");
-                let result = client.analyze_document(&file, &question, structured).await?;
+                let result = client
+                    .analyze_document(&file, &question, structured)
+                    .await?;
                 progress.finish_success(None);
-                
+
                 if structured {
-                    println!("📄 Structured Data:\n{}", serde_json::to_string_pretty(&result.data)?);
+                    println!(
+                        "📄 Structured Data:\n{}",
+                        serde_json::to_string_pretty(&result.data)?
+                    );
                 } else {
                     println!("📄 Document Analysis:\n{}", result.text);
                 }
-                
+
                 if !question.is_empty() {
                     println!("\n❓ Answers:");
                     for (q, a) in result.answers {
@@ -1189,21 +1342,25 @@ impl Transcription {
     fn to_srt(&self) -> String {
         let mut srt = String::new();
         for (i, seg) in self.segments.iter().enumerate() {
-            srt.push_str(&format!("{}\n{} --> {}\n{}\n\n", 
-                i + 1, 
-                format_time(seg.start), 
-                format_time(seg.end), 
-                seg.text));
+            srt.push_str(&format!(
+                "{}\n{} --> {}\n{}\n\n",
+                i + 1,
+                format_time(seg.start),
+                format_time(seg.end),
+                seg.text
+            ));
         }
         srt
     }
     fn to_vtt(&self) -> String {
         let mut vtt = "WEBVTT\n\n".to_string();
         for seg in &self.segments {
-            vtt.push_str(&format!("{} --> {}\n{}\n\n", 
-                format_time(seg.start), 
-                format_time(seg.end), 
-                seg.text));
+            vtt.push_str(&format!(
+                "{} --> {}\n{}\n\n",
+                format_time(seg.start),
+                format_time(seg.end),
+                seg.text
+            ));
         }
         vtt
     }
@@ -1266,45 +1423,115 @@ struct DocumentAnalysis {
     answers: Vec<(String, String)>,
 }
 
-use futures::Stream;
 use std::pin::Pin;
+
+use futures::Stream;
 
 // Client extension trait
 trait InferClient {
     async fn list_capabilities(&self, category: Option<&str>) -> Result<Vec<Capability>>;
     async fn get_capability(&self, id: &str) -> Result<Capability>;
     async fn generate_text(&self, request: &TextRequest) -> Result<TextResponse>;
-    async fn stream_text(&self, request: &TextRequest) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>>;
+    async fn stream_text(
+        &self,
+        request: &TextRequest,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>>;
     async fn summarize(&self, text: &str, length: &str) -> Result<String>;
     async fn analyze_sentiment(&self, text: &str) -> Result<SentimentResult>;
     async fn extract_entities(&self, text: &str, types: &[String]) -> Result<Vec<Entity>>;
     async fn classify_text(&self, text: &str, categories: &[String]) -> Result<Vec<(String, f32)>>;
     async fn translate(&self, text: &str, to: &str, from: Option<&str>) -> Result<Translation>;
-    async fn answer_question(&self, question: &str, context: Option<&str>, web_search: bool) -> Result<Answer>;
+    async fn answer_question(
+        &self,
+        question: &str,
+        context: Option<&str>,
+        web_search: bool,
+    ) -> Result<Answer>;
     async fn generate_image(&self, request: &ImageGenRequest) -> Result<ImageGenResult>;
-    async fn edit_image(&self, image: &PathBuf, prompt: &str, mask: Option<&PathBuf>, output: Option<&PathBuf>) -> Result<()>;
-    async fn create_image_variations(&self, image: &PathBuf, n: u32, output: Option<&PathBuf>) -> Result<Vec<PathBuf>>;
-    async fn describe_image(&self, image: &str, detail: &str, question: Option<&str>) -> Result<ImageAnalysis>;
+    async fn edit_image(
+        &self,
+        image: &PathBuf,
+        prompt: &str,
+        mask: Option<&PathBuf>,
+        output: Option<&PathBuf>,
+    ) -> Result<()>;
+    async fn create_image_variations(
+        &self,
+        image: &PathBuf,
+        n: u32,
+        output: Option<&PathBuf>,
+    ) -> Result<Vec<PathBuf>>;
+    async fn describe_image(
+        &self,
+        image: &str,
+        detail: &str,
+        question: Option<&str>,
+    ) -> Result<ImageAnalysis>;
     async fn ocr_image(&self, image: &PathBuf) -> Result<String>;
-    async fn transcribe_audio(&self, file: &PathBuf, language: Option<&str>, timestamps: bool) -> Result<Transcription>;
+    async fn transcribe_audio(
+        &self,
+        file: &PathBuf,
+        language: Option<&str>,
+        timestamps: bool,
+    ) -> Result<Transcription>;
     async fn translate_audio(&self, file: &PathBuf) -> Result<Transcription>;
     async fn generate_audio(&self, prompt: &str, duration: Option<f32>) -> Result<Vec<u8>>;
-    async fn text_to_speech(&self, text: &str, voice: Option<&str>, speed: Option<f32>) -> Result<Vec<u8>>;
+    async fn text_to_speech(
+        &self,
+        text: &str,
+        voice: Option<&str>,
+        speed: Option<f32>,
+    ) -> Result<Vec<u8>>;
     async fn list_voices(&self, language: Option<&str>) -> Result<Vec<Voice>>;
-    async fn web_search(&self, query: &str, limit: usize, site: Option<&str>) -> Result<Vec<SearchResult>>;
+    async fn web_search(
+        &self,
+        query: &str,
+        limit: usize,
+        site: Option<&str>,
+    ) -> Result<Vec<SearchResult>>;
     async fn fetch_webpage(&self, url: &str, extract: bool, format: &str) -> Result<String>;
-    async fn crawl_website(&self, url: &str, max_pages: usize, same_domain: bool) -> Result<Vec<CrawledPage>>;
-    async fn create_embeddings(&self, texts: &[String], model: Option<&str>, batch_size: usize) -> Result<Vec<Vec<f32>>>;
-    async fn calculate_similarity(&self, text1: &str, text2: &str, model: Option<&str>) -> Result<f32>;
+    async fn crawl_website(
+        &self,
+        url: &str,
+        max_pages: usize,
+        same_domain: bool,
+    ) -> Result<Vec<CrawledPage>>;
+    async fn create_embeddings(
+        &self,
+        texts: &[String],
+        model: Option<&str>,
+        batch_size: usize,
+    ) -> Result<Vec<Vec<f32>>>;
+    async fn calculate_similarity(
+        &self,
+        text1: &str,
+        text2: &str,
+        model: Option<&str>,
+    ) -> Result<f32>;
     async fn cluster_texts(&self, texts: &[String], n_clusters: usize) -> Result<Vec<Cluster>>;
-    async fn complete_code(&self, code: &str, language: Option<&str>, context: &[String]) -> Result<String>;
+    async fn complete_code(
+        &self,
+        code: &str,
+        language: Option<&str>,
+        context: &[String],
+    ) -> Result<String>;
     async fn explain_code(&self, code: &str, detail: &str) -> Result<String>;
     async fn review_code(&self, code: &str, focus: &[String]) -> Result<CodeReview>;
     async fn fix_code(&self, code: &str, issue: Option<&str>) -> Result<String>;
     async fn generate_tests(&self, code: &str, framework: Option<&str>) -> Result<String>;
     async fn generate_docs(&self, code: &str, format: &str) -> Result<String>;
-    async fn multimodal_chat(&self, images: &[PathBuf], prompt: &str, model: Option<&str>) -> Result<String>;
-    async fn analyze_document(&self, file: &PathBuf, questions: &[String], structured: bool) -> Result<DocumentAnalysis>;
+    async fn multimodal_chat(
+        &self,
+        images: &[PathBuf],
+        prompt: &str,
+        model: Option<&str>,
+    ) -> Result<String>;
+    async fn analyze_document(
+        &self,
+        file: &PathBuf,
+        questions: &[String],
+        structured: bool,
+    ) -> Result<DocumentAnalysis>;
 }
 
 // Stub implementations
@@ -1318,7 +1545,10 @@ impl InferClient for crate::client::ApiClient {
     async fn generate_text(&self, _request: &TextRequest) -> Result<TextResponse> {
         anyhow::bail!("Not implemented")
     }
-    async fn stream_text(&self, _request: &TextRequest) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
+    async fn stream_text(
+        &self,
+        _request: &TextRequest,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
         anyhow::bail!("Not implemented")
     }
     async fn summarize(&self, _text: &str, _length: &str) -> Result<String> {
@@ -1330,31 +1560,61 @@ impl InferClient for crate::client::ApiClient {
     async fn extract_entities(&self, _text: &str, _types: &[String]) -> Result<Vec<Entity>> {
         Ok(vec![])
     }
-    async fn classify_text(&self, _text: &str, _categories: &[String]) -> Result<Vec<(String, f32)>> {
+    async fn classify_text(
+        &self,
+        _text: &str,
+        _categories: &[String],
+    ) -> Result<Vec<(String, f32)>> {
         Ok(vec![])
     }
     async fn translate(&self, _text: &str, _to: &str, _from: Option<&str>) -> Result<Translation> {
         anyhow::bail!("Not implemented")
     }
-    async fn answer_question(&self, _question: &str, _context: Option<&str>, _web_search: bool) -> Result<Answer> {
+    async fn answer_question(
+        &self,
+        _question: &str,
+        _context: Option<&str>,
+        _web_search: bool,
+    ) -> Result<Answer> {
         anyhow::bail!("Not implemented")
     }
     async fn generate_image(&self, _request: &ImageGenRequest) -> Result<ImageGenResult> {
         anyhow::bail!("Not implemented")
     }
-    async fn edit_image(&self, _image: &PathBuf, _prompt: &str, _mask: Option<&PathBuf>, _output: Option<&PathBuf>) -> Result<()> {
+    async fn edit_image(
+        &self,
+        _image: &PathBuf,
+        _prompt: &str,
+        _mask: Option<&PathBuf>,
+        _output: Option<&PathBuf>,
+    ) -> Result<()> {
         Ok(())
     }
-    async fn create_image_variations(&self, _image: &PathBuf, _n: u32, _output: Option<&PathBuf>) -> Result<Vec<PathBuf>> {
+    async fn create_image_variations(
+        &self,
+        _image: &PathBuf,
+        _n: u32,
+        _output: Option<&PathBuf>,
+    ) -> Result<Vec<PathBuf>> {
         Ok(vec![])
     }
-    async fn describe_image(&self, _image: &str, _detail: &str, _question: Option<&str>) -> Result<ImageAnalysis> {
+    async fn describe_image(
+        &self,
+        _image: &str,
+        _detail: &str,
+        _question: Option<&str>,
+    ) -> Result<ImageAnalysis> {
         anyhow::bail!("Not implemented")
     }
     async fn ocr_image(&self, _image: &PathBuf) -> Result<String> {
         anyhow::bail!("Not implemented")
     }
-    async fn transcribe_audio(&self, _file: &PathBuf, _language: Option<&str>, _timestamps: bool) -> Result<Transcription> {
+    async fn transcribe_audio(
+        &self,
+        _file: &PathBuf,
+        _language: Option<&str>,
+        _timestamps: bool,
+    ) -> Result<Transcription> {
         anyhow::bail!("Not implemented")
     }
     async fn translate_audio(&self, _file: &PathBuf) -> Result<Transcription> {
@@ -1363,38 +1623,71 @@ impl InferClient for crate::client::ApiClient {
     async fn generate_audio(&self, _prompt: &str, _duration: Option<f32>) -> Result<Vec<u8>> {
         anyhow::bail!("Not implemented")
     }
-    async fn text_to_speech(&self, _text: &str, _voice: Option<&str>, _speed: Option<f32>) -> Result<Vec<u8>> {
+    async fn text_to_speech(
+        &self,
+        _text: &str,
+        _voice: Option<&str>,
+        _speed: Option<f32>,
+    ) -> Result<Vec<u8>> {
         anyhow::bail!("Not implemented")
     }
     async fn list_voices(&self, _language: Option<&str>) -> Result<Vec<Voice>> {
         Ok(vec![])
     }
-    async fn web_search(&self, _query: &str, _limit: usize, _site: Option<&str>) -> Result<Vec<SearchResult>> {
+    async fn web_search(
+        &self,
+        _query: &str,
+        _limit: usize,
+        _site: Option<&str>,
+    ) -> Result<Vec<SearchResult>> {
         Ok(vec![])
     }
     async fn fetch_webpage(&self, _url: &str, _extract: bool, _format: &str) -> Result<String> {
         anyhow::bail!("Not implemented")
     }
-    async fn crawl_website(&self, _url: &str, _max_pages: usize, _same_domain: bool) -> Result<Vec<CrawledPage>> {
+    async fn crawl_website(
+        &self,
+        _url: &str,
+        _max_pages: usize,
+        _same_domain: bool,
+    ) -> Result<Vec<CrawledPage>> {
         Ok(vec![])
     }
-    async fn create_embeddings(&self, _texts: &[String], _model: Option<&str>, _batch_size: usize) -> Result<Vec<Vec<f32>>> {
+    async fn create_embeddings(
+        &self,
+        _texts: &[String],
+        _model: Option<&str>,
+        _batch_size: usize,
+    ) -> Result<Vec<Vec<f32>>> {
         Ok(vec![])
     }
-    async fn calculate_similarity(&self, _text1: &str, _text2: &str, _model: Option<&str>) -> Result<f32> {
+    async fn calculate_similarity(
+        &self,
+        _text1: &str,
+        _text2: &str,
+        _model: Option<&str>,
+    ) -> Result<f32> {
         Ok(0.0)
     }
     async fn cluster_texts(&self, _texts: &[String], _n_clusters: usize) -> Result<Vec<Cluster>> {
         Ok(vec![])
     }
-    async fn complete_code(&self, _code: &str, _language: Option<&str>, _context: &[String]) -> Result<String> {
+    async fn complete_code(
+        &self,
+        _code: &str,
+        _language: Option<&str>,
+        _context: &[String],
+    ) -> Result<String> {
         anyhow::bail!("Not implemented")
     }
     async fn explain_code(&self, _code: &str, _detail: &str) -> Result<String> {
         anyhow::bail!("Not implemented")
     }
     async fn review_code(&self, _code: &str, _focus: &[String]) -> Result<CodeReview> {
-        Ok(CodeReview { summary: String::new(), issues: vec![] })
+        Ok(CodeReview {
+            summary: String::new(),
+            issues: vec![],
+        })
     }
     async fn fix_code(&self, _code: &str, _issue: Option<&str>) -> Result<String> {
         anyhow::bail!("Not implemented")
@@ -1405,10 +1698,20 @@ impl InferClient for crate::client::ApiClient {
     async fn generate_docs(&self, _code: &str, _format: &str) -> Result<String> {
         anyhow::bail!("Not implemented")
     }
-    async fn multimodal_chat(&self, _images: &[PathBuf], _prompt: &str, _model: Option<&str>) -> Result<String> {
+    async fn multimodal_chat(
+        &self,
+        _images: &[PathBuf],
+        _prompt: &str,
+        _model: Option<&str>,
+    ) -> Result<String> {
         anyhow::bail!("Not implemented")
     }
-    async fn analyze_document(&self, _file: &PathBuf, _questions: &[String], _structured: bool) -> Result<DocumentAnalysis> {
+    async fn analyze_document(
+        &self,
+        _file: &PathBuf,
+        _questions: &[String],
+        _structured: bool,
+    ) -> Result<DocumentAnalysis> {
         anyhow::bail!("Not implemented")
     }
 }

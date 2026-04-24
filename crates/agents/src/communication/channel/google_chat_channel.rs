@@ -12,18 +12,20 @@
 //! # API Reference
 //! - <https://developers.google.com/chat/api/reference/rest>
 
-use super::r#trait::{
-    BaseChannelConfig, Channel, ChannelConfig, ChannelEvent, ChannelInfo, ChannelType, ConnectionMode,
-    ContentType, MemberInfo,
-};
-use crate::communication::{Message, MessageType, PlatformType};
-use crate::error::{AgentError, Result};
+use std::collections::HashMap;
+
 use async_trait::async_trait;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use tokio::sync::mpsc;
 use tracing::{debug, error, info, warn};
+
+use super::r#trait::{
+    BaseChannelConfig, Channel, ChannelConfig, ChannelEvent, ChannelInfo, ChannelType,
+    ConnectionMode, ContentType, MemberInfo,
+};
+use crate::communication::{Message, MessageType, PlatformType};
+use crate::error::{AgentError, Result};
 
 /// Google Chat API base URL
 const GOOGLE_CHAT_API_BASE: &str = "https://chat.googleapis.com/v1";
@@ -81,7 +83,10 @@ impl GoogleChatConfig {
             // Format: https://chat.googleapis.com/v1/spaces/{space_id}/messages
             if let Some(start) = url.find("/spaces/") {
                 let start = start + 8;
-                let end = url[start..].find('/').map(|i| start + i).unwrap_or(url.len());
+                let end = url[start..]
+                    .find('/')
+                    .map(|i| start + i)
+                    .unwrap_or(url.len());
                 return Some(url[start..end].to_string());
             }
         }
@@ -94,7 +99,7 @@ impl Default for GoogleChatConfig {
         let mut base = BaseChannelConfig::default();
         // Google Chat uses Webhook mode
         base.connection_mode = ConnectionMode::Webhook;
-        
+
         Self {
             service_account_key: None,
             webhook_url: None,
@@ -145,7 +150,9 @@ impl GoogleChatChannel {
         let client = Client::builder()
             .timeout(std::time::Duration::from_secs(30))
             .build()
-            .map_err(|e| AgentError::configuration(format!("Failed to create HTTP client: {}", e)))?;
+            .map_err(|e| {
+                AgentError::configuration(format!("Failed to create HTTP client: {}", e))
+            })?;
 
         Ok(Self {
             config,
@@ -446,10 +453,9 @@ impl GoogleChatWebhookHandler {
                         ),
                     };
 
-                    self.event_sender
-                        .send(channel_event)
-                        .await
-                        .map_err(|e| AgentError::platform(format!("Failed to send event: {}", e)))?;
+                    self.event_sender.send(channel_event).await.map_err(|e| {
+                        AgentError::platform(format!("Failed to send event: {}", e))
+                    })?;
                 }
             }
             _ => {

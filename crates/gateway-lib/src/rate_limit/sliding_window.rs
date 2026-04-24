@@ -1,11 +1,13 @@
 //! Sliding Window Rate Limiter
 //!
 //! More accurate than fixed window, distributes rate limit smoothly over time.
-//! Uses a sliding time window to count requests, preventing burst at window boundaries.
+//! Uses a sliding time window to count requests, preventing burst at window
+//! boundaries.
 
 use std::collections::VecDeque;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+
 use tokio::sync::RwLock;
 
 use super::{RateLimitConfig, RateLimitResult, RateLimiter};
@@ -117,11 +119,13 @@ impl WindowState {
 
 /// Sliding window rate limiter
 ///
-/// Provides smooth rate limiting without the boundary burst issues of fixed window.
+/// Provides smooth rate limiting without the boundary burst issues of fixed
+/// window.
 ///
 /// # Example
 /// ```rust
 /// use std::time::Duration;
+///
 /// use beebotos_gateway_lib::rate_limit::sliding_window::SlidingWindowRateLimiter;
 /// use beebotos_gateway_lib::rate_limit::RateLimiter;
 ///
@@ -244,7 +248,8 @@ impl RateLimiter for SlidingWindowRateLimiter {
 
 /// Sliding window with sub-window granularity (more memory efficient)
 ///
-/// Divides the window into smaller sub-windows for approximate but efficient counting.
+/// Divides the window into smaller sub-windows for approximate but efficient
+/// counting.
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
 pub struct ApproximateSlidingWindow {
@@ -266,7 +271,8 @@ impl ApproximateSlidingWindow {
     /// # Arguments
     /// * `max_requests` - Max requests per full window
     /// * `window_size` - Total window duration
-    /// * `sub_windows` - Number of sub-windows (higher = more accurate, more memory)
+    /// * `sub_windows` - Number of sub-windows (higher = more accurate, more
+    ///   memory)
     pub fn new(max_requests: u32, window_size: Duration, sub_windows: usize) -> Self {
         let sub_windows = sub_windows.max(2);
         let sub_window_duration = window_size / sub_windows as u32;
@@ -395,8 +401,9 @@ impl RateLimiter for ApproximateSlidingWindow {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use tokio::time::{sleep, Duration};
+
+    use super::*;
 
     #[tokio::test]
     async fn test_sliding_window_basic() {

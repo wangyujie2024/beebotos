@@ -2,13 +2,15 @@
 //!
 //! Provides chain-agnostic provider functionality for EVM chains.
 
-use crate::compat::{Address, U256};
-use crate::contracts::HttpProvider;
-use alloy_provider::Provider;
-use alloy_rpc_types::TransactionRequest;
 use std::sync::Arc;
 use std::time::Duration;
+
+use alloy_provider::Provider;
+use alloy_rpc_types::TransactionRequest;
 use tokio::sync::RwLock;
+
+use crate::compat::{Address, U256};
+use crate::contracts::HttpProvider;
 
 /// Generic EVM provider wrapper
 #[derive(Debug, Clone)]

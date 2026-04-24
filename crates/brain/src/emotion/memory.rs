@@ -4,9 +4,11 @@
 
 #![allow(dead_code)]
 
-use super::state::{EmotionState, EmotionType};
 use std::collections::HashMap;
+
 use uuid::Uuid;
+
+use super::state::{EmotionState, EmotionType};
 
 /// Emotional memory entry
 #[derive(Debug, Clone)]

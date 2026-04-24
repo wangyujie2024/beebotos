@@ -3,18 +3,20 @@
 //! Provides infrastructure for calling smart contracts with metrics,
 //! retry logic, and proper error handling.
 
-use crate::compat::retry::{with_retry, RetryConfig};
-use crate::compat::{Address, B256, U256};
-use crate::metrics::ContractMetrics;
-use crate::{ChainError, Result};
+use std::marker::PhantomData;
+use std::sync::Arc;
+
 use alloy_network::Network;
 use alloy_primitives::Bytes;
 use alloy_provider::Provider;
 use alloy_rpc_types::TransactionReceipt;
 use alloy_sol_types::SolCall;
-use std::marker::PhantomData;
-use std::sync::Arc;
 use tracing::{debug, info, instrument};
+
+use crate::compat::retry::{with_retry, RetryConfig};
+use crate::compat::{Address, B256, U256};
+use crate::metrics::ContractMetrics;
+use crate::{ChainError, Result};
 
 /// Contract call options
 #[derive(Debug, Clone)]

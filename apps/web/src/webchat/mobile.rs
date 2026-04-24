@@ -97,7 +97,7 @@ impl MobileAdapter {
         {
             return MobilePlatform::Desktop;
         }
-        
+
         #[cfg(target_arch = "wasm32")]
         {
             if let Some(window) = web_sys::window() {

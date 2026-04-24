@@ -1,7 +1,8 @@
 //! DeFi Module
 
-use crate::compat::{Address, U256};
 use serde::{Deserialize, Serialize};
+
+use crate::compat::{Address, U256};
 
 /// DEX trait
 #[async_trait::async_trait]

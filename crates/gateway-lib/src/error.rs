@@ -6,14 +6,13 @@
 //! - Error tracing/logging integration
 //! - Generic error conversion support
 
-use axum::{
-    http::StatusCode,
-    response::{IntoResponse, Response},
-    Json,
-};
+use std::fmt;
+
+use axum::http::StatusCode;
+use axum::response::{IntoResponse, Response};
+use axum::Json;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::fmt;
 use tracing::{debug, error, warn};
 
 /// Gateway error types
@@ -207,13 +206,15 @@ impl GatewayError {
 
     /// Create internal error
     ///
-    /// 🟠 HIGH SECURITY FIX: Logs detailed error internally but returns generic message to user
-    /// This prevents sensitive internal details from being exposed to attackers
+    /// 🟠 HIGH SECURITY FIX: Logs detailed error internally but returns generic
+    /// message to user This prevents sensitive internal details from being
+    /// exposed to attackers
     pub fn internal(message: impl Into<String>) -> Self {
         let correlation_id = uuid::Uuid::new_v4().to_string();
         let internal_message = message.into();
 
-        // Log detailed error internally for debugging (contains potentially sensitive info)
+        // Log detailed error internally for debugging (contains potentially sensitive
+        // info)
         error!(
             correlation_id = %correlation_id,
             error_message = %internal_message,
@@ -374,8 +375,15 @@ impl fmt::Display for GatewayError {
             }
             Self::BadRequest { message, .. } => write!(f, "Bad request: {}", message),
             Self::Validation { errors } => write!(f, "Validation failed: {} errors", errors.len()),
-            Self::Internal { message, correlation_id } => {
-                write!(f, "Internal error: {} (correlation_id: {})", message, correlation_id)
+            Self::Internal {
+                message,
+                correlation_id,
+            } => {
+                write!(
+                    f,
+                    "Internal error: {} (correlation_id: {})",
+                    message, correlation_id
+                )
             }
             Self::ServiceUnavailable { service, .. } => {
                 write!(f, "Service '{}' unavailable", service)

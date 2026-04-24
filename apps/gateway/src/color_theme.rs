@@ -6,10 +6,11 @@
 //! - Command line arguments (--theme, --no-color)
 //! - CI/Log-friendly no-color mode
 
-use colored::Colorize;
-use serde::{Deserialize, Serialize};
 use std::env;
 use std::str::FromStr;
+
+use colored::Colorize;
+use serde::{Deserialize, Serialize};
 
 /// Available color themes for the configuration wizard
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, Serialize)]
@@ -280,7 +281,11 @@ impl FromStr for ColorTheme {
             "high_contrast" | "high-contrast" | "highcontrast" => Ok(ColorTheme::HighContrast),
             "minimal" => Ok(ColorTheme::Minimal),
             "no_color" | "no-color" | "nocolor" | "none" => Ok(ColorTheme::NoColor),
-            _ => Err(format!("Unknown theme: {}. Available themes: default, dark, light, high_contrast, minimal, no_color", s)),
+            _ => Err(format!(
+                "Unknown theme: {}. Available themes: default, dark, light, high_contrast, \
+                 minimal, no_color",
+                s
+            )),
         }
     }
 }
@@ -551,14 +556,32 @@ mod tests {
 
     #[test]
     fn test_color_theme_from_str() {
-        assert_eq!(ColorTheme::from_str("default").unwrap(), ColorTheme::Default);
+        assert_eq!(
+            ColorTheme::from_str("default").unwrap(),
+            ColorTheme::Default
+        );
         assert_eq!(ColorTheme::from_str("dark").unwrap(), ColorTheme::Dark);
         assert_eq!(ColorTheme::from_str("light").unwrap(), ColorTheme::Light);
-        assert_eq!(ColorTheme::from_str("high_contrast").unwrap(), ColorTheme::HighContrast);
-        assert_eq!(ColorTheme::from_str("high-contrast").unwrap(), ColorTheme::HighContrast);
-        assert_eq!(ColorTheme::from_str("minimal").unwrap(), ColorTheme::Minimal);
-        assert_eq!(ColorTheme::from_str("no_color").unwrap(), ColorTheme::NoColor);
-        assert_eq!(ColorTheme::from_str("no-color").unwrap(), ColorTheme::NoColor);
+        assert_eq!(
+            ColorTheme::from_str("high_contrast").unwrap(),
+            ColorTheme::HighContrast
+        );
+        assert_eq!(
+            ColorTheme::from_str("high-contrast").unwrap(),
+            ColorTheme::HighContrast
+        );
+        assert_eq!(
+            ColorTheme::from_str("minimal").unwrap(),
+            ColorTheme::Minimal
+        );
+        assert_eq!(
+            ColorTheme::from_str("no_color").unwrap(),
+            ColorTheme::NoColor
+        );
+        assert_eq!(
+            ColorTheme::from_str("no-color").unwrap(),
+            ColorTheme::NoColor
+        );
         assert!(ColorTheme::from_str("unknown").is_err());
     }
 

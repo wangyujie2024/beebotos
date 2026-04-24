@@ -15,43 +15,39 @@ pub mod webhook;
 pub mod message_history;
 
 // Multi-user multi-agent channel architecture
-pub mod user_channel;
 pub mod agent_channel;
 pub mod channel_instance_manager;
 pub mod message_router_v2;
 pub mod offline_message_store;
 pub mod offline_message_store_sqlite;
-
-pub use message_history::{
-    MessageHistoryStore, MessageEditRecord, MessageDeletionRecord, MessagePinRecord,
-    MessageSnapshot, HistoryQuery, HistoryQueryResult, OperationType,
-    ChannelHistoryExport, MessageHistoryStats, SearchResult,
-};
-
-pub use user_channel::{
-    ChannelBindingStatus, ChannelInstanceId, ChannelInstanceRef,
-    PlatformCredentials, UserChannelBinding, UserChannelConfig,
-};
-pub use agent_channel::{AgentChannelBinding, RoutingRules};
-pub use channel_instance_manager::{ChannelInstanceManager, ChannelInstanceStatus};
-pub use message_router_v2::{
-    AgentMessageDispatcher, InboundMessageRouter, OutboundMessageRouter,
-    ReplyRoute, RoutingDecision, UserMessageContext,
-};
-pub use offline_message_store::OfflineMessageStore;
-pub use offline_message_store_sqlite::{
-    MemoryOfflineMessageStore, SqliteOfflineMessageStore,
-};
+pub mod user_channel;
 
 use std::collections::HashMap;
 use std::sync::Arc;
 
+pub use agent_channel::{AgentChannelBinding, RoutingRules};
 use async_trait::async_trait;
+pub use channel_instance_manager::{ChannelInstanceManager, ChannelInstanceStatus};
+pub use message_history::{
+    ChannelHistoryExport, HistoryQuery, HistoryQueryResult, MessageDeletionRecord,
+    MessageEditRecord, MessageHistoryStats, MessageHistoryStore, MessagePinRecord, MessageSnapshot,
+    OperationType, SearchResult,
+};
+pub use message_router_v2::{
+    AgentMessageDispatcher, InboundMessageRouter, OutboundMessageRouter, ReplyRoute,
+    RoutingDecision, UserMessageContext,
+};
+pub use offline_message_store::OfflineMessageStore;
+pub use offline_message_store_sqlite::{MemoryOfflineMessageStore, SqliteOfflineMessageStore};
 pub use router::{CommunicationRouter, RouteConfig};
 use serde::{Deserialize, Serialize};
 pub use thread::{Thread, ThreadManager};
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
+pub use user_channel::{
+    ChannelBindingStatus, ChannelInstanceId, ChannelInstanceRef, PlatformCredentials,
+    UserChannelBinding, UserChannelConfig,
+};
 use uuid::Uuid;
 pub use voice::{VoiceConfig, VoiceHandler};
 
@@ -514,7 +510,7 @@ impl DefaultLLMInterface {
 
     /// Create with default OpenAI provider from environment
     pub async fn from_env() -> Result<Self> {
-        use crate::llm::providers::{OpenAIProvider, OpenAIConfig};
+        use crate::llm::providers::{OpenAIConfig, OpenAIProvider};
 
         let config = OpenAIConfig::from_env()
             .map_err(|e| AgentError::InvalidConfig(format!("OpenAI config error: {}", e)))?;

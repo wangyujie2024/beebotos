@@ -6,14 +6,13 @@
 //! - Dependency health checks
 //! - Health aggregation
 
-use axum::{
-    http::StatusCode,
-    response::{IntoResponse, Json},
-};
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+
+use axum::http::StatusCode;
+use axum::response::{IntoResponse, Json};
+use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
 use crate::config::HealthConfig;
@@ -156,7 +155,8 @@ impl HealthRegistry {
                 for check in checks_list {
                     // Respect individual check intervals
                     let check_interval = check.interval().as_secs();
-                    // Only run check if enough time has passed (simplified - would need per-check tracking in production)
+                    // Only run check if enough time has passed (simplified - would need per-check
+                    // tracking in production)
                     if check_interval <= interval_seconds {
                         let health = check.check().await;
                         let mut results = results.write().await;
@@ -235,7 +235,8 @@ impl HealthCheck for PingHealthCheck {
         &self.name
     }
 
-    /// 🟠 HIGH SECURITY FIX: Explicitly closes TCP connection to prevent resource leaks
+    /// 🟠 HIGH SECURITY FIX: Explicitly closes TCP connection to prevent
+    /// resource leaks
     async fn check(&self) -> ComponentHealth {
         let start = Instant::now();
 
@@ -404,8 +405,9 @@ impl HealthCheck for DatabaseHealthCheck {
 
 /// Health check HTTP handlers
 pub mod handlers {
-    use super::*;
     use axum::extract::State;
+
+    use super::*;
 
     /// Liveness probe handler
     pub async fn liveness(State(registry): State<Arc<HealthRegistry>>) -> impl IntoResponse {

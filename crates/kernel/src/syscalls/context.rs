@@ -3,8 +3,9 @@
 //! Provides a clean dependency injection container for system calls,
 //! replacing global static variables with proper dependency management.
 
-use parking_lot::RwLock;
 use std::sync::Arc;
+
+use parking_lot::RwLock;
 
 use crate::capabilities::{CapabilityLevel, CapabilityManager};
 use crate::ipc::router::MessageRouter;

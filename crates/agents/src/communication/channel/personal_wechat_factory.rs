@@ -1,7 +1,8 @@
 //! Personal WeChat Channel Factory (iLink Protocol)
 //!
 //! Factory implementation for creating PersonalWeChatChannel instances.
-//! Uses Tencent's official iLink Bot API for direct WeChat personal account integration.
+//! Uses Tencent's official iLink Bot API for direct WeChat personal account
+//! integration.
 //!
 //! Features:
 //! - QR code login with 24h session
@@ -15,16 +16,14 @@ use serde_json::Value;
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
-use super::{
-    Channel, ChannelFactory,
-    personal_wechat_channel::{PersonalWeChatChannel, PersonalWeChatConfig},
-};
+use super::personal_wechat_channel::{PersonalWeChatChannel, PersonalWeChatConfig};
+use super::{Channel, ChannelFactory};
 
 /// Factory for creating Personal WeChat channels via iLink protocol
 ///
 /// # Example
 /// ```
-/// use beebotos_agents::communication::channel::{PersonalWeChatFactory, ChannelFactory};
+/// use beebotos_agents::communication::channel::{ChannelFactory, PersonalWeChatFactory};
 ///
 /// let factory = PersonalWeChatFactory::new();
 /// assert_eq!(factory.name(), "personal_wechat");
@@ -69,10 +68,7 @@ impl ChannelFactory for PersonalWeChatFactory {
         super::PlatformType::WeChat
     }
 
-    async fn create(
-        &self,
-        config: &Value,
-    ) -> crate::error::Result<Arc<RwLock<dyn Channel>>> {
+    async fn create(&self, config: &Value) -> crate::error::Result<Arc<RwLock<dyn Channel>>> {
         debug!("Creating Personal WeChat channel from config (iLink protocol)");
 
         // Extract base URL for iLink API
@@ -183,7 +179,10 @@ impl ChannelFactory for PersonalWeChatFactory {
         if let Some(warning_secs) = config.get("warning_before_secs").and_then(|v| v.as_u64()) {
             if let Some(force_secs) = config.get("force_before_secs").and_then(|v| v.as_u64()) {
                 if warning_secs <= force_secs {
-                    warn!("Personal WeChat config validation failed: warning_before_secs must be greater than force_before_secs");
+                    warn!(
+                        "Personal WeChat config validation failed: warning_before_secs must be \
+                         greater than force_before_secs"
+                    );
                     return false;
                 }
             }
@@ -258,12 +257,20 @@ mod tests {
             "https://ilinkai.weixin.qq.com"
         );
         assert_eq!(
-            default.get("reconnect_interval_secs").unwrap().as_u64().unwrap(),
+            default
+                .get("reconnect_interval_secs")
+                .unwrap()
+                .as_u64()
+                .unwrap(),
             300
         );
         assert!(default.get("auto_reconnect").unwrap().as_bool().unwrap());
         assert_eq!(
-            default.get("warning_before_secs").unwrap().as_u64().unwrap(),
+            default
+                .get("warning_before_secs")
+                .unwrap()
+                .as_u64()
+                .unwrap(),
             7200
         );
         assert_eq!(

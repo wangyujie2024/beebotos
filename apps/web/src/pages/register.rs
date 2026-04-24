@@ -1,13 +1,14 @@
 //! Register Page
 
-use crate::api::AuthService;
-use crate::i18n::I18nContext;
-use crate::state::{use_auth_state, Permission, Role, User};
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 use leptos::view;
 use leptos_router::components::A;
 use leptos_router::hooks::use_navigate;
+
+use crate::api::AuthService;
+use crate::i18n::I18nContext;
+use crate::state::{use_auth_state, User};
 
 #[component]
 pub fn RegisterPage() -> impl IntoView {
@@ -34,12 +35,18 @@ pub fn RegisterPage() -> impl IntoView {
             }
 
             if password.get() != confirm_password.get() {
-                set_error.set(Some(i18n_stored.get_value().t("register-error-password-mismatch")));
+                set_error.set(Some(
+                    i18n_stored
+                        .get_value()
+                        .t("register-error-password-mismatch"),
+                ));
                 return;
             }
 
             if password.get().len() < 6 {
-                set_error.set(Some(i18n_stored.get_value().t("register-error-password-short")));
+                set_error.set(Some(
+                    i18n_stored.get_value().t("register-error-password-short"),
+                ));
                 return;
             }
 
@@ -55,11 +62,10 @@ pub fn RegisterPage() -> impl IntoView {
                 let auth_service = AuthService::new(client);
 
                 // Try to register via API
-                match auth_service.register(
-                    &username.get(),
-                    &email.get(),
-                    &password.get(),
-                ).await {
+                match auth_service
+                    .register(&username.get(), &email.get(), &password.get())
+                    .await
+                {
                     Ok(response) => {
                         // Convert UserInfo to User
                         let user = User {
@@ -68,40 +74,6 @@ pub fn RegisterPage() -> impl IntoView {
                             email: response.user.email,
                             avatar: response.user.avatar,
                             wallet_address: response.user.wallet_address,
-                            roles: response
-                                .user
-                                .roles
-                                .into_iter()
-                                .map(|r| match r.as_str() {
-                                    "admin" => Role::Admin,
-                                    "operator" => Role::Operator,
-                                    "guest" => Role::Guest,
-                                    _ => Role::Member,
-                                })
-                                .collect(),
-                            permissions: response
-                                .user
-                                .permissions
-                                .into_iter()
-                                .map(|p| match p.as_str() {
-                                    "agentCreate" => Permission::AgentCreate,
-                                    "agentRead" => Permission::AgentRead,
-                                    "agentUpdate" => Permission::AgentUpdate,
-                                    "agentDelete" => Permission::AgentDelete,
-                                    "agentStart" => Permission::AgentStart,
-                                    "agentStop" => Permission::AgentStop,
-                                    "daoVote" => Permission::DaoVote,
-                                    "daoCreateProposal" => Permission::DaoCreateProposal,
-                                    "daoExecute" => Permission::DaoExecute,
-                                    "treasuryView" => Permission::TreasuryView,
-                                    "treasuryDeposit" => Permission::TreasuryDeposit,
-                                    "treasuryWithdraw" => Permission::TreasuryWithdraw,
-                                    "settingsRead" => Permission::SettingsRead,
-                                    "settingsWrite" => Permission::SettingsWrite,
-                                    "userManage" => Permission::UserManage,
-                                    _ => Permission::AgentRead,
-                                })
-                                .collect(),
                         };
 
                         // Set authenticated state
@@ -116,11 +88,7 @@ pub fn RegisterPage() -> impl IntoView {
                         nav("/", Default::default());
                     }
                     Err(e) => {
-                        set_error.set(Some(format!(
-                            "{}: {}",
-                            i18n.t("register-error-failed"),
-                            e
-                        )));
+                        set_error.set(Some(format!("{}: {}", i18n.t("register-error-failed"), e)));
                     }
                 }
 

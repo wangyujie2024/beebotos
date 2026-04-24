@@ -39,7 +39,8 @@ impl ConceptNetClient {
     /// Query ConceptNet for a concept
     ///
     /// # Warning
-    /// This is currently a stub implementation. HTTP client integration is pending.
+    /// This is currently a stub implementation. HTTP client integration is
+    /// pending.
     pub async fn query(&self, concept: &str) -> BrainResult<Vec<Relation>> {
         tracing::info!("Querying ConceptNet for: {}", concept);
         // Note: Full HTTP client implementation requires external API integration

@@ -1,8 +1,9 @@
 //! 侧边提问面板组件
 
+use leptos::prelude::*;
+
 use crate::utils::event_target_value;
 use crate::webchat::SideQuestion;
-use leptos::prelude::*;
 
 /// 侧边提问面板组件
 #[component]
@@ -119,5 +120,3 @@ fn SideQuestionItem(question: SideQuestion) -> impl IntoView {
         </div>
     }
 }
-
-

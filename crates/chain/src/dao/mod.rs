@@ -1,8 +1,9 @@
 //! DAO Module
 
+use serde::{Deserialize, Serialize};
+
 use crate::compat::{Address, B256, U256};
 use crate::Result;
-use serde::{Deserialize, Serialize};
 
 /// Proposal ID
 pub type ProposalId = u64;

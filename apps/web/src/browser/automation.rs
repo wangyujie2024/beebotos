@@ -3,11 +3,12 @@
 //! 提供批量操作、智能延迟点击、多选择器定位等功能
 //! 兼容 OpenClaw V2026.3.13 批处理系统
 
+use serde::{Deserialize, Serialize};
+
 use super::{
     ActionResult, BatchResult, BrowserError, FallbackStrategy, NavigationWait, Selector,
     WaitCondition,
 };
-use serde::{Deserialize, Serialize};
 // HashMap may be used in future implementations
 
 /// 浏览器自动化控制器
@@ -100,9 +101,7 @@ pub enum BrowserAction {
         submit: bool,
     },
     /// 提交表单
-    Submit {
-        selector: SelectorChain,
-    },
+    Submit { selector: SelectorChain },
     /// 页面导航
     Navigate {
         url: String,
@@ -142,18 +141,14 @@ pub enum BrowserAction {
         value: String,
     },
     /// 悬停
-    Hover {
-        selector: SelectorChain,
-    },
+    Hover { selector: SelectorChain },
     /// 获取元素属性
     GetAttribute {
         selector: SelectorChain,
         attribute: String,
     },
     /// 获取元素文本
-    GetText {
-        selector: SelectorChain,
-    },
+    GetText { selector: SelectorChain },
 }
 
 fn default_timeout() -> u64 {
@@ -326,40 +321,47 @@ impl AutomationExecutor {
                 value,
                 clear_first,
                 submit,
-            } => self.execute_input(selector, value, *clear_first, *submit).await,
+            } => {
+                self.execute_input(selector, value, *clear_first, *submit)
+                    .await
+            }
 
             BrowserAction::Navigate {
                 url,
                 wait_until,
                 timeout_ms,
-            } => self.execute_navigate(url, wait_until.clone(), *timeout_ms).await,
-
-            BrowserAction::Wait { condition, timeout_ms } => {
-                self.wait_for(condition, *timeout_ms).await
+            } => {
+                self.execute_navigate(url, wait_until.clone(), *timeout_ms)
+                    .await
             }
+
+            BrowserAction::Wait {
+                condition,
+                timeout_ms,
+            } => self.wait_for(condition, *timeout_ms).await,
 
             BrowserAction::Screenshot {
                 selector,
                 full_page,
-            } => self.execute_screenshot(selector.as_deref(), *full_page).await,
-
-            BrowserAction::Evaluate { script, args } => {
-                self.execute_evaluate(script, args).await
+            } => {
+                self.execute_screenshot(selector.as_deref(), *full_page)
+                    .await
             }
+
+            BrowserAction::Evaluate { script, args } => self.execute_evaluate(script, args).await,
 
             BrowserAction::ScrollTo { selector, behavior } => {
                 self.execute_scroll_to(selector, behavior).await
             }
 
-            BrowserAction::Select { selector, value } => {
-                self.execute_select(selector, value).await
-            }
+            BrowserAction::Select { selector, value } => self.execute_select(selector, value).await,
 
             BrowserAction::Hover { selector } => self.execute_hover(selector).await,
 
-            BrowserAction::GetAttribute { selector, attribute } => {
-                self.execute_get_attribute(selector, attribute).await
-            }
+            BrowserAction::GetAttribute {
+                selector,
+                attribute,
+            } => self.execute_get_attribute(selector, attribute).await,
 
             BrowserAction::GetText { selector } => self.execute_get_text(selector).await,
 
@@ -372,7 +374,9 @@ impl AutomationExecutor {
         self.action_history.push(ActionRecord {
             _timestamp: chrono::Utc::now().to_rfc3339(),
             _action: action.clone(),
-            _result: result.clone().map(|r| serde_json::to_value(r).unwrap_or_default()),
+            _result: result
+                .clone()
+                .map(|r| serde_json::to_value(r).unwrap_or_default()),
         });
 
         match result {
@@ -441,7 +445,10 @@ impl AutomationExecutor {
     }
 
     // 内部执行方法
-    async fn execute_click(&mut self, selector: &SelectorChain) -> Result<serde_json::Value, BrowserError> {
+    async fn execute_click(
+        &mut self,
+        selector: &SelectorChain,
+    ) -> Result<serde_json::Value, BrowserError> {
         // 通过 CDP 执行点击
         let selector_str = selector.to_selector_strings().join(", ");
         let script = format!(

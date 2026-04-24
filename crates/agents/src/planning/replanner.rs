@@ -3,14 +3,14 @@
 //! Dynamic plan adaptation and replanning capabilities.
 //! Handles failures, changing conditions, and new information.
 
-use super::{
-    plan::{Action, Plan, PlanStatus, PlanStep, PlanningResult, Priority, StepStatus},
-    Decomposer, DecompositionContext,
-};
-use tracing::{info, warn};
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Duration;
+
+use serde::{Deserialize, Serialize};
+use tracing::{info, warn};
+
+use super::plan::{Action, Plan, PlanStatus, PlanStep, PlanningResult, Priority, StepStatus};
+use super::{Decomposer, DecompositionContext};
 
 /// RePlanner trait for dynamic plan adaptation
 #[async_trait::async_trait]
@@ -46,9 +46,7 @@ pub enum RePlanTrigger {
         data: serde_json::Value,
     },
     /// Timeout approaching
-    TimeoutWarning {
-        remaining: Duration,
-    },
+    TimeoutWarning { remaining: Duration },
     /// External feedback
     ExternalFeedback {
         source: String,
@@ -62,10 +60,7 @@ pub enum RePlanTrigger {
         available: u64,
     },
     /// Goal changed
-    GoalChanged {
-        new_goal: String,
-        reason: String,
-    },
+    GoalChanged { new_goal: String, reason: String },
 }
 
 impl RePlanTrigger {
@@ -85,8 +80,15 @@ impl RePlanTrigger {
     /// Get description
     pub fn description(&self) -> String {
         match self {
-            RePlanTrigger::StepFailed { step_index, error, attempt } => {
-                format!("Step {} failed (attempt {}): {}", step_index, attempt, error)
+            RePlanTrigger::StepFailed {
+                step_index,
+                error,
+                attempt,
+            } => {
+                format!(
+                    "Step {} failed (attempt {}): {}",
+                    step_index, attempt, error
+                )
             }
             RePlanTrigger::ConditionChanged { condition, .. } => {
                 format!("Condition changed: {}", condition)
@@ -149,7 +151,10 @@ impl ConditionRePlanner {
         condition: &str,
         _new_value: &serde_json::Value,
     ) -> PlanningResult<()> {
-        info!("Adapting plan {} for condition change: {}", plan.id, condition);
+        info!(
+            "Adapting plan {} for condition change: {}",
+            plan.id, condition
+        );
 
         // Mark plan as replanning
         plan.status = PlanStatus::Replanning;
@@ -331,7 +336,10 @@ impl RePlanner for FeedbackRePlanner {
                 step_index,
                 error,
                 attempt,
-            } => self.handle_step_failure(plan, *step_index, error, *attempt).await,
+            } => {
+                self.handle_step_failure(plan, *step_index, error, *attempt)
+                    .await
+            }
             RePlanTrigger::GoalChanged { new_goal, .. } => self.handle_goal_change(plan, new_goal),
             _ => Ok(()),
         }
@@ -386,10 +394,7 @@ impl ResourceRePlanner {
             resource, required, available
         ))
         .with_action(Action::LLMReasoning {
-            prompt: format!(
-                "Choose strategy for resource constraint: {:?}",
-                strategies
-            ),
+            prompt: format!("Choose strategy for resource constraint: {:?}", strategies),
             context: HashMap::new(),
         });
 
@@ -417,9 +422,7 @@ impl ResourceRePlanner {
             .steps
             .iter()
             .enumerate()
-            .filter(|(_, s)| {
-                s.status == StepStatus::Pending && s.priority == Priority::Low
-            })
+            .filter(|(_, s)| s.status == StepStatus::Pending && s.priority == Priority::Low)
             .map(|(i, _)| i)
             .collect();
 

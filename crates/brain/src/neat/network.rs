@@ -2,8 +2,9 @@
 //!
 //! Phenotypic expression of NEAT genome.
 
-use super::genome::{ActivationFn, Genome};
 use std::collections::HashMap;
+
+use super::genome::{ActivationFn, Genome};
 
 /// Neural network
 #[derive(Debug, Clone)]

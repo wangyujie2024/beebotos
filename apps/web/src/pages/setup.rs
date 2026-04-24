@@ -2,14 +2,15 @@
 //!
 //! Interactive 10-step configuration wizard for BeeBotOS Gateway.
 
-use crate::components::wizard::{ConfigPreview, SecretInput, WizardNavigation, WizardStepper};
-use crate::state::wizard::*;
-use crate::utils::{download_file, event_target_checked, event_target_value};
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 use leptos::view;
 use leptos_meta::*;
 use leptos_router::components::A;
+
+use crate::components::wizard::{ConfigPreview, SecretInput, WizardNavigation, WizardStepper};
+use crate::state::wizard::*;
+use crate::utils::{download_file, event_target_checked, event_target_value};
 
 const TOTAL_STEPS: usize = 10;
 
@@ -29,11 +30,13 @@ pub fn SetupPage() -> impl IntoView {
     let can_proceed: Signal<bool> = Memo::new(move |_| {
         let s = state.get();
         s.can_proceed()
-    }).into();
+    })
+    .into();
 
     let toml_preview: Signal<String> = Memo::new(move |_| state.get().generate_toml()).into();
     let env_preview: Signal<String> = Memo::new(move |_| state.get().generate_env()).into();
-    let docker_preview: Signal<String> = Memo::new(move |_| state.get().generate_docker_compose()).into();
+    let docker_preview: Signal<String> =
+        Memo::new(move |_| state.get().generate_docker_compose()).into();
     let k8s_preview: Signal<String> = Memo::new(move |_| state.get().generate_k8s()).into();
 
     let on_back = move || {
@@ -390,16 +393,14 @@ fn StepSecurity(state: RwSignal<WizardState>) -> impl IntoView {
 
     let generate_error = RwSignal::new(None::<String>);
 
-    let generate = move || {
-        match generate_jwt_secret() {
-            Ok(new_secret) => {
-                generate_error.set(None);
-                secret.set(new_secret.clone());
-                state.update(|s| s.jwt.secret = new_secret);
-            }
-            Err(e) => {
-                generate_error.set(Some(e));
-            }
+    let generate = move || match generate_jwt_secret() {
+        Ok(new_secret) => {
+            generate_error.set(None);
+            secret.set(new_secret.clone());
+            state.update(|s| s.jwt.secret = new_secret);
+        }
+        Err(e) => {
+            generate_error.set(Some(e));
         }
     };
 
@@ -492,13 +493,21 @@ fn StepLlmModels(state: RwSignal<WizardState>) -> impl IntoView {
         let presets: std::collections::HashMap<&str, (&str, &str)> = [
             ("kimi", ("moonshot-v1-8k", "https://api.moonshot.cn")),
             ("openai", ("gpt-4", "https://api.openai.com/v1")),
-            ("anthropic", ("claude-3-sonnet", "https://api.anthropic.com")),
+            (
+                "anthropic",
+                ("claude-3-sonnet", "https://api.anthropic.com"),
+            ),
             ("zhipu", ("glm-4", "https://open.bigmodel.cn/api/paas/v4")),
             ("deepseek", ("deepseek-chat", "https://api.deepseek.com")),
             ("ollama", ("llama2", "http://localhost:11434")),
-        ].into_iter().collect();
+        ]
+        .into_iter()
+        .collect();
 
-        let (model, base_url) = presets.get(name.as_str()).copied().unwrap_or(("gpt-4", "https://api.openai.com/v1"));
+        let (model, base_url) = presets
+            .get(name.as_str())
+            .copied()
+            .unwrap_or(("gpt-4", "https://api.openai.com/v1"));
 
         state.update(|s| {
             s.models.providers.push(ProviderDraft {

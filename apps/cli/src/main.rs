@@ -2,8 +2,9 @@
 //!
 //! Command line interface for BeeBotOS.
 
-use clap::{Parser, Subcommand};
 use std::io::IsTerminal;
+
+use clap::{Parser, Subcommand};
 
 mod client;
 mod commands;

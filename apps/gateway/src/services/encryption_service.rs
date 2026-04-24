@@ -3,9 +3,10 @@
 //! Uses AES-256-GCM from beebotos_crypto crate.
 //! Master key is read from BEE__SECURITY__MASTER_KEY environment variable.
 
+use std::sync::Arc;
+
 use beebotos_crypto::encryption::aes::AES256GCMScheme;
 use beebotos_crypto::encryption::{EncryptedData, EncryptionScheme};
-use std::sync::Arc;
 
 /// Service for encrypting and decrypting sensitive data
 pub struct EncryptionService {
@@ -42,17 +43,17 @@ impl EncryptionService {
             .encrypt(plaintext.as_bytes(), None)
             .map_err(|e| format!("Encryption failed: {:?}", e))?;
 
-        let json = serde_json::to_vec(&encrypted)
-            .map_err(|e| format!("Serialization failed: {}", e))?;
+        let json =
+            serde_json::to_vec(&encrypted).map_err(|e| format!("Serialization failed: {}", e))?;
         Ok(base64::encode(json))
     }
 
     /// Decrypt base64-encoded ciphertext
     pub fn decrypt(&self, ciphertext: &str) -> Result<String, String> {
-        let json = base64::decode(ciphertext)
-            .map_err(|e| format!("Base64 decode failed: {}", e))?;
-        let encrypted: EncryptedData = serde_json::from_slice(&json)
-            .map_err(|e| format!("Deserialization failed: {}", e))?;
+        let json =
+            base64::decode(ciphertext).map_err(|e| format!("Base64 decode failed: {}", e))?;
+        let encrypted: EncryptedData =
+            serde_json::from_slice(&json).map_err(|e| format!("Deserialization failed: {}", e))?;
 
         let plaintext = self
             .scheme

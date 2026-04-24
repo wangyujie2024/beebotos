@@ -2,13 +2,12 @@
 //!
 //! 将 /api/* 请求转发到后端 Gateway
 
-use axum::{
-    body::{Body, Bytes},
-    extract::{Request, State},
-    http::{HeaderMap, HeaderName, HeaderValue, StatusCode},
-    response::{IntoResponse, Response},
-};
 use std::time::Duration;
+
+use axum::body::{Body, Bytes};
+use axum::extract::{Request, State};
+use axum::http::{HeaderMap, HeaderName, HeaderValue, StatusCode};
+use axum::response::{IntoResponse, Response};
 
 /// 代理状态
 #[derive(Clone)]
@@ -46,7 +45,11 @@ pub async fn proxy_handler(
 ) -> Result<impl IntoResponse, StatusCode> {
     // 构建目标 URL - 添加 /api 前缀
     let path = req.uri().path();
-    let query = req.uri().query().map(|q| format!("?{}", q)).unwrap_or_default();
+    let query = req
+        .uri()
+        .query()
+        .map(|q| format!("?{}", q))
+        .unwrap_or_default();
     let target_url = format!("{}/api{}{}", state.gateway_url, path, query);
 
     tracing::debug!("Proxying {} {} -> {}", req.method(), path, target_url);
@@ -58,11 +61,10 @@ pub async fn proxy_handler(
     })?;
 
     // 构建代理请求
-    let method = reqwest::Method::from_bytes(req.method().as_str().as_bytes())
-        .map_err(|_| {
-            tracing::error!("Invalid HTTP method: {}", req.method());
-            StatusCode::BAD_REQUEST
-        })?;
+    let method = reqwest::Method::from_bytes(req.method().as_str().as_bytes()).map_err(|_| {
+        tracing::error!("Invalid HTTP method: {}", req.method());
+        StatusCode::BAD_REQUEST
+    })?;
     let mut proxy_req = state.client.request(method, &target_url);
 
     // 复制请求头
@@ -171,19 +173,21 @@ mod tests {
 
     #[test]
     fn test_proxy_state_creation() {
-        let state = ProxyState::new(
-            "http://localhost:3000".to_string(),
-            30,
-            false,
-        );
+        let state = ProxyState::new("http://localhost:3000".to_string(), 30, false);
         assert!(state.is_ok());
     }
 
     #[test]
     fn test_should_forward_header() {
-        assert!(!should_forward_header(&HeaderName::from_static("connection")));
+        assert!(!should_forward_header(&HeaderName::from_static(
+            "connection"
+        )));
         assert!(!should_forward_header(&HeaderName::from_static("upgrade")));
-        assert!(should_forward_header(&HeaderName::from_static("content-type")));
-        assert!(should_forward_header(&HeaderName::from_static("authorization")));
+        assert!(should_forward_header(&HeaderName::from_static(
+            "content-type"
+        )));
+        assert!(should_forward_header(&HeaderName::from_static(
+            "authorization"
+        )));
     }
 }

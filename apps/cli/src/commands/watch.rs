@@ -1,6 +1,7 @@
 //! Watch command for BeeBotOS CLI
 //!
-//! Provides real-time streaming of agents, blocks, events, and tasks via WebSocket.
+//! Provides real-time streaming of agents, blocks, events, and tasks via
+//! WebSocket.
 
 use anyhow::Result;
 use clap::Parser;

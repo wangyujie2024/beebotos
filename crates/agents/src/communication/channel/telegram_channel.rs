@@ -777,7 +777,10 @@ impl ChannelFactory for TelegramChannelFactory {
         super::PlatformType::Telegram
     }
 
-    async fn create(&self, config: &Value) -> crate::error::Result<Arc<RwLock<dyn super::Channel>>> {
+    async fn create(
+        &self,
+        config: &Value,
+    ) -> crate::error::Result<Arc<RwLock<dyn super::Channel>>> {
         use crate::error::AgentError;
 
         let bot_token = config
@@ -790,10 +793,15 @@ impl ChannelFactory for TelegramChannelFactory {
         base.connection_mode = ConnectionMode::Polling;
         let channel = TelegramChannel::new(TelegramConfig {
             bot_token,
-            polling_interval_secs: config.get("polling_interval_secs").and_then(|v| v.as_u64()).unwrap_or(1),
+            polling_interval_secs: config
+                .get("polling_interval_secs")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(1),
             allowed_updates: config.get("allowed_updates").and_then(|v| {
                 v.as_array().map(|arr| {
-                    arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect()
+                    arr.iter()
+                        .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                        .collect()
                 })
             }),
             base,

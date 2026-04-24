@@ -5,14 +5,24 @@ use wasm_bindgen::JsCast;
 /// Extract the `value` from an event target (input, textarea, or select)
 pub fn event_target_value(ev: &leptos::ev::Event) -> String {
     ev.target()
-        .and_then(|t| t.dyn_into::<web_sys::HtmlInputElement>().ok().map(|e| e.value()))
-        .or_else(|| {
-            ev.target()
-                .and_then(|t| t.dyn_into::<web_sys::HtmlTextAreaElement>().ok().map(|e| e.value()))
+        .and_then(|t| {
+            t.dyn_into::<web_sys::HtmlInputElement>()
+                .ok()
+                .map(|e| e.value())
         })
         .or_else(|| {
-            ev.target()
-                .and_then(|t| t.dyn_into::<web_sys::HtmlSelectElement>().ok().map(|e| e.value()))
+            ev.target().and_then(|t| {
+                t.dyn_into::<web_sys::HtmlTextAreaElement>()
+                    .ok()
+                    .map(|e| e.value())
+            })
+        })
+        .or_else(|| {
+            ev.target().and_then(|t| {
+                t.dyn_into::<web_sys::HtmlSelectElement>()
+                    .ok()
+                    .map(|e| e.value())
+            })
         })
         .unwrap_or_default()
 }

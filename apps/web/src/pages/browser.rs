@@ -9,9 +9,7 @@ use leptos_meta::Title;
 
 use crate::browser::ConnectionStatus;
 use crate::components::Modal;
-use crate::state::{
-    use_browser_state, use_browser_ui_state,
-};
+use crate::state::{use_browser_state, use_browser_ui_state};
 
 /// 浏览器自动化页面
 #[component]
@@ -38,9 +36,13 @@ pub fn BrowserPage() -> impl IntoView {
         }
         match service.get_status().await {
             Ok(status) => {
-                browser_state.connection_status.set(
-                    if status.active_instances > 0 { crate::browser::ConnectionStatus::Connected } else { crate::browser::ConnectionStatus::Disconnected }
-                );
+                browser_state
+                    .connection_status
+                    .set(if status.active_instances > 0 {
+                        crate::browser::ConnectionStatus::Connected
+                    } else {
+                        crate::browser::ConnectionStatus::Disconnected
+                    });
             }
             Err(_) => {}
         }

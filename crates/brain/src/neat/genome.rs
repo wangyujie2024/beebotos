@@ -316,7 +316,8 @@ impl Genome {
         });
     }
 
-    /// Add connection mutation - create new connection between unconnected nodes
+    /// Add connection mutation - create new connection between unconnected
+    /// nodes
     fn add_connection_mutation(&mut self, innovations: &mut crate::neat::InnovationTracker) {
         // Get all node IDs using indices instead of pointer comparison
         let mut node_ids = Vec::new();

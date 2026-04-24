@@ -9,10 +9,10 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
 
+use crate::communication::webhook::common::{compute_hmac_sha256, MetadataBuilder};
 use crate::communication::webhook::{
     SignatureVerification, WebhookConfig, WebhookEvent, WebhookEventType, WebhookHandler,
 };
-use crate::communication::webhook::common::{compute_hmac_sha256, MetadataBuilder};
 use crate::communication::{Message, MessageType, PlatformType};
 use crate::error::{AgentError, Result};
 
@@ -380,16 +380,46 @@ impl TwitterWebhookHandler {
             .add("user_id", &tweet.user.id_str)
             .add("user_name", &tweet.user.name)
             .add("screen_name", &tweet.user.screen_name)
-            .add_optional("in_reply_to_status_id", tweet.in_reply_to_status_id.map(|id| id.to_string()))
-            .add_optional("in_reply_to_user_id", tweet.in_reply_to_user_id.map(|id| id.to_string()))
-            .add_optional("quoted_status_id", tweet.quoted_status_id.map(|id| id.to_string()))
-            .add_optional("is_quote_status", if tweet.is_quote_status { Some("true") } else { None })
-            .add_optional("is_retweet", if tweet.retweeted_status.is_some() { Some("true") } else { None })
-            .add_optional("mentions", tweet.entities.as_ref().and_then(|e| {
-                e.user_mentions.as_ref().map(|mentions| {
-                    mentions.iter().map(|m| format!("@{}", m.screen_name)).collect::<Vec<_>>().join(",")
-                })
-            }))
+            .add_optional(
+                "in_reply_to_status_id",
+                tweet.in_reply_to_status_id.map(|id| id.to_string()),
+            )
+            .add_optional(
+                "in_reply_to_user_id",
+                tweet.in_reply_to_user_id.map(|id| id.to_string()),
+            )
+            .add_optional(
+                "quoted_status_id",
+                tweet.quoted_status_id.map(|id| id.to_string()),
+            )
+            .add_optional(
+                "is_quote_status",
+                if tweet.is_quote_status {
+                    Some("true")
+                } else {
+                    None
+                },
+            )
+            .add_optional(
+                "is_retweet",
+                if tweet.retweeted_status.is_some() {
+                    Some("true")
+                } else {
+                    None
+                },
+            )
+            .add_optional(
+                "mentions",
+                tweet.entities.as_ref().and_then(|e| {
+                    e.user_mentions.as_ref().map(|mentions| {
+                        mentions
+                            .iter()
+                            .map(|m| format!("@{}", m.screen_name))
+                            .collect::<Vec<_>>()
+                            .join(",")
+                    })
+                }),
+            )
             .build();
 
         Some(Message {
@@ -428,7 +458,14 @@ impl TwitterWebhookHandler {
             .add("sender_name", &sender.name)
             .add("sender_screen_name", &sender.screen_name)
             .add("is_dm", "true")
-            .add_optional("attachment_type", dm.message_create.message_data.attachment.as_ref().map(|a| &a.attachment_type))
+            .add_optional(
+                "attachment_type",
+                dm.message_create
+                    .message_data
+                    .attachment
+                    .as_ref()
+                    .map(|a| &a.attachment_type),
+            )
             .build();
 
         Some(Message {

@@ -2,9 +2,10 @@
 //!
 //! Registry for managing capability tokens.
 
-use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::Arc;
+
+use parking_lot::RwLock;
 
 use super::tokens::TokenStatus;
 use super::CapabilityToken;

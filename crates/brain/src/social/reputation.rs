@@ -4,8 +4,9 @@
 
 #![allow(dead_code)]
 
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+
+use serde::{Deserialize, Serialize};
 
 /// Reputation score for an agent
 #[derive(Debug, Clone, Serialize, Deserialize)]

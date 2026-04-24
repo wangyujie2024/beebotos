@@ -246,7 +246,7 @@ impl StateMachine {
 
             // Error can recover, retry processing, shutdown, or terminate (if max errors)
             (AgentState::Error, AgentState::Recovering) => true,
-            (AgentState::Error, AgentState::Processing) => true,   // Allow retry after error
+            (AgentState::Error, AgentState::Processing) => true, // Allow retry after error
             (AgentState::Error, AgentState::ShuttingDown) => true, // 🔒 P0 FIX: Added
             (AgentState::Error, AgentState::Terminated) => self.error_count >= self.max_errors,
 

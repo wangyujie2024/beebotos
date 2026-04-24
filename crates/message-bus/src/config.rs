@@ -36,15 +36,15 @@ pub struct MessageBusConfig {
     /// gRPC transport configuration
     #[serde(default)]
     pub grpc: GrpcConfig,
-    
+
     /// Resource limits
     #[serde(default)]
     pub limits: LimitsConfig,
-    
+
     /// Metrics configuration
     #[serde(default)]
     pub metrics: MetricsConfig,
-    
+
     /// Logging configuration
     #[serde(default)]
     pub logging: LoggingConfig,
@@ -55,19 +55,19 @@ impl MessageBusConfig {
     pub fn new() -> Self {
         Self::default()
     }
-    
+
     /// Load configuration from a YAML file
     pub async fn from_file<P: AsRef<Path>>(path: P) -> Result<Self, ConfigError> {
         let content = tokio::fs::read_to_string(path)
             .await
             .map_err(|e| ConfigError::FileRead(e.to_string()))?;
-        
-        let config: MessageBusConfig = serde_yaml::from_str(&content)
-            .map_err(|e| ConfigError::Parse(e.to_string()))?;
-        
+
+        let config: MessageBusConfig =
+            serde_yaml::from_str(&content).map_err(|e| ConfigError::Parse(e.to_string()))?;
+
         Ok(config)
     }
-    
+
     /// Load configuration from environment variables
     ///
     /// Variables:
@@ -77,57 +77,60 @@ impl MessageBusConfig {
     /// - MESSAGE_BUS_LIMITS_MAX_MESSAGE_SIZE - Max message size
     pub fn from_env() -> Result<Self, ConfigError> {
         let mut config = MessageBusConfig::default();
-        
+
         if let Ok(transport) = std::env::var("MESSAGE_BUS_TRANSPORT") {
             config.transport = transport;
         }
-        
+
         if let Ok(addr) = std::env::var("MESSAGE_BUS_GRPC_BIND_ADDR") {
-            config.grpc.bind_addr = addr.parse()
+            config.grpc.bind_addr = addr
+                .parse()
                 .map_err(|e| ConfigError::Parse(format!("Invalid bind address: {}", e)))?;
         }
-        
+
         if let Ok(node_id) = std::env::var("MESSAGE_BUS_GRPC_NODE_ID") {
             config.grpc.node_id = Some(node_id);
         }
-        
+
         if let Ok(seeds) = std::env::var("MESSAGE_BUS_GRPC_CLUSTER_SEEDS") {
             config.grpc.cluster_seeds = seeds
                 .split(',')
                 .filter_map(|s| s.trim().parse().ok())
                 .collect();
         }
-        
+
         if let Ok(size) = std::env::var("MESSAGE_BUS_LIMITS_MAX_MESSAGE_SIZE") {
             config.limits.max_message_size = parse_size(&size)
                 .map_err(|e| ConfigError::Parse(format!("Invalid size: {}", e)))?;
         }
-        
+
         Ok(config)
     }
-    
+
     /// Validate the configuration
     pub fn validate(&self) -> Result<(), ConfigError> {
         match self.transport.as_str() {
             "memory" | "grpc" => {}
-            _ => return Err(ConfigError::Invalid(format!(
-                "Invalid transport: {}. Must be 'memory' or 'grpc'",
-                self.transport
-            ))),
+            _ => {
+                return Err(ConfigError::Invalid(format!(
+                    "Invalid transport: {}. Must be 'memory' or 'grpc'",
+                    self.transport
+                )))
+            }
         }
-        
+
         if self.limits.max_message_size == 0 {
             return Err(ConfigError::Invalid(
-                "max_message_size must be greater than 0".to_string()
+                "max_message_size must be greater than 0".to_string(),
             ));
         }
-        
+
         if self.limits.max_topics == 0 {
             return Err(ConfigError::Invalid(
-                "max_topics must be greater than 0".to_string()
+                "max_topics must be greater than 0".to_string(),
             ));
         }
-        
+
         Ok(())
     }
 }
@@ -150,29 +153,29 @@ pub struct GrpcConfig {
     /// Bind address for gRPC server
     #[serde(default = "default_bind_addr")]
     pub bind_addr: SocketAddr,
-    
+
     /// Node ID (auto-generated if not set)
     #[serde(default)]
     pub node_id: Option<String>,
-    
+
     /// Cluster seed nodes
     #[serde(default)]
     pub cluster_seeds: Vec<SocketAddr>,
-    
+
     /// Keepalive interval
     #[serde(default = "default_keepalive_interval")]
     #[serde(with = "humantime_serde")]
     pub keepalive_interval: Duration,
-    
+
     /// Connection timeout
     #[serde(default = "default_connect_timeout")]
     #[serde(with = "humantime_serde")]
     pub connect_timeout: Duration,
-    
+
     /// Maximum message size
     #[serde(default = "default_max_message_size")]
     pub max_message_size: usize,
-    
+
     /// TLS configuration
     #[serde(default)]
     pub tls: TlsConfig,
@@ -198,19 +201,19 @@ pub struct LimitsConfig {
     /// Maximum message size in bytes
     #[serde(default = "default_max_message_size")]
     pub max_message_size: usize,
-    
+
     /// Maximum number of topics
     #[serde(default = "default_max_topics")]
     pub max_topics: usize,
-    
+
     /// Maximum subscriptions per topic
     #[serde(default = "default_max_subscriptions")]
     pub max_subscriptions_per_topic: usize,
-    
+
     /// Maximum queue depth per subscription
     #[serde(default = "default_queue_depth")]
     pub queue_depth: usize,
-    
+
     /// Maximum number of connections (gRPC)
     #[serde(default = "default_max_connections")]
     pub max_connections: usize,
@@ -234,11 +237,11 @@ pub struct MetricsConfig {
     /// Enable metrics collection
     #[serde(default = "default_true")]
     pub enabled: bool,
-    
+
     /// Metrics endpoint bind address
     #[serde(default = "default_metrics_addr")]
     pub endpoint: SocketAddr,
-    
+
     /// Metrics export interval
     #[serde(default = "default_metrics_interval")]
     #[serde(with = "humantime_serde")]
@@ -261,11 +264,11 @@ pub struct LoggingConfig {
     /// Log level
     #[serde(default = "default_log_level")]
     pub level: String,
-    
+
     /// Log format: "json" or "pretty"
     #[serde(default = "default_log_format")]
     pub format: String,
-    
+
     /// Optional log file path
     pub file: Option<String>,
 }
@@ -286,13 +289,13 @@ pub struct TlsConfig {
     /// Enable TLS
     #[serde(default)]
     pub enabled: bool,
-    
+
     /// Certificate file path
     pub cert_file: Option<String>,
-    
+
     /// Private key file path
     pub key_file: Option<String>,
-    
+
     /// CA certificate file path (for client verification)
     pub ca_file: Option<String>,
 }
@@ -313,10 +316,10 @@ impl Default for TlsConfig {
 pub enum ConfigError {
     #[error("Failed to read config file: {0}")]
     FileRead(String),
-    
+
     #[error("Failed to parse config: {0}")]
     Parse(String),
-    
+
     #[error("Invalid configuration: {0}")]
     Invalid(String),
 }
@@ -385,17 +388,20 @@ fn default_log_format() -> String {
 /// Parse size string like "10MB", "1GB" to bytes
 fn parse_size(s: &str) -> Result<usize, String> {
     let s = s.trim().to_uppercase();
-    
+
     if let Some(num) = s.strip_suffix("GB") {
-        num.trim().parse::<usize>()
+        num.trim()
+            .parse::<usize>()
             .map(|n| n * 1024 * 1024 * 1024)
             .map_err(|e| e.to_string())
     } else if let Some(num) = s.strip_suffix("MB") {
-        num.trim().parse::<usize>()
+        num.trim()
+            .parse::<usize>()
             .map(|n| n * 1024 * 1024)
             .map_err(|e| e.to_string())
     } else if let Some(num) = s.strip_suffix("KB") {
-        num.trim().parse::<usize>()
+        num.trim()
+            .parse::<usize>()
             .map(|n| n * 1024)
             .map_err(|e| e.to_string())
     } else {
@@ -406,14 +412,14 @@ fn parse_size(s: &str) -> Result<usize, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_default_config() {
         let config = MessageBusConfig::default();
         assert_eq!(config.transport, "memory");
         assert_eq!(config.limits.max_message_size, 10 * 1024 * 1024);
     }
-    
+
     #[test]
     fn test_parse_size() {
         assert_eq!(parse_size("10").unwrap(), 10);
@@ -421,16 +427,16 @@ mod tests {
         assert_eq!(parse_size("10MB").unwrap(), 10 * 1024 * 1024);
         assert_eq!(parse_size("1GB").unwrap(), 1024 * 1024 * 1024);
     }
-    
+
     #[test]
     fn test_config_validation() {
         let config = MessageBusConfig::default();
         assert!(config.validate().is_ok());
-        
+
         let mut invalid = config.clone();
         invalid.transport = "invalid".to_string();
         assert!(invalid.validate().is_err());
-        
+
         let mut invalid = config;
         invalid.limits.max_message_size = 0;
         assert!(invalid.validate().is_err());

@@ -1,18 +1,11 @@
 //! Authentication service
 
-use argon2::{
-    password_hash::{
-        rand_core::OsRng,
-        PasswordHash, PasswordHasher, PasswordVerifier, SaltString,
-    },
-    Argon2,
-};
+use argon2::password_hash::rand_core::OsRng;
+use argon2::password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
+use argon2::Argon2;
 use sqlx::SqlitePool;
 
 use crate::error::AppError;
-
-const DEFAULT_ROLES: &str = "user";
-const DEFAULT_PERMISSIONS: &str = "agentRead,agentCreate,daoVote,settingsRead";
 
 /// Authenticated user info (non-sensitive)
 #[derive(Clone, Debug, serde::Serialize)]
@@ -23,8 +16,6 @@ pub struct AuthUserInfo {
     pub email: Option<String>,
     pub avatar: Option<String>,
     pub wallet_address: Option<String>,
-    pub roles: Vec<String>,
-    pub permissions: Vec<String>,
 }
 
 /// DB row for users table (includes password hash)
@@ -36,8 +27,6 @@ struct UserRow {
     password_hash: String,
     avatar: Option<String>,
     wallet_address: Option<String>,
-    roles: String,
-    permissions: String,
 }
 
 /// DB row for public user queries (excludes password hash)
@@ -48,8 +37,6 @@ struct UserPublicRow {
     email: Option<String>,
     avatar: Option<String>,
     wallet_address: Option<String>,
-    roles: String,
-    permissions: String,
 }
 
 impl UserPublicRow {
@@ -60,8 +47,6 @@ impl UserPublicRow {
             email: self.email.clone(),
             avatar: self.avatar.clone(),
             wallet_address: self.wallet_address.clone(),
-            roles: parse_comma_list(&self.roles),
-            permissions: parse_comma_list(&self.permissions),
         }
     }
 }
@@ -74,17 +59,8 @@ impl UserRow {
             email: self.email.clone(),
             avatar: self.avatar.clone(),
             wallet_address: self.wallet_address.clone(),
-            roles: parse_comma_list(&self.roles),
-            permissions: parse_comma_list(&self.permissions),
         }
     }
-}
-
-fn parse_comma_list(s: &str) -> Vec<String> {
-    s.split(',')
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty())
-        .collect()
 }
 
 /// Authentication service
@@ -108,23 +84,28 @@ impl AuthService {
         let password_hash = hash_password(password)?;
 
         let result = sqlx::query_as::<_, UserRow>(
-            "INSERT INTO users (username, email, password_hash, roles, permissions)
-             VALUES (?, ?, ?, ?, ?)
-             RETURNING id, username, email, password_hash, avatar, wallet_address, roles, permissions"
+            "INSERT INTO users (username, email, password_hash)
+             VALUES (?, ?, ?)
+             RETURNING id, username, email, password_hash, avatar, wallet_address",
         )
         .bind(username)
         .bind(email)
         .bind(password_hash)
-        .bind(DEFAULT_ROLES)
-        .bind(DEFAULT_PERMISSIONS)
         .fetch_one(&self.db)
         .await;
 
         match result {
             Ok(row) => Ok(row.to_auth_user_info()),
             Err(sqlx::Error::Database(db_err)) => {
-                let field = db_err.constraint()
-                    .and_then(|c| if c.contains("email") { Some("email") } else { Some("username") })
+                let field = db_err
+                    .constraint()
+                    .and_then(|c| {
+                        if c.contains("email") {
+                            Some("email")
+                        } else {
+                            Some("username")
+                        }
+                    })
                     .unwrap_or("username");
                 Err(AppError::Validation(vec![crate::error::ValidationError {
                     field: field.to_string(),
@@ -143,8 +124,8 @@ impl AuthService {
         password: &str,
     ) -> Result<AuthUserInfo, AppError> {
         let row = sqlx::query_as::<_, UserRow>(
-            "SELECT id, username, email, password_hash, avatar, wallet_address, roles, permissions
-             FROM users WHERE username = ?"
+            "SELECT id, username, email, password_hash, avatar, wallet_address
+             FROM users WHERE username = ?",
         )
         .bind(username)
         .fetch_optional(&self.db)
@@ -161,8 +142,8 @@ impl AuthService {
     /// Get user by ID
     pub async fn get_user_by_id(&self, id: &str) -> Result<AuthUserInfo, AppError> {
         let row = sqlx::query_as::<_, UserPublicRow>(
-            "SELECT id, username, email, avatar, wallet_address, roles, permissions
-             FROM users WHERE id = ?"
+            "SELECT id, username, email, avatar, wallet_address
+             FROM users WHERE id = ?",
         )
         .bind(id)
         .fetch_optional(&self.db)

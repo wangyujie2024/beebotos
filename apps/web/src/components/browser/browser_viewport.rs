@@ -1,7 +1,8 @@
 //! 浏览器视口组件
 
-use crate::browser::ConnectionStatus;
 use leptos::prelude::*;
+
+use crate::browser::ConnectionStatus;
 
 /// 浏览器视口组件
 #[component]

@@ -1,7 +1,8 @@
 //! WebChat 状态管理
 
-use crate::webchat::{ChatMessage, ChatSession, SideQuestion, TokenUsage, UsagePanel};
 use leptos::prelude::*;
+
+use crate::webchat::{ChatMessage, ChatSession, SideQuestion, TokenUsage, UsagePanel};
 
 /// WebChat 状态
 #[derive(Clone, Debug)]
@@ -23,8 +24,7 @@ pub struct WebchatState {
     /// 用量统计
     pub usage: RwSignal<UsagePanel>,
     /// 侧边提问列表
-    pub side_questions: RwSignal<Vec<SideQuestion>>
-    ,
+    pub side_questions: RwSignal<Vec<SideQuestion>>,
     /// 消息缓存（按会话 ID）
     pub message_cache: RwSignal<std::collections::HashMap<String, Vec<ChatMessage>>>,
     /// 当前错误
@@ -77,7 +77,8 @@ impl WebchatState {
 
     /// 添加消息
     pub fn add_message(&self, message: ChatMessage) {
-        self.current_messages.update(|msgs| msgs.push(message.clone()));
+        self.current_messages
+            .update(|msgs| msgs.push(message.clone()));
         if let Some(session_id) = self.current_session_id.get() {
             self.message_cache.update(|cache| {
                 cache.entry(session_id).or_default().push(message);

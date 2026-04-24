@@ -48,6 +48,13 @@
     --transition-normal: 0.25s ease;
     --transition-slow: 0.4s ease;
 
+    /* Spacing */
+    --spacing-xs: 4px;
+    --spacing-sm: 8px;
+    --spacing-md: 16px;
+    --spacing-lg: 24px;
+    --spacing-xl: 32px;
+
     /* Sidebar */
     --sidebar-width: 260px;
 }

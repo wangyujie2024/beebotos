@@ -7,15 +7,16 @@
 //! - mDNS for local network discovery
 //! - Peer reputation and health tracking
 
-use crate::error::{KernelError, Result};
-use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
+
+use serde::{Deserialize, Serialize};
 use tokio::time::{Duration, Instant};
 use tracing::{debug, info, warn};
 
 use super::PeerInfo;
+use crate::error::{KernelError, Result};
 
 /// Kademlia K constant - maximum peers per bucket
 const K_BUCKET_SIZE: usize = 20;

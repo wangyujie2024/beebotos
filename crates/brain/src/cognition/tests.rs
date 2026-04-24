@@ -4,8 +4,9 @@
 
 #[cfg(test)]
 mod tests {
-    use super::super::*;
     use serde_json::json;
+
+    use super::super::*;
 
     // =============================================================================
     // WorkingMemory Tests

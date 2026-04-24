@@ -2,8 +2,9 @@
 //!
 //! 实现 Gateway 的精细化权限控制
 
-use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
+
+use serde::{Deserialize, Serialize};
 
 /// Gateway 权限范围
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
@@ -127,7 +128,7 @@ impl ScopeManager {
         // 检查读权限：如果有对应的写权限，则也有读权限
         // 原来的 read_scope 逻辑已被下面的代码替代
         let _ = scope.read_scope();
-        
+
         // 如果查询的是读权限，检查是否有对应的写权限
         if !scope.is_write() {
             // 找到对应的写权限
@@ -262,34 +263,20 @@ mod tests {
 
     #[test]
     fn test_has_all_scopes() {
-        let manager = ScopeManager::new(vec![
-            GatewayScope::BrowserRead,
-            GatewayScope::BrowserWrite,
-        ]);
+        let manager =
+            ScopeManager::new(vec![GatewayScope::BrowserRead, GatewayScope::BrowserWrite]);
 
-        assert!(manager.has_all_scopes(&[
-            GatewayScope::BrowserRead,
-            GatewayScope::BrowserWrite,
-        ]));
+        assert!(manager.has_all_scopes(&[GatewayScope::BrowserRead, GatewayScope::BrowserWrite,]));
 
-        assert!(!manager.has_all_scopes(&[
-            GatewayScope::BrowserRead,
-            GatewayScope::ChatRead,
-        ]));
+        assert!(!manager.has_all_scopes(&[GatewayScope::BrowserRead, GatewayScope::ChatRead,]));
     }
 
     #[test]
     fn test_has_any_scope() {
         let manager = ScopeManager::new(vec![GatewayScope::BrowserRead]);
 
-        assert!(manager.has_any_scope(&[
-            GatewayScope::BrowserRead,
-            GatewayScope::ChatRead,
-        ]));
+        assert!(manager.has_any_scope(&[GatewayScope::BrowserRead, GatewayScope::ChatRead,]));
 
-        assert!(!manager.has_any_scope(&[
-            GatewayScope::ChatRead,
-            GatewayScope::ChatWrite,
-        ]));
+        assert!(!manager.has_any_scope(&[GatewayScope::ChatRead, GatewayScope::ChatWrite,]));
     }
 }

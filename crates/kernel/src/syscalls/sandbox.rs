@@ -5,16 +5,17 @@
 //! - ExitSandbox: Exit sandboxed execution mode
 //! - UpdateCapability: Update agent capability level
 
+use std::collections::HashMap;
+use std::sync::Arc;
+
+use async_trait::async_trait;
+use parking_lot::RwLock;
+use tracing::{info, trace, warn};
+
 use crate::capabilities::{CapabilityLevel, CapabilityManager, CapabilityRequest};
 use crate::security::sandbox::SandboxConfig;
 use crate::syscalls::handlers::read_caller_memory;
 use crate::syscalls::{SyscallArgs, SyscallContext, SyscallError, SyscallHandler, SyscallResult};
-
-use async_trait::async_trait;
-use parking_lot::RwLock;
-use std::collections::HashMap;
-use std::sync::Arc;
-use tracing::{info, trace, warn};
 
 // Global sandbox registry
 static SANDBOX_REGISTRY: RwLock<Option<Arc<RwLock<SandboxRegistry>>>> = RwLock::new(None);

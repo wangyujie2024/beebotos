@@ -99,12 +99,9 @@ impl TransactionHelper {
         debug!("Nonce: {}", nonce);
 
         // Get gas price
-        let gas_price = Self::get_gas_price_with_retry(
-            client,
-            options.retry_count,
-            options.retry_delay_ms,
-        )
-        .await?;
+        let gas_price =
+            Self::get_gas_price_with_retry(client, options.retry_count, options.retry_delay_ms)
+                .await?;
         debug!("Gas price: {}", gas_price);
 
         // Check max gas price
@@ -163,7 +160,8 @@ impl TransactionHelper {
                     debug!("Gas estimation attempt {} failed: {}", attempt + 1, e);
                     last_error = Some(e);
                     if attempt < retry_count - 1 {
-                        tokio::time::sleep(tokio::time::Duration::from_millis(retry_delay_ms)).await;
+                        tokio::time::sleep(tokio::time::Duration::from_millis(retry_delay_ms))
+                            .await;
                     }
                 }
             }
@@ -172,7 +170,9 @@ impl TransactionHelper {
         Err(AppError::Chain(format!(
             "Failed to estimate gas after {} attempts: {}",
             retry_count,
-            last_error.map(|e| e.to_string()).unwrap_or_else(|| "Unknown error".to_string())
+            last_error
+                .map(|e| e.to_string())
+                .unwrap_or_else(|| "Unknown error".to_string())
         )))
     }
 
@@ -192,7 +192,8 @@ impl TransactionHelper {
                     debug!("Nonce fetch attempt {} failed: {}", attempt + 1, e);
                     last_error = Some(e);
                     if attempt < retry_count - 1 {
-                        tokio::time::sleep(tokio::time::Duration::from_millis(retry_delay_ms)).await;
+                        tokio::time::sleep(tokio::time::Duration::from_millis(retry_delay_ms))
+                            .await;
                     }
                 }
             }
@@ -201,7 +202,9 @@ impl TransactionHelper {
         Err(AppError::Chain(format!(
             "Failed to get nonce after {} attempts: {}",
             retry_count,
-            last_error.map(|e| e.to_string()).unwrap_or_else(|| "Unknown error".to_string())
+            last_error
+                .map(|e| e.to_string())
+                .unwrap_or_else(|| "Unknown error".to_string())
         )))
     }
 
@@ -220,7 +223,8 @@ impl TransactionHelper {
                     debug!("Gas price fetch attempt {} failed: {}", attempt + 1, e);
                     last_error = Some(e);
                     if attempt < retry_count - 1 {
-                        tokio::time::sleep(tokio::time::Duration::from_millis(retry_delay_ms)).await;
+                        tokio::time::sleep(tokio::time::Duration::from_millis(retry_delay_ms))
+                            .await;
                     }
                 }
             }
@@ -229,7 +233,9 @@ impl TransactionHelper {
         Err(AppError::Chain(format!(
             "Failed to get gas price after {} attempts: {}",
             retry_count,
-            last_error.map(|e| e.to_string()).unwrap_or_else(|| "Unknown error".to_string())
+            last_error
+                .map(|e| e.to_string())
+                .unwrap_or_else(|| "Unknown error".to_string())
         )))
     }
 
@@ -249,7 +255,8 @@ impl TransactionHelper {
                     debug!("Transaction send attempt {} failed: {}", attempt + 1, e);
                     last_error = Some(e);
                     if attempt < retry_count - 1 {
-                        tokio::time::sleep(tokio::time::Duration::from_millis(retry_delay_ms)).await;
+                        tokio::time::sleep(tokio::time::Duration::from_millis(retry_delay_ms))
+                            .await;
                     }
                 }
             }
@@ -258,7 +265,9 @@ impl TransactionHelper {
         Err(AppError::Chain(format!(
             "Failed to send transaction after {} attempts: {}",
             retry_count,
-            last_error.map(|e| e.to_string()).unwrap_or_else(|| "Unknown error".to_string())
+            last_error
+                .map(|e| e.to_string())
+                .unwrap_or_else(|| "Unknown error".to_string())
         )))
     }
 }

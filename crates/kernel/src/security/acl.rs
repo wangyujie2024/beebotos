@@ -7,9 +7,10 @@
 //! - ACL inheritance
 //! - Audit logging
 
+use std::collections::{HashMap, HashSet};
+
 use chrono::Timelike;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
 use tracing::trace;
 
 use crate::security::{AccessAction, AccessDecision, Capability, SecurityContext};
@@ -491,7 +492,7 @@ impl AccessControlList {
         match entry.subject_type {
             SubjectType::User => subject.user_id == entry.subject_id,
             SubjectType::Group => subject.group_id == entry.subject_id,
-            SubjectType::Role => subject.capabilities.contains(&Capability::FileRead), // Simplified
+            SubjectType::Role => subject.capabilities.contains(&Capability::FileRead), /* Simplified */
             SubjectType::Everyone => true,
         }
     }

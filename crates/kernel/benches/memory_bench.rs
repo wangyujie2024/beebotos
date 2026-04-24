@@ -1,9 +1,11 @@
 //! Memory Management Benchmarks
 
-use beebotos_kernel::memory::{slab::SlabAllocator, MemorySnapshot, MemoryStats};
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::sync::atomic::Ordering;
+
+use beebotos_kernel::memory::slab::SlabAllocator;
+use beebotos_kernel::memory::{MemorySnapshot, MemoryStats};
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 
 fn bench_memory_allocation(c: &mut Criterion) {
     let mut group = c.benchmark_group("memory_allocation");

@@ -14,7 +14,8 @@ pub struct OptimismClient {
 impl OptimismClient {
     /// Create new Optimism client from RPC URL
     pub async fn new(rpc_url: &str) -> ChainResult<Self> {
-        let base = BaseEvmClient::new(rpc_url, crate::chains::optimism::OPTIMISM_MAINNET_CHAIN_ID).await?;
+        let base =
+            BaseEvmClient::new(rpc_url, crate::chains::optimism::OPTIMISM_MAINNET_CHAIN_ID).await?;
         Ok(Self {
             base,
             block_stats: OptimismBlockStats::default(),

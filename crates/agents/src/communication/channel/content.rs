@@ -3,9 +3,12 @@
 //! Provides common traits and structures for all platform content types.
 //! This module eliminates duplication across 16+ *_content.rs files.
 
-use crate::error::Result;
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::collections::HashMap;
+
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
+
+use crate::error::Result;
 
 // =============================================================================
 // Common Content Types
@@ -242,21 +245,22 @@ pub enum ButtonAction {
 // =============================================================================
 
 /// Core content trait implemented by all platform content types
-/// 
-/// Note: This trait is dyn-compatible (object-safe) for use with `&dyn PlatformContent`.
-/// For serialization, use the `PlatformContentExt` trait which requires `Serialize`.
+///
+/// Note: This trait is dyn-compatible (object-safe) for use with `&dyn
+/// PlatformContent`. For serialization, use the `PlatformContentExt` trait
+/// which requires `Serialize`.
 pub trait PlatformContent: Send + Sync + 'static {
     /// Get the content type
     fn content_type(&self) -> ContentType;
-    
+
     /// Extract plain text representation
     fn extract_text(&self) -> String;
-    
+
     /// Get media content if this is a media type
     fn as_media(&self) -> Option<&MediaContent> {
         None
     }
-    
+
     /// Get text content if this is a text type
     fn as_text(&self) -> Option<&TextContent> {
         None
@@ -264,7 +268,7 @@ pub trait PlatformContent: Send + Sync + 'static {
 }
 
 /// Extension trait for PlatformContent types that support serialization
-/// 
+///
 /// This trait requires `Serialize` and `DeserializeOwned` and provides
 /// JSON serialization methods. It is not dyn-compatible.
 pub trait PlatformContentExt: PlatformContent + Serialize + DeserializeOwned + Clone {
@@ -273,7 +277,7 @@ pub trait PlatformContentExt: PlatformContent + Serialize + DeserializeOwned + C
         serde_json::to_string(self)
             .map_err(|e| crate::error::AgentError::platform(format!("JSON serialize error: {}", e)))
     }
-    
+
     /// Convert to JSON value
     fn to_json_value(&self) -> Result<serde_json::Value> {
         serde_json::to_value(self)
@@ -292,26 +296,26 @@ impl<T> PlatformContentExt for T where T: PlatformContent + Serialize + Deserial
 pub trait ContentParser<C: PlatformContent>: Clone + Send + Sync + 'static {
     /// Parse content from JSON value
     fn parse(&self, content_type: &str, content: serde_json::Value) -> Result<C>;
-    
+
     /// Parse content from JSON string
     fn parse_str(&self, content_type: &str, json: &str) -> Result<C> {
         let value: serde_json::Value = serde_json::from_str(json)
             .map_err(|e| crate::error::AgentError::platform(format!("JSON parse error: {}", e)))?;
         self.parse(content_type, value)
     }
-    
+
     /// Create text content
     fn create_text(&self, text: impl Into<String>) -> C;
-    
+
     /// Create image content
     fn create_image(&self, url: impl Into<String>) -> C;
-    
+
     /// Create video content  
     fn create_video(&self, url: impl Into<String>) -> C;
-    
+
     /// Create file content
     fn create_file(&self, url: impl Into<String>, filename: impl Into<String>) -> C;
-    
+
     /// Get content type string for a content variant
     fn get_content_type(content: &C) -> &'static str;
 }
@@ -329,12 +333,12 @@ impl<C: PlatformContent> ContentBuilder<C> {
     pub fn new() -> Self {
         Self { content: None }
     }
-    
+
     pub fn with_content(mut self, content: C) -> Self {
         self.content = Some(content);
         self
     }
-    
+
     pub fn build(self) -> Option<C> {
         self.content
     }

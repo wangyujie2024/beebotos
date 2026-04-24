@@ -2,16 +2,16 @@
 //!
 //! Provides batch contract call functionality using the Multicall3 contract.
 
-use crate::compat::{Address, Bytes};
-use crate::{ChainError, Result};
+use std::sync::Arc;
+
 use alloy_primitives::U256;
 use alloy_provider::Provider as AlloyProvider;
-
-use std::sync::Arc;
 use tracing::{debug, error, instrument};
 
 // Re-export the Multicall3 types from contracts module
 pub use super::Multicall3;
+use crate::compat::{Address, Bytes};
+use crate::{ChainError, Result};
 
 /// A single call in a multicall batch
 #[derive(Debug, Clone)]

@@ -2,14 +2,14 @@
 //!
 //! High-load tests for memory, scheduler, IPC, and WASM runtime.
 
-use beebotos_kernel::memory::{MemorySnapshot, MemoryStats};
-use beebotos_kernel::scheduler::{Priority, Scheduler, SchedulerConfig, Task};
-
-use beebotos_kernel::capabilities::{CapabilityLevel, CapabilitySet};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
+
+use beebotos_kernel::capabilities::{CapabilityLevel, CapabilitySet};
+use beebotos_kernel::memory::{MemorySnapshot, MemoryStats};
+use beebotos_kernel::scheduler::{Priority, Scheduler, SchedulerConfig, Task};
 
 /// Stress test: Massive task submission
 #[tokio::test]

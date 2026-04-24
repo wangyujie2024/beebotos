@@ -112,7 +112,11 @@ pub async fn create_agent(
     // 🔒 P0 FIX: Pass task_monitor for kernel fault awareness
     let (agent, _kernel_info) = state
         .agent_service
-        .create_and_spawn(req, &user.user_id, state.task_monitor.as_ref().map(|v| &**v))
+        .create_and_spawn(
+            req,
+            &user.user_id,
+            state.task_monitor.as_ref().map(|v| &**v),
+        )
         .await?;
 
     tracing::info!(
@@ -124,10 +128,7 @@ pub async fn create_agent(
 
     let response = AgentResponse::from(agent);
 
-    Ok((
-        StatusCode::CREATED,
-        Json(response),
-    ))
+    Ok((StatusCode::CREATED, Json(response)))
 }
 
 /// Get agent by ID

@@ -1,18 +1,20 @@
 //! WebSocket Client for BeeBotOS CLI
 //!
-//! Provides real-time streaming capabilities for watching agents, blocks, events, and tasks.
-//! Uses tokio-tungstenite for WebSocket connectivity.
+//! Provides real-time streaming capabilities for watching agents, blocks,
+//! events, and tasks. Uses tokio-tungstenite for WebSocket connectivity.
 
 #![allow(dead_code)]
+
+use std::time::Duration;
 
 use anyhow::{anyhow, Context, Result};
 use futures::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::time::Duration;
 use tokio::net::TcpStream;
 use tokio::time::timeout;
-use tokio_tungstenite::{connect_async, tungstenite::Message, MaybeTlsStream, WebSocketStream};
+use tokio_tungstenite::tungstenite::Message;
+use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
 use url::Url;
 
 /// WebSocket message types (matching gateway protocol)

@@ -1,8 +1,9 @@
 //! 调试控制台组件
 
+use leptos::prelude::*;
+
 use crate::browser::debugger::{BrowserLogEntry, LogLevel};
 use crate::utils::event_target_value;
-use leptos::prelude::*;
 
 /// 调试控制台组件
 #[component]
@@ -138,5 +139,3 @@ pub fn LogLevelFilter(
         </div>
     }
 }
-
-

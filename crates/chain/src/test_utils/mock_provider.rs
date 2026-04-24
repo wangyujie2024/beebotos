@@ -2,15 +2,16 @@
 //!
 //! Provides a mock implementation for unit tests.
 
+use std::collections::HashMap;
+use std::str::FromStr;
+use std::sync::{Arc, Mutex};
+
 use alloy_primitives::{Address, B256, U256};
 use alloy_rpc_types::{
     Block, BlockNumberOrTag, BlockTransactionsKind, Filter, Log, Transaction, TransactionReceipt,
     TransactionRequest,
 };
 use alloy_transport::TransportError;
-use std::collections::HashMap;
-use std::str::FromStr;
-use std::sync::{Arc, Mutex};
 
 /// Mock provider for testing
 #[derive(Debug, Clone)]

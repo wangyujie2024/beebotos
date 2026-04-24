@@ -78,7 +78,10 @@ impl ChannelInstanceManager {
     ) -> Result<Arc<RwLock<dyn Channel>>> {
         // Clean up any existing instance with the same ID to prevent resource leaks.
         if self.get_instance(&id).await.is_some() {
-            warn!("Channel instance {:?} already exists, removing old instance first", id);
+            warn!(
+                "Channel instance {:?} already exists, removing old instance first",
+                id
+            );
             self.remove_instance(&id).await?;
         }
 
@@ -122,10 +125,7 @@ impl ChannelInstanceManager {
     }
 
     /// Get a channel instance by its ID.
-    pub async fn get_instance(
-        &self,
-        id: &ChannelInstanceId,
-    ) -> Option<Arc<RwLock<dyn Channel>>> {
+    pub async fn get_instance(&self, id: &ChannelInstanceId) -> Option<Arc<RwLock<dyn Channel>>> {
         let instances = self.instances.read().await;
         instances.get(id).map(|i| i.channel.clone())
     }
@@ -165,7 +165,10 @@ impl ChannelInstanceManager {
     }
 
     /// Get all instances for a platform.
-    pub async fn get_instances_by_platform(&self, platform: PlatformType) -> Vec<ChannelInstanceRef> {
+    pub async fn get_instances_by_platform(
+        &self,
+        platform: PlatformType,
+    ) -> Vec<ChannelInstanceRef> {
         let instances = self.instances.read().await;
         instances
             .values()
@@ -301,7 +304,8 @@ impl ChannelInstanceManager {
             ch.stop_listener().await.ok();
         }
 
-        self.set_status(id, ChannelInstanceStatus::Disconnected).await;
+        self.set_status(id, ChannelInstanceStatus::Disconnected)
+            .await;
         info!("🔌 Disconnected channel instance: {:?}", id);
         Ok(())
     }
@@ -360,7 +364,9 @@ mod tests {
         let config = serde_json::json!({"app_id": "test", "app_secret": "test"});
 
         // Without a factory, creation should fail
-        let result = manager.create_instance(id.clone(), "uc-1".to_string(), &config, None).await;
+        let result = manager
+            .create_instance(id.clone(), "uc-1".to_string(), &config, None)
+            .await;
         assert!(result.is_err());
     }
 

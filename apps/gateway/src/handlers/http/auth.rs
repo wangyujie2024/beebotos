@@ -2,21 +2,18 @@
 
 use std::sync::Arc;
 
-use axum::{extract::State, Json};
+use axum::extract::State;
+use axum::Json;
 use chrono::{Duration as ChronoDuration, Utc};
-use gateway::{
-    error::GatewayError,
-    middleware::{AuthUser, Claims, TokenType},
-};
+use gateway::error::GatewayError;
+use gateway::middleware::{AuthUser, Claims, TokenType};
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
 use secrecy::ExposeSecret;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{
-    services::auth_service::{AuthService, AuthUserInfo},
-    AppState,
-};
+use crate::services::auth_service::{AuthService, AuthUserInfo};
+use crate::AppState;
 
 /// Login request
 #[derive(Debug, Deserialize)]
@@ -58,7 +55,6 @@ fn get_auth_service(state: &AppState) -> Result<&AuthService, GatewayError> {
 
 fn generate_access_token(
     user_id: &str,
-    roles: Vec<String>,
     state: &AppState,
 ) -> Result<String, GatewayError> {
     let now = Utc::now();
@@ -70,7 +66,6 @@ fn generate_access_token(
         exp: (now + ChronoDuration::hours(state.config.jwt.expiry_hours)).timestamp(),
         iss: state.config.jwt.issuer.clone(),
         aud: state.config.jwt.audience.clone(),
-        roles,
         token_type: TokenType::Access,
         session_id: Some(jti),
     };
@@ -92,7 +87,6 @@ fn generate_refresh_token(user_id: &str, state: &AppState) -> Result<String, Gat
         exp: (now + ChronoDuration::hours(state.config.jwt.refresh_expiry_hours)).timestamp(),
         iss: state.config.jwt.issuer.clone(),
         aud: state.config.jwt.audience.clone(),
-        roles: vec![],
         token_type: TokenType::Refresh,
         session_id: Some(jti),
     };
@@ -114,7 +108,7 @@ pub async fn login(
         .authenticate(&req.username, &req.password)
         .await?;
 
-    let access_token = generate_access_token(&user.id, user.roles.clone(), &state)?;
+    let access_token = generate_access_token(&user.id, &state)?;
     let refresh_token = generate_refresh_token(&user.id, &state)?;
 
     Ok(Json(AuthResponse {
@@ -135,7 +129,7 @@ pub async fn register(
         .register(&req.username, req.email.as_deref(), &req.password)
         .await?;
 
-    let access_token = generate_access_token(&user.id, user.roles.clone(), &state)?;
+    let access_token = generate_access_token(&user.id, &state)?;
     let refresh_token = generate_refresh_token(&user.id, &state)?;
 
     Ok(Json(AuthResponse {
@@ -177,7 +171,7 @@ pub async fn refresh_token(
 
     let auth_service = get_auth_service(&state)?;
     let user = auth_service.get_user_by_id(&claims.sub).await?;
-    let access_token = generate_access_token(&user.id, user.roles.clone(), &state)?;
+    let access_token = generate_access_token(&user.id, &state)?;
     let refresh_token = generate_refresh_token(&user.id, &state)?;
 
     Ok(Json(serde_json::json!({

@@ -12,15 +12,15 @@ pub struct DoctorArgs {
     /// Attempt to fix issues automatically
     #[arg(long)]
     pub fix: bool,
-    
+
     /// Deep scan (includes network tests)
     #[arg(long)]
     pub deep: bool,
-    
+
     /// Generate gateway token
     #[arg(long)]
     pub generate_gateway_token: bool,
-    
+
     /// Output format
     #[arg(short, long, value_enum, default_value = "pretty")]
     pub format: OutputFormat,
@@ -33,10 +33,12 @@ pub enum OutputFormat {
 }
 
 pub async fn execute(args: DoctorArgs) -> Result<()> {
-    println!(r#"
+    println!(
+        r#"
 🏥 BeeBotOS Health Check
 ═══════════════════════════════════════════════════════════════
-"#);
+"#
+    );
 
     let mut all_checks = Vec::new();
     let mut issues_found = 0;
@@ -45,7 +47,7 @@ pub async fn execute(args: DoctorArgs) -> Result<()> {
     // Section 1: System Checks
     println!("\n📦 System Checks");
     println!("{}", "-".repeat(60));
-    
+
     let system_checks = run_system_checks(&args).await?;
     for check in &system_checks {
         display_check(check);
@@ -60,7 +62,7 @@ pub async fn execute(args: DoctorArgs) -> Result<()> {
     // Section 2: Configuration Checks
     println!("\n⚙️  Configuration Checks");
     println!("{}", "-".repeat(60));
-    
+
     let config_checks = run_config_checks(&args).await?;
     for check in &config_checks {
         display_check(check);
@@ -75,7 +77,7 @@ pub async fn execute(args: DoctorArgs) -> Result<()> {
     // Section 3: Gateway Checks
     println!("\n🌐 Gateway Checks");
     println!("{}", "-".repeat(60));
-    
+
     let gateway_checks = run_gateway_checks(&args).await?;
     for check in &gateway_checks {
         display_check(check);
@@ -91,7 +93,7 @@ pub async fn execute(args: DoctorArgs) -> Result<()> {
     if args.deep {
         println!("\n🌐 Network Checks (Deep Scan)");
         println!("{}", "-".repeat(60));
-        
+
         let network_checks = run_network_checks(&args).await?;
         for check in &network_checks {
             display_check(check);
@@ -107,24 +109,35 @@ pub async fn execute(args: DoctorArgs) -> Result<()> {
     // Summary
     println!("\n");
     println!("{}", "=".repeat(60));
-    
+
     let total = all_checks.len();
-    let passed = all_checks.iter().filter(|c| c.status == CheckStatus::Pass).count();
-    
+    let passed = all_checks
+        .iter()
+        .filter(|c| c.status == CheckStatus::Pass)
+        .count();
+
     if issues_found == 0 && warnings_found == 0 {
         println!("✅ All {} checks passed! System is healthy.", total);
     } else {
         println!("⚠️  Health Check Summary:");
         println!("   Total checks: {}", total);
         println!("   {}{}", "✅ Passed: ".green(), passed.to_string().green());
-        
+
         if warnings_found > 0 {
-            println!("   {}{}", "⚠️  Warnings: ".yellow(), warnings_found.to_string().yellow());
+            println!(
+                "   {}{}",
+                "⚠️  Warnings: ".yellow(),
+                warnings_found.to_string().yellow()
+            );
         }
         if issues_found > 0 {
-            println!("   {}{}", "❌ Issues: ".red(), issues_found.to_string().red());
+            println!(
+                "   {}{}",
+                "❌ Issues: ".red(),
+                issues_found.to_string().red()
+            );
         }
-        
+
         if args.fix && issues_found > 0 {
             println!("\n🔧 Attempting automatic fixes...");
             let fixed = attempt_auto_fix(&all_checks).await?;
@@ -133,7 +146,7 @@ pub async fn execute(args: DoctorArgs) -> Result<()> {
             println!("\n💡 Run with `--fix` to attempt automatic fixes.");
         }
     }
-    
+
     if args.generate_gateway_token {
         println!("\n🔑 Generating gateway token...");
         let token = generate_gateway_token().await?;
@@ -170,10 +183,10 @@ fn display_check(check: &HealthCheck) {
         CheckStatus::Warning => "⚠️",
         CheckStatus::Fail => "❌",
     };
-    
+
     println!("{} {}", icon, check.name);
     println!("   {}", check.message);
-    
+
     if let Some(ref suggestion) = check.suggestion {
         let colored = match check.status {
             CheckStatus::Warning => suggestion.yellow(),
@@ -186,25 +199,25 @@ fn display_check(check: &HealthCheck) {
 
 async fn run_system_checks(_args: &DoctorArgs) -> Result<Vec<HealthCheck>> {
     let mut checks = Vec::new();
-    
+
     // Check disk space
     let disk_check = check_disk_space().await;
     checks.push(disk_check);
-    
+
     // Check memory
     let memory_check = check_memory().await;
     checks.push(memory_check);
-    
+
     // Check OS compatibility
     let os_check = check_os_compatibility().await;
     checks.push(os_check);
-    
+
     Ok(checks)
 }
 
 async fn run_config_checks(_args: &DoctorArgs) -> Result<Vec<HealthCheck>> {
     let mut checks = Vec::new();
-    
+
     // Check if config directory exists
     let config_dir_check = if let Some(home) = dirs::home_dir() {
         let config_dir = home.join(".beebotos");
@@ -235,47 +248,47 @@ async fn run_config_checks(_args: &DoctorArgs) -> Result<Vec<HealthCheck>> {
         }
     };
     checks.push(config_dir_check);
-    
+
     // Check config file
     let config_file_check = check_config_file().await;
     checks.push(config_file_check);
-    
+
     // Check API keys
     let api_key_check = check_api_keys().await;
     checks.push(api_key_check);
-    
+
     Ok(checks)
 }
 
 async fn run_gateway_checks(_args: &DoctorArgs) -> Result<Vec<HealthCheck>> {
     let mut checks = Vec::new();
-    
+
     // Check if gateway is running
     let gateway_running_check = check_gateway_running().await;
     checks.push(gateway_running_check);
-    
+
     // Check gateway health
     let gateway_health_check = check_gateway_health().await;
     checks.push(gateway_health_check);
-    
+
     // Check port availability
     let port_check = check_gateway_port().await;
     checks.push(port_check);
-    
+
     Ok(checks)
 }
 
 async fn run_network_checks(_args: &DoctorArgs) -> Result<Vec<HealthCheck>> {
     let mut checks = Vec::new();
-    
+
     // Check internet connectivity
     let internet_check = check_internet_connectivity().await;
     checks.push(internet_check);
-    
+
     // Check LLM provider connectivity
     let llm_check = check_llm_connectivity().await;
     checks.push(llm_check);
-    
+
     Ok(checks)
 }
 
@@ -303,12 +316,20 @@ async fn check_memory() -> HealthCheck {
 async fn check_os_compatibility() -> HealthCheck {
     let os = std::env::consts::OS;
     let supported = matches!(os, "linux" | "macos" | "windows");
-    
+
     HealthCheck {
         name: "OS compatibility".to_string(),
-        status: if supported { CheckStatus::Pass } else { CheckStatus::Warning },
+        status: if supported {
+            CheckStatus::Pass
+        } else {
+            CheckStatus::Warning
+        },
         message: format!("Detected: {}", os),
-        suggestion: if supported { None } else { Some("Some features may not work on this OS".to_string()) },
+        suggestion: if supported {
+            None
+        } else {
+            Some("Some features may not work on this OS".to_string())
+        },
         auto_fixable: false,
     }
 }
@@ -345,10 +366,10 @@ async fn check_config_file() -> HealthCheck {
 }
 
 async fn check_api_keys() -> HealthCheck {
-    let has_key = std::env::var("BEEBOTOS_API_KEY").is_ok() ||
-                  std::env::var("OPENAI_API_KEY").is_ok() ||
-                  std::env::var("ANTHROPIC_API_KEY").is_ok();
-    
+    let has_key = std::env::var("BEEBOTOS_API_KEY").is_ok()
+        || std::env::var("OPENAI_API_KEY").is_ok()
+        || std::env::var("ANTHROPIC_API_KEY").is_ok();
+
     if has_key {
         HealthCheck {
             name: "API keys".to_string(),
@@ -362,7 +383,9 @@ async fn check_api_keys() -> HealthCheck {
             name: "API keys".to_string(),
             status: CheckStatus::Warning,
             message: "No LLM API keys found".to_string(),
-            suggestion: Some("Set OPENAI_API_KEY or ANTHROPIC_API_KEY environment variable".to_string()),
+            suggestion: Some(
+                "Set OPENAI_API_KEY or ANTHROPIC_API_KEY environment variable".to_string(),
+            ),
             auto_fixable: false,
         }
     }
@@ -373,17 +396,15 @@ async fn check_gateway_running() -> HealthCheck {
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(2))
         .build();
-    
+
     let running = match client {
-        Ok(c) => {
-            match c.get("http://localhost:8080/health").send().await {
-                Ok(r) => r.status().is_success(),
-                Err(_) => false,
-            }
-        }
+        Ok(c) => match c.get("http://localhost:8080/health").send().await {
+            Ok(r) => r.status().is_success(),
+            Err(_) => false,
+        },
         Err(_) => false,
     };
-    
+
     if running {
         HealthCheck {
             name: "Gateway running".to_string(),
@@ -428,14 +449,12 @@ async fn check_internet_connectivity() -> HealthCheck {
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(5))
         .build();
-    
+
     let connected = match client {
-        Ok(c) => {
-            c.get("https://1.1.1.1").send().await.is_ok()
-        }
+        Ok(c) => c.get("https://1.1.1.1").send().await.is_ok(),
         Err(_) => false,
     };
-    
+
     if connected {
         HealthCheck {
             name: "Internet connectivity".to_string(),
@@ -467,7 +486,7 @@ async fn check_llm_connectivity() -> HealthCheck {
 
 async fn attempt_auto_fix(checks: &[HealthCheck]) -> Result<usize> {
     let mut fixed = 0;
-    
+
     for check in checks {
         if check.status == CheckStatus::Fail && check.auto_fixable {
             match check.name.as_str() {
@@ -477,7 +496,7 @@ async fn attempt_auto_fix(checks: &[HealthCheck]) -> Result<usize> {
                     if let Some(home) = dirs::home_dir() {
                         let config_dir = home.join(".beebotos");
                         std::fs::create_dir_all(&config_dir)?;
-                        
+
                         let config = serde_json::json!({
                             "version": "1.0",
                             "gateway": {
@@ -485,7 +504,7 @@ async fn attempt_auto_fix(checks: &[HealthCheck]) -> Result<usize> {
                                 "port": 8080,
                             },
                         });
-                        
+
                         let config_path = config_dir.join("config.json");
                         std::fs::write(&config_path, serde_json::to_string_pretty(&config)?)?;
                         fixed += 1;
@@ -501,7 +520,7 @@ async fn attempt_auto_fix(checks: &[HealthCheck]) -> Result<usize> {
             }
         }
     }
-    
+
     Ok(fixed)
 }
 
@@ -512,6 +531,6 @@ async fn generate_gateway_token() -> Result<String> {
     let token: String = (0..32)
         .map(|_| rng.sample(rand::distributions::Alphanumeric) as char)
         .collect();
-    
+
     Ok(format!("bee_{}", token))
 }

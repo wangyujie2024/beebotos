@@ -170,7 +170,8 @@ pub fn compute_create2_address(
     use alloy_primitives::keccak256;
     // use alloy_sol_types::SolValue;
 
-    // CREATE2 address = keccak256(0xff ++ deployer ++ salt ++ keccak256(bytecode))[12:]
+    // CREATE2 address = keccak256(0xff ++ deployer ++ salt ++
+    // keccak256(bytecode))[12:]
     let mut data = Vec::with_capacity(85);
     data.push(0xff);
     data.extend_from_slice(deployer.as_slice());

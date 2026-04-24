@@ -7,7 +7,12 @@
 //! - Proper error handling
 //! - Audit logging
 
+use std::collections::HashMap;
+use std::sync::Arc;
+use std::time::Duration;
+
 use async_trait::async_trait;
+use parking_lot::RwLock;
 use tracing::{error, info, trace, warn};
 
 use crate::capabilities::{CapabilityLevel, CapabilitySet};
@@ -15,13 +20,9 @@ use crate::ipc::router::{global_router, MessageEnvelope};
 use crate::resource::{ResourceLimits, ResourceManager, ResourceUsage};
 use crate::security::path::{validate_path, PathValidationOptions};
 use crate::storage::global::{global as global_storage, workspace_key};
-use crate::syscalls::{blockchain, sandbox};
-use crate::syscalls::{SyscallArgs, SyscallContext, SyscallError, SyscallHandler, SyscallResult};
-
-use parking_lot::RwLock;
-use std::collections::HashMap;
-use std::sync::Arc;
-use std::time::Duration;
+use crate::syscalls::{
+    blockchain, sandbox, SyscallArgs, SyscallContext, SyscallError, SyscallHandler, SyscallResult,
+};
 
 /// Global capability registry reference (initialized during kernel startup)
 static CAPABILITY_REGISTRY: RwLock<Option<Arc<RwLock<CapabilitySet>>>> = RwLock::new(None);
@@ -1424,7 +1425,8 @@ fn verify_signature(data: &[u8], signature: &[u8], public_key: &[u8]) -> bool {
 
 /// Verify Ed25519 signature
 ///
-/// Note: This is a placeholder implementation. In production, use ed25519-dalek crate.
+/// Note: This is a placeholder implementation. In production, use ed25519-dalek
+/// crate.
 fn verify_ed25519(_data: &[u8], _signature: &[u8], _public_key: &[u8]) -> bool {
     // Ed25519 requires:
     // - 32-byte public key

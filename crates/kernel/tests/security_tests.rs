@@ -59,7 +59,8 @@ fn test_access_control_list() {
         AccessDecision::Deny
     );
 
-    // Charlie is neither owner nor in group, but default permissions 0o644 allow others to read
+    // Charlie is neither owner nor in group, but default permissions 0o644 allow
+    // others to read
     assert_eq!(
         acl.check_access(&charlie_ctx, AccessAction::Read),
         AccessDecision::Allow

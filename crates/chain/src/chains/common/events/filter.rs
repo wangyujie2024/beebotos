@@ -1,8 +1,9 @@
 //! Event Filter Builder
 
-use crate::compat::{Address, B256};
 use alloy_rpc_types::{Filter, FilterBlockOption};
 use serde::{Deserialize, Serialize};
+
+use crate::compat::{Address, B256};
 
 /// Event filter builder
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

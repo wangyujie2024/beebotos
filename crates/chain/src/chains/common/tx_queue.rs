@@ -3,15 +3,17 @@
 //! Provides priority-based transaction queuing, batching, and submission
 //! with automatic gas estimation and nonce management.
 
-use crate::chains::common::{ChainStateCache, EvmProvider, GasEstimator, TransactionPriority};
-use crate::compat::Address;
-use crate::ChainError;
-use alloy_rpc_types::TransactionRequest;
 use std::collections::{BinaryHeap, HashMap, VecDeque};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+
+use alloy_rpc_types::TransactionRequest;
 use tokio::sync::{mpsc, oneshot, RwLock};
 use tracing::{debug, info, instrument};
+
+use crate::chains::common::{ChainStateCache, EvmProvider, GasEstimator, TransactionPriority};
+use crate::compat::Address;
+use crate::ChainError;
 
 /// Unique transaction ID
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]

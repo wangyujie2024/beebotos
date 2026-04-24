@@ -422,11 +422,7 @@ impl AgentConfigBuilder {
     }
 
     /// Add extra configuration
-    pub fn with_extra(
-        mut self,
-        key: impl Into<String>,
-        value: serde_json::Value,
-    ) -> Self {
+    pub fn with_extra(mut self, key: impl Into<String>, value: serde_json::Value) -> Self {
         self.config.extra.insert(key.into(), value);
         self
     }
@@ -440,11 +436,13 @@ impl AgentConfigBuilder {
 /// Mock implementation for testing
 #[cfg(test)]
 pub mod mock {
-    use super::*;
-    use crate::GatewayError;
     use std::collections::HashMap;
     use std::sync::Mutex;
+
     use tokio::sync::broadcast;
+
+    use super::*;
+    use crate::GatewayError;
 
     /// Mock agent runtime for testing
     pub struct MockAgentRuntime {
@@ -504,11 +502,9 @@ pub mod mock {
 
         async fn status(&self, agent_id: &AgentId) -> Result<AgentStatus> {
             let agents = self.agents.lock().unwrap();
-            let (config, state) = agents
-                .get(agent_id)
-                .ok_or_else(|| GatewayError::Agent {
-                    message: format!("Agent {} not found", agent_id),
-                })?;
+            let (config, state) = agents.get(agent_id).ok_or_else(|| GatewayError::Agent {
+                message: format!("Agent {} not found", agent_id),
+            })?;
 
             Ok(AgentStatus {
                 agent_id: agent_id.clone(),
@@ -552,11 +548,9 @@ pub mod mock {
 
         async fn get_config(&self, agent_id: &AgentId) -> Result<AgentConfig> {
             let agents = self.agents.lock().unwrap();
-            let (config, _) = agents
-                .get(agent_id)
-                .ok_or_else(|| GatewayError::Agent {
-                    message: format!("Agent {} not found", agent_id),
-                })?;
+            let (config, _) = agents.get(agent_id).ok_or_else(|| GatewayError::Agent {
+                message: format!("Agent {} not found", agent_id),
+            })?;
             Ok(config.clone())
         }
 
@@ -582,8 +576,8 @@ pub mod mock {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::mock::MockAgentRuntime;
+    use super::*;
 
     #[tokio::test]
     async fn test_mock_runtime() {

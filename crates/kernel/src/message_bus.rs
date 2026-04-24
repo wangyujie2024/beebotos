@@ -3,10 +3,11 @@
 //! Provides integration between Kernel module and the unified Message Bus.
 
 use std::sync::Arc;
+
 use beebotos_message_bus::{Message, MessageBus, Result as BusResult};
 
-use crate::TaskId;
 use crate::capabilities::CapabilityLevel;
+use crate::TaskId;
 
 /// Kernel task events
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -107,13 +108,16 @@ impl<B: MessageBus> KernelMessageBus<B> {
 
     /// Publish task event
     pub async fn publish_task_event(&self, event: KernelTaskEvent) -> BusResult<()> {
-        let topic = format!("kernel/task/{}", match &event {
-            KernelTaskEvent::Spawned { task_id, .. } => task_id.to_string(),
-            KernelTaskEvent::Started { task_id, .. } => task_id.to_string(),
-            KernelTaskEvent::Completed { task_id, .. } => task_id.to_string(),
-            KernelTaskEvent::Failed { task_id, .. } => task_id.to_string(),
-            KernelTaskEvent::Cancelled { task_id, .. } => task_id.to_string(),
-        });
+        let topic = format!(
+            "kernel/task/{}",
+            match &event {
+                KernelTaskEvent::Spawned { task_id, .. } => task_id.to_string(),
+                KernelTaskEvent::Started { task_id, .. } => task_id.to_string(),
+                KernelTaskEvent::Completed { task_id, .. } => task_id.to_string(),
+                KernelTaskEvent::Failed { task_id, .. } => task_id.to_string(),
+                KernelTaskEvent::Cancelled { task_id, .. } => task_id.to_string(),
+            }
+        );
 
         let payload = serde_json::to_vec(&event).unwrap_or_default();
         let message = Message::new(&topic, payload);
@@ -129,12 +133,22 @@ impl<B: MessageBus> KernelMessageBus<B> {
     }
 
     /// Subscribe to task events
-    pub async fn subscribe_task_events(&self) -> BusResult<(beebotos_message_bus::SubscriptionId, beebotos_message_bus::MessageStream)> {
+    pub async fn subscribe_task_events(
+        &self,
+    ) -> BusResult<(
+        beebotos_message_bus::SubscriptionId,
+        beebotos_message_bus::MessageStream,
+    )> {
         self.bus.subscribe("kernel/task/+").await
     }
 
     /// Subscribe to capability events
-    pub async fn subscribe_capability_events(&self) -> BusResult<(beebotos_message_bus::SubscriptionId, beebotos_message_bus::MessageStream)> {
+    pub async fn subscribe_capability_events(
+        &self,
+    ) -> BusResult<(
+        beebotos_message_bus::SubscriptionId,
+        beebotos_message_bus::MessageStream,
+    )> {
         self.bus.subscribe("kernel/capability/+").await
     }
 }
@@ -150,15 +164,17 @@ impl<B: MessageBus> Clone for KernelMessageBus<B> {
 use std::sync::OnceLock;
 
 /// Global Message Bus handle
-/// 
-/// SECURITY FIX: Replaced `static mut` with `OnceLock` for thread-safe initialization
+///
+/// SECURITY FIX: Replaced `static mut` with `OnceLock` for thread-safe
+/// initialization
 static KERNEL_MESSAGE_BUS: OnceLock<Arc<dyn MessageBus>> = OnceLock::new();
 
 /// Initialize Kernel Message Bus
-/// 
+///
 /// This function is thread-safe and can only be called once.
 pub fn init_message_bus<B: MessageBus + 'static>(bus: Arc<B>) -> Result<(), &'static str> {
-    KERNEL_MESSAGE_BUS.set(bus)
+    KERNEL_MESSAGE_BUS
+        .set(bus)
         .map_err(|_| "Kernel message bus already initialized")
 }
 
@@ -169,8 +185,9 @@ pub fn message_bus() -> Option<Arc<dyn MessageBus>> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use beebotos_message_bus::{DefaultMessageBus, JsonCodec, MemoryTransport};
+
+    use super::*;
 
     #[tokio::test]
     async fn test_kernel_message_bus() {

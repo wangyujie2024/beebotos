@@ -4,8 +4,9 @@
 //! Supports syllogistic reasoning, modus ponens, and chain reasoning.
 #![allow(dead_code)]
 
-use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
+
+use serde::{Deserialize, Serialize};
 
 /// A logical statement
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]

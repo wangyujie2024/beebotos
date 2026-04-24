@@ -1,7 +1,8 @@
 //! Config management command
 
-use crate::config::Config;
 use std::path::PathBuf;
+
+use crate::config::Config;
 
 /// Config subcommand
 #[derive(clap::Args)]
@@ -86,17 +87,15 @@ pub async fn run(args: ConfigArgs, _config: Config) -> anyhow::Result<()> {
             config.save()?;
             println!("✅ Configuration reset to defaults");
         }
-        ConfigCommand::Validate => {
-            match Config::load() {
-                Ok(_) => {
-                    println!("✅ Configuration is valid");
-                }
-                Err(e) => {
-                    eprintln!("❌ Configuration error: {}", e);
-                    std::process::exit(1);
-                }
+        ConfigCommand::Validate => match Config::load() {
+            Ok(_) => {
+                println!("✅ Configuration is valid");
             }
-        }
+            Err(e) => {
+                eprintln!("❌ Configuration error: {}", e);
+                std::process::exit(1);
+            }
+        },
     }
 
     Ok(())
@@ -152,8 +151,8 @@ fn list_keys<T: serde::Serialize>(value: &T, prefix: &str) {
 /// Check if a config key is sensitive (contains passwords, keys, tokens, etc.)
 fn is_sensitive_key(key: &str) -> bool {
     let lower = key.to_lowercase();
-    lower.contains("key") 
-        || lower.contains("secret") 
+    lower.contains("key")
+        || lower.contains("secret")
         || lower.contains("password")
         || lower.contains("token")
         || lower.contains("credential")
@@ -166,6 +165,6 @@ fn mask_sensitive_value(value: &str) -> String {
     if value.len() <= 8 {
         "****".to_string()
     } else {
-        format!("{}****{}", &value[..4], &value[value.len()-4..])
+        format!("{}****{}", &value[..4], &value[value.len() - 4..])
     }
 }

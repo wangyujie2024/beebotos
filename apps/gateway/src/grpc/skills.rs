@@ -1,8 +1,8 @@
 //! gRPC Skill Registry Service
 //!
 //! Full implementation of the proto SkillRegistry service with instance-based
-//! execution model: skill lifecycle, multi-function dispatch, timeout enforcement,
-//! and streaming output.
+//! execution model: skill lifecycle, multi-function dispatch, timeout
+//! enforcement, and streaming output.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -12,11 +12,11 @@ use std::sync::Arc;
 use tokio::sync::mpsc;
 use tonic::{Request, Response, Status};
 
-use super::generated::beebotos::skills::registry::{
-    skill_registry_server::{SkillRegistry, SkillRegistryServer},
-    *,
-};
 use super::generated::beebotos::common::SemanticVersion;
+use super::generated::beebotos::skills::registry::skill_registry_server::{
+    SkillRegistry, SkillRegistryServer,
+};
+use super::generated::beebotos::skills::registry::*;
 
 /// gRPC service for skill registry and instance operations.
 pub struct SkillsGrpcService {
@@ -43,10 +43,7 @@ impl SkillsGrpcService {
         }
     }
 
-    pub fn with_rating_store(
-        mut self,
-        db: sqlx::SqlitePool,
-    ) -> Self {
+    pub fn with_rating_store(mut self, db: sqlx::SqlitePool) -> Self {
         self.rating_store = Some(beebotos_agents::skills::SkillRatingStore::new(db));
         self
     }
@@ -78,7 +75,10 @@ impl SkillsGrpcService {
     }
 
     /// Load a skill by ID using a fresh loader.
-    async fn load_skill(&self, skill_id: &str) -> Result<beebotos_agents::skills::LoadedSkill, Status> {
+    async fn load_skill(
+        &self,
+        skill_id: &str,
+    ) -> Result<beebotos_agents::skills::LoadedSkill, Status> {
         let mut loader = self.create_loader();
         loader
             .load_skill(skill_id)
@@ -108,7 +108,9 @@ fn validate_skill_id(skill_id: &str) -> Result<(), Status> {
         return Err(Status::invalid_argument("skill_id cannot be empty"));
     }
     if skill_id.starts_with('/') {
-        return Err(Status::invalid_argument("skill_id cannot be an absolute path"));
+        return Err(Status::invalid_argument(
+            "skill_id cannot be an absolute path",
+        ));
     }
     if skill_id.contains("..") || skill_id.contains('/') || skill_id.contains('\\') {
         return Err(Status::invalid_argument(
@@ -307,9 +309,7 @@ impl SkillRegistry for SkillsGrpcService {
             .as_ref()
             .map(|m| m.keywords.clone())
             .unwrap_or_default();
-        registry
-            .register(loaded, category, keywords)
-            .await;
+        registry.register(loaded, category, keywords).await;
 
         Ok(Response::new(RegisterSkillResponse {
             success: true,
@@ -344,10 +344,8 @@ impl SkillRegistry for SkillsGrpcService {
                     skills = registry.by_category(&req.category).await;
                 }
                 let total_count = skills.len() as u32;
-                let proto_skills: Vec<Skill> = skills
-                    .iter()
-                    .map(|r| convert_registered_skill(r))
-                    .collect();
+                let proto_skills: Vec<Skill> =
+                    skills.iter().map(|r| convert_registered_skill(r)).collect();
                 Ok(Response::new(ListSkillsResponse {
                     skills: proto_skills,
                     next_page_token: "".to_string(),
@@ -367,10 +365,8 @@ impl SkillRegistry for SkillsGrpcService {
             Some(registry) => {
                 let skills = registry.search(&req.query).await;
                 let total_count = skills.len() as u32;
-                let proto_skills: Vec<Skill> = skills
-                    .iter()
-                    .map(|r| convert_registered_skill(r))
-                    .collect();
+                let proto_skills: Vec<Skill> =
+                    skills.iter().map(|r| convert_registered_skill(r)).collect();
                 Ok(Response::new(ListSkillsResponse {
                     skills: proto_skills,
                     next_page_token: "".to_string(),
@@ -405,15 +401,22 @@ impl SkillRegistry for SkillsGrpcService {
                 .await
                 .map_err(|e| Status::internal(format!("Failed to reload skill: {}", e)))?;
 
-            let category = updated.categories.first().cloned().unwrap_or_else(|| skill.category.clone());
-            let keywords = updated.metadata.as_ref().map(|m| m.keywords.clone()).unwrap_or_default();
+            let category = updated
+                .categories
+                .first()
+                .cloned()
+                .unwrap_or_else(|| skill.category.clone());
+            let keywords = updated
+                .metadata
+                .as_ref()
+                .map(|m| m.keywords.clone())
+                .unwrap_or_default();
             registry.register(loaded, category, keywords).await;
         }
 
-        let updated = registry
-            .get(&req.skill_id)
-            .await
-            .ok_or_else(|| Status::not_found(format!("Skill {} not found after update", req.skill_id)))?;
+        let updated = registry.get(&req.skill_id).await.ok_or_else(|| {
+            Status::not_found(format!("Skill {} not found after update", req.skill_id))
+        })?;
 
         Ok(Response::new(convert_registered_skill(&updated)))
     }
@@ -432,7 +435,10 @@ impl SkillRegistry for SkillsGrpcService {
 
         let removed = registry.unregister(&req.skill_id).await;
         if removed.is_none() {
-            return Err(Status::not_found(format!("Skill {} not found", req.skill_id)));
+            return Err(Status::not_found(format!(
+                "Skill {} not found",
+                req.skill_id
+            )));
         }
 
         // Remove from disk
@@ -462,7 +468,10 @@ impl SkillRegistry for SkillsGrpcService {
             .as_ref()
             .ok_or_else(|| Status::internal("Skill registry not available"))?;
         if registry.get(&req.skill_id).await.is_none() {
-            return Err(Status::not_found(format!("Skill {} not found", req.skill_id)));
+            return Err(Status::not_found(format!(
+                "Skill {} not found",
+                req.skill_id
+            )));
         }
 
         let instance_id = manager
@@ -472,7 +481,10 @@ impl SkillRegistry for SkillsGrpcService {
 
         // Auto-transition to Running
         manager
-            .update_status(&instance_id, beebotos_agents::skills::InstanceStatus::Running)
+            .update_status(
+                &instance_id,
+                beebotos_agents::skills::InstanceStatus::Running,
+            )
             .await
             .map_err(|e| Status::internal(format!("Failed to start instance: {}", e)))?;
 
@@ -488,7 +500,9 @@ impl SkillRegistry for SkillsGrpcService {
         &self,
         request: Request<GetInstanceRequest>,
     ) -> Result<Response<SkillInstance>, Status> {
-        let instance = self.resolve_instance(&request.into_inner().instance_id).await?;
+        let instance = self
+            .resolve_instance(&request.into_inner().instance_id)
+            .await?;
         Ok(Response::new(convert_instance(&instance)))
     }
 
@@ -630,18 +644,20 @@ impl SkillRegistry for SkillsGrpcService {
         // Record usage
         if let Some(manager) = &self.instance_manager {
             let _ = manager
-                .record_execution(&req.instance_id, result.success, result.execution_time_ms as f64)
+                .record_execution(
+                    &req.instance_id,
+                    result.success,
+                    result.execution_time_ms as f64,
+                )
                 .await;
         }
 
         // Convert structured output to proto map<string, bytes>
-        let results = result
-            .structured_output
-            .unwrap_or_else(|| {
-                let mut map = HashMap::new();
-                map.insert("output".to_string(), result.output.into_bytes());
-                map
-            });
+        let results = result.structured_output.unwrap_or_else(|| {
+            let mut map = HashMap::new();
+            map.insert("output".to_string(), result.output.into_bytes());
+            map
+        });
 
         Ok(Response::new(ExecuteFunctionResponse {
             success: result.success,
@@ -802,8 +818,9 @@ impl SkillRegistry for SkillsGrpcService {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::sync::Arc;
+
+    use super::*;
 
     fn create_test_service() -> (SkillsGrpcService, tempfile::TempDir) {
         let tmp = tempfile::tempdir().unwrap();
@@ -825,7 +842,11 @@ entry_point: handle
         )
         .unwrap();
         // Write a minimal valid WASM header
-        std::fs::write(skill_dir.join("skill.wasm"), &[0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00]).unwrap();
+        std::fs::write(
+            skill_dir.join("skill.wasm"),
+            &[0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00],
+        )
+        .unwrap();
 
         let svc = SkillsGrpcService::new(
             Some(Arc::new(beebotos_agents::skills::SkillRegistry::new())),

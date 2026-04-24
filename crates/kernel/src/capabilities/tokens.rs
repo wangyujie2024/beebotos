@@ -2,8 +2,9 @@
 //!
 //! Tokens for temporary capability elevation.
 
-use serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};
+
+use serde::{Deserialize, Serialize};
 
 use super::CapabilityLevel;
 use crate::AgentId;

@@ -4,8 +4,7 @@
 
 /// 🟡 P1 FIX: Re-export core error for unified error handling
 pub use beebotos_core::Error as CoreError;
-pub use beebotos_core::Error as BeeBotOSError;
-pub use beebotos_core::ErrorCode;
+pub use beebotos_core::{Error as BeeBotOSError, ErrorCode};
 use thiserror::Error;
 
 /// Agent result type - now uses core::Error for consistency
@@ -191,7 +190,9 @@ impl AgentError {
         use beebotos_core::ErrorCode;
         match self {
             AgentError::AgentNotFound(msg) => BeeBotOSError::not_found("agent", msg),
-            AgentError::AgentExists(msg) => BeeBotOSError::new(ErrorCode::AlreadyExists, format!("Agent exists: {}", msg)),
+            AgentError::AgentExists(msg) => {
+                BeeBotOSError::new(ErrorCode::AlreadyExists, format!("Agent exists: {}", msg))
+            }
             AgentError::InvalidConfig(msg) => CoreError::configuration(msg.clone()),
             AgentError::Execution(msg) => BeeBotOSError::new(ErrorCode::Agent, msg.clone()),
             AgentError::Wasm(msg) => BeeBotOSError::new(ErrorCode::Agent, format!("WASM: {}", msg)),
@@ -205,9 +206,13 @@ impl AgentError {
             AgentError::Platform(msg) => CoreError::agent(msg.clone()),
             AgentError::Authentication(msg) => CoreError::authentication(format!("Auth: {}", msg)),
             AgentError::TaskExecutionFailed(msg) => CoreError::agent(format!("Task: {}", msg)),
-            AgentError::CommunicationFailed(msg) => BeeBotOSError::new(ErrorCode::Network, format!("Comm: {}", msg)),
+            AgentError::CommunicationFailed(msg) => {
+                BeeBotOSError::new(ErrorCode::Network, format!("Comm: {}", msg))
+            }
             AgentError::MCPError(msg) => CoreError::agent(format!("MCP: {}", msg)),
-            AgentError::NotConfigured(msg) => CoreError::configuration(format!("Not configured: {}", msg)),
+            AgentError::NotConfigured(msg) => {
+                CoreError::configuration(format!("Not configured: {}", msg))
+            }
             AgentError::UnsupportedTaskType(msg) => {
                 CoreError::validation(format!("Task type: {}", msg))
             }
@@ -224,7 +229,9 @@ impl AgentError {
             AgentError::MessageSendFailed(msg) => {
                 BeeBotOSError::new(ErrorCode::Network, format!("Send failed: {}", msg))
             }
-            AgentError::NotConnected(msg) => BeeBotOSError::new(ErrorCode::Network, format!("Not connected: {}", msg)),
+            AgentError::NotConnected(msg) => {
+                BeeBotOSError::new(ErrorCode::Network, format!("Not connected: {}", msg))
+            }
             AgentError::RateLimited(msg) => {
                 BeeBotOSError::new(ErrorCode::RateLimited, format!("Rate limited: {}", msg))
             }
@@ -274,8 +281,13 @@ impl From<CoreError> for AgentError {
                 AgentError::Authentication(err.message)
             }
             ErrorCode::Io => AgentError::Execution(format!("IO: {}", err.message)),
-            ErrorCode::Serialization => AgentError::Execution(format!("Serialization: {}", err.message)),
-            ErrorCode::Contract | ErrorCode::Transaction | ErrorCode::Wallet | ErrorCode::InsufficientFunds => {
+            ErrorCode::Serialization => {
+                AgentError::Execution(format!("Serialization: {}", err.message))
+            }
+            ErrorCode::Contract
+            | ErrorCode::Transaction
+            | ErrorCode::Wallet
+            | ErrorCode::InsufficientFunds => {
                 AgentError::Execution(format!("Blockchain: {}", err.message))
             }
             _ => AgentError::Internal(format!("Unknown: {}", err.message)),

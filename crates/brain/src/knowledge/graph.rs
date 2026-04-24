@@ -2,8 +2,9 @@
 //!
 //! Graph-based knowledge representation.
 
-use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
+
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 /// Knowledge graph node

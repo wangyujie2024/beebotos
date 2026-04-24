@@ -3,70 +3,60 @@
 //! Complete event system for all BeeBotOS contracts.
 //! Works on any EVM-compatible chain.
 
-use crate::compat::{Address, B256};
-// use crate::contracts::bindings::*; // Events are re-exported individually below
-use crate::{ChainError, Result};
+use std::pin::Pin;
+use std::task::{Context, Poll};
+
 use alloy_primitives::Log as PrimitiveLog;
 use alloy_provider::Provider;
 use alloy_rpc_types::{Filter, FilterBlockOption, Log};
 use alloy_sol_types::SolEvent;
-use std::pin::Pin;
-use std::task::{Context, Poll};
 use tokio::sync::mpsc;
 use tokio_stream::{Stream, StreamExt};
 use tracing::{debug, error, info, warn};
 
+use crate::compat::{Address, B256};
+// Commerce events
+pub use crate::contracts::bindings::A2ACommerce::{
+    ListingCancelled, ListingCreated, ListingFulfilled, PurchaseMade,
+};
 // ============================================================================
 // Event Type Definitions (from sol! generated code)
 // ============================================================================
 
 // DAO events
 pub use crate::contracts::bindings::AgentDAO::{ProposalCreated, ProposalExecuted, VoteCast};
-
-// Token events
-pub use crate::contracts::bindings::BeeToken::{Approval, Transfer};
-
-// Treasury events
-pub use crate::contracts::bindings::TreasuryManager::{BudgetCreated, BudgetReleased};
-
 // Identity events
 pub use crate::contracts::bindings::AgentIdentity::{
     AgentDeactivated, AgentRegistered, AgentUpdated,
 };
-
-// Commerce events
-pub use crate::contracts::bindings::A2ACommerce::{
-    ListingCancelled, ListingCreated, ListingFulfilled, PurchaseMade,
-};
-
-// Escrow events
-pub use crate::contracts::bindings::DealEscrow::{EscrowCreated, EscrowRefunded, EscrowReleased};
-
-// Skill NFT events
-pub use crate::contracts::bindings::SkillNFT::{RoyaltyUpdated, SkillMinted};
-
-// Reputation events
-pub use crate::contracts::bindings::ReputationSystem::{CategoryScoreUpdated, ReputationUpdated};
-
-// Bridge events
-pub use crate::contracts::bindings::CrossChainBridge::{
-    BridgeCompleted, BridgeFailed, BridgeInitiated,
-};
-
 // Payment events
 pub use crate::contracts::bindings::AgentPayment::{
     MandateCreated, PaymentExecuted, StreamCreated, StreamUpdated,
 };
-
 // Registry events
 pub use crate::contracts::bindings::AgentRegistry::{
     AvailabilityChanged, Heartbeat, MetadataUpdated,
 };
-
+// Token events
+pub use crate::contracts::bindings::BeeToken::{Approval, Transfer};
+// Bridge events
+pub use crate::contracts::bindings::CrossChainBridge::{
+    BridgeCompleted, BridgeFailed, BridgeInitiated,
+};
+// Escrow events
+pub use crate::contracts::bindings::DealEscrow::{EscrowCreated, EscrowRefunded, EscrowReleased};
 // Dispute events
 pub use crate::contracts::bindings::DisputeResolution::{
     DisputeRaised, DisputeResolved, EvidenceSubmitted,
 };
+// Reputation events
+pub use crate::contracts::bindings::ReputationSystem::{CategoryScoreUpdated, ReputationUpdated};
+// Skill NFT events
+pub use crate::contracts::bindings::SkillNFT::{RoyaltyUpdated, SkillMinted};
+// Treasury events
+pub use crate::contracts::bindings::TreasuryManager::{BudgetCreated, BudgetReleased};
+// use crate::contracts::bindings::*; // Events are re-exported individually below
+use crate::{ChainError, Result};
 
 // ============================================================================
 // Event System Types

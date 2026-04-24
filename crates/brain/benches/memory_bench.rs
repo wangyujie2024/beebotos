@@ -1,9 +1,7 @@
 //! Memory System Benchmarks
 
-use beebotos_brain::{
-    memory::{MemoryIndex, MemoryQuery, ShortTermMemory},
-    SocialBrainApi,
-};
+use beebotos_brain::memory::{MemoryIndex, MemoryQuery, ShortTermMemory};
+use beebotos_brain::SocialBrainApi;
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 
 /// Benchmark short-term memory operations

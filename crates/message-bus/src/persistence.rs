@@ -1,20 +1,23 @@
 //! Message persistence layer for replay and recovery
 //!
 //! This module provides message persistence capabilities, allowing messages
-//! to be stored and replayed. It supports both in-memory and file-based storage.
+//! to be stored and replayed. It supports both in-memory and file-based
+//! storage.
 
-use crate::error::{MessageBusError, Result};
-use crate::Message;
-use async_trait::async_trait;
-use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
+
+use async_trait::async_trait;
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use tokio::fs;
 use tokio::sync::RwLock;
 use tracing::{debug, error, info};
+
+use crate::error::{MessageBusError, Result};
+use crate::Message;
 
 /// Persisted message record
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -63,7 +66,8 @@ pub trait MessagePersistence: Send + Sync {
     async fn persist(&self, topic: &str, message: &Message) -> Result<()>;
 
     /// Get messages for a topic since a sequence number
-    async fn get_messages_since(&self, topic: &str, sequence: u64) -> Result<Vec<PersistedMessage>>;
+    async fn get_messages_since(&self, topic: &str, sequence: u64)
+        -> Result<Vec<PersistedMessage>>;
 
     /// Get messages for a topic within a time range
     async fn get_messages_in_range(
@@ -232,13 +236,16 @@ impl MessagePersistence for InMemoryPersistence {
         };
 
         let mut messages = self.messages.write().await;
-        let queue = messages.entry(topic.to_string()).or_insert_with(VecDeque::new);
+        let queue = messages
+            .entry(topic.to_string())
+            .or_insert_with(VecDeque::new);
         queue.push_back(persisted);
 
         self.total_messages.fetch_add(1, Ordering::Relaxed);
 
         // Enforce retention in background
-        if self.total_messages.load(Ordering::Relaxed) as usize > self.config.max_in_memory_messages {
+        if self.total_messages.load(Ordering::Relaxed) as usize > self.config.max_in_memory_messages
+        {
             drop(messages);
             self.enforce_retention().await;
         }
@@ -247,7 +254,11 @@ impl MessagePersistence for InMemoryPersistence {
         Ok(())
     }
 
-    async fn get_messages_since(&self, topic: &str, sequence: u64) -> Result<Vec<PersistedMessage>> {
+    async fn get_messages_since(
+        &self,
+        topic: &str,
+        sequence: u64,
+    ) -> Result<Vec<PersistedMessage>> {
         let messages = self.messages.read().await;
 
         if let Some(queue) = messages.get(topic) {
@@ -337,7 +348,8 @@ impl MessagePersistence for InMemoryPersistence {
             removed += initial_len - queue.len();
         }
 
-        self.total_messages.fetch_sub(removed as u64, Ordering::Relaxed);
+        self.total_messages
+            .fetch_sub(removed as u64, Ordering::Relaxed);
         info!("Cleaned up {} old messages", removed);
 
         Ok(removed as u64)
@@ -384,7 +396,9 @@ impl FilePersistence {
         if config.enable_file_persistence {
             fs::create_dir_all(&config.persistence_dir)
                 .await
-                .map_err(|e| MessageBusError::Internal(format!("Failed to create persistence dir: {}", e)))?;
+                .map_err(|e| {
+                    MessageBusError::Internal(format!("Failed to create persistence dir: {}", e))
+                })?;
         }
 
         let inner = InMemoryPersistence::new(config.clone());
@@ -406,8 +420,10 @@ impl FilePersistence {
 
         match fs::read_to_string(&snapshot_path).await {
             Ok(content) => {
-                let snapshot: PersistenceSnapshot = serde_json::from_str(&content)
-                    .map_err(|e| MessageBusError::Deserialization(format!("Failed to parse snapshot: {}", e)))?;
+                let snapshot: PersistenceSnapshot =
+                    serde_json::from_str(&content).map_err(|e| {
+                        MessageBusError::Deserialization(format!("Failed to parse snapshot: {}", e))
+                    })?;
                 info!("Loaded snapshot with {} topics", snapshot.messages.len());
                 Ok(snapshot)
             }
@@ -415,7 +431,10 @@ impl FilePersistence {
                 info!("No existing snapshot found, starting fresh");
                 Ok(PersistenceSnapshot::default())
             }
-            Err(e) => Err(MessageBusError::Internal(format!("Failed to read snapshot: {}", e))),
+            Err(e) => Err(MessageBusError::Internal(format!(
+                "Failed to read snapshot: {}",
+                e
+            ))),
         }
     }
 
@@ -426,8 +445,9 @@ impl FilePersistence {
         }
 
         let snapshot = self.inner.snapshot().await?;
-        let content = serde_json::to_string(&snapshot)
-            .map_err(|e| MessageBusError::Serialization(format!("Failed to serialize snapshot: {}", e)))?;
+        let content = serde_json::to_string(&snapshot).map_err(|e| {
+            MessageBusError::Serialization(format!("Failed to serialize snapshot: {}", e))
+        })?;
 
         let snapshot_path = format!("{}/snapshot.json", self.config.persistence_dir);
         fs::write(&snapshot_path, content)
@@ -465,7 +485,11 @@ impl MessagePersistence for FilePersistence {
         self.inner.persist(topic, message).await
     }
 
-    async fn get_messages_since(&self, topic: &str, sequence: u64) -> Result<Vec<PersistedMessage>> {
+    async fn get_messages_since(
+        &self,
+        topic: &str,
+        sequence: u64,
+    ) -> Result<Vec<PersistedMessage>> {
         self.inner.get_messages_since(topic, sequence).await
     }
 
@@ -587,7 +611,10 @@ mod tests {
         }
 
         // Get messages since sequence 3
-        let messages = persistence.get_messages_since("test/topic", 3).await.unwrap();
+        let messages = persistence
+            .get_messages_since("test/topic", 3)
+            .await
+            .unwrap();
         assert_eq!(messages.len(), 3); // sequences 3, 4, 5
 
         // Get latest sequence
@@ -640,7 +667,10 @@ mod tests {
         persistence2.restore(snapshot).await.unwrap();
 
         // Verify
-        let latest = persistence2.get_latest_sequence("test/topic").await.unwrap();
+        let latest = persistence2
+            .get_latest_sequence("test/topic")
+            .await
+            .unwrap();
         assert_eq!(latest, 5);
     }
 
@@ -662,7 +692,10 @@ mod tests {
         persistence.enforce_retention().await;
 
         // Should only have 3 messages (latest)
-        let messages = persistence.get_messages_since("test/topic", 0).await.unwrap();
+        let messages = persistence
+            .get_messages_since("test/topic", 0)
+            .await
+            .unwrap();
         assert_eq!(messages.len(), 3);
     }
 }

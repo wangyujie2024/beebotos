@@ -5,15 +5,18 @@
 //!
 //! # Supported Providers
 //!
-//! - **OpenAI**: text-embedding-3-small, text-embedding-3-large, text-embedding-ada-002
+//! - **OpenAI**: text-embedding-3-small, text-embedding-3-large,
+//!   text-embedding-ada-002
 //! - **Local**: llama.cpp with embedding support
 //! - **Mock**: For testing without external dependencies
 
-use crate::error::Result;
-use async_trait::async_trait;
-use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::time::Duration;
+
+use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
+
+use crate::error::Result;
 
 /// Default embedding dimension (OpenAI ada-002)
 pub const DEFAULT_EMBEDDING_DIMENSION: usize = 1536;
@@ -144,9 +147,7 @@ impl OpenAIEmbeddingProvider {
     /// Create new OpenAI provider
     pub fn new(config: EmbeddingConfig) -> Result<Self> {
         let api_key = config.api_key.as_ref().ok_or_else(|| {
-            crate::error::AgentError::configuration(
-                "OpenAI API key is required".to_string()
-            )
+            crate::error::AgentError::configuration("OpenAI API key is required".to_string())
         })?;
 
         let client = reqwest::Client::builder()
@@ -221,17 +222,14 @@ impl EmbeddingProvider for OpenAIEmbeddingProvider {
         }
 
         let embedding_response: OpenAIEmbeddingResponse = response.json().await.map_err(|e| {
-            crate::error::AgentError::platform(format!(
-                "Failed to parse embedding response: {}",
-                e
-            ))
+            crate::error::AgentError::platform(format!("Failed to parse embedding response: {}", e))
         })?;
 
         if let Some(data) = embedding_response.data.first() {
             Ok(data.embedding.clone())
         } else {
             Err(crate::error::AgentError::platform(
-                "Empty embedding response".to_string()
+                "Empty embedding response".to_string(),
             ))
         }
     }
@@ -282,12 +280,13 @@ impl EmbeddingProvider for OpenAIEmbeddingProvider {
             )));
         }
 
-        let embedding_response: OpenAIEmbeddingBatchResponse = response.json().await.map_err(|e| {
-            crate::error::AgentError::platform(format!(
-                "Failed to parse batch embedding response: {}",
-                e
-            ))
-        })?;
+        let embedding_response: OpenAIEmbeddingBatchResponse =
+            response.json().await.map_err(|e| {
+                crate::error::AgentError::platform(format!(
+                    "Failed to parse batch embedding response: {}",
+                    e
+                ))
+            })?;
 
         let mut embeddings: Vec<Vec<f32>> = Vec::with_capacity(embedding_response.data.len());
         for data in embedding_response.data {
@@ -527,9 +526,7 @@ impl EmbeddingProviderFactory {
             ProviderType::OpenAI | ProviderType::AzureOpenAI => {
                 Ok(Box::new(OpenAIEmbeddingProvider::new(config)?))
             }
-            ProviderType::LocalLlama => {
-                Ok(Box::new(LocalLlamaEmbeddingProvider::new(config)?))
-            }
+            ProviderType::LocalLlama => Ok(Box::new(LocalLlamaEmbeddingProvider::new(config)?)),
             ProviderType::Mock => {
                 let dimension = config.get_dimension();
                 Ok(Box::new(MockEmbeddingProvider::new(dimension)))
@@ -626,9 +623,7 @@ impl EmbeddingProvider for CachedEmbeddingProvider {
             .into_iter()
             .collect::<Option<Vec<_>>>()
             .ok_or_else(|| {
-                crate::error::AgentError::platform(
-                    "Some embeddings were not generated".to_string()
-                )
+                crate::error::AgentError::platform("Some embeddings were not generated".to_string())
             })
     }
 
@@ -652,14 +647,14 @@ mod tests {
     #[tokio::test]
     async fn test_mock_provider() {
         let provider = MockEmbeddingProvider::new(128);
-        
+
         let embedding1 = provider.embed("Hello world").await.unwrap();
         assert_eq!(embedding1.len(), 128);
-        
+
         // Should be deterministic
         let embedding2 = provider.embed("Hello world").await.unwrap();
         assert_eq!(embedding1, embedding2);
-        
+
         // Different text should produce different embedding
         let embedding3 = provider.embed("Different text").await.unwrap();
         assert_ne!(embedding1, embedding3);
@@ -670,7 +665,8 @@ mod tests {
         let config = EmbeddingConfig::default();
         assert_eq!(config.get_dimension(), 1536);
 
-        let config = EmbeddingConfig::openai("test-key", Some("text-embedding-3-large".to_string()));
+        let config =
+            EmbeddingConfig::openai("test-key", Some("text-embedding-3-large".to_string()));
         assert_eq!(config.get_dimension(), 3072);
 
         let config = EmbeddingConfig::mock(256);
@@ -683,15 +679,15 @@ mod tests {
         let cached = CachedEmbeddingProvider::new(inner, 100);
 
         let text = "Test text for caching";
-        
+
         // First call - should cache
         let embedding1 = cached.embed(text).await.unwrap();
-        
+
         // Second call - should hit cache
         let embedding2 = cached.embed(text).await.unwrap();
-        
+
         assert_eq!(embedding1, embedding2);
-        
+
         // Check cache stats
         let (len, cap) = cached.cache_stats();
         assert_eq!(len, 1);
@@ -701,13 +697,13 @@ mod tests {
     #[tokio::test]
     async fn test_batch_embedding() {
         let provider = MockEmbeddingProvider::new(64);
-        
+
         let texts = vec![
             "First text".to_string(),
             "Second text".to_string(),
             "Third text".to_string(),
         ];
-        
+
         let embeddings = provider.embed_batch(&texts).await.unwrap();
         assert_eq!(embeddings.len(), 3);
         assert_eq!(embeddings[0].len(), 64);

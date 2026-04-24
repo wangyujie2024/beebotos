@@ -3,10 +3,12 @@
 //! Efficient fixed-size object allocation using slab allocation strategy.
 //! Reduces fragmentation and improves cache locality.
 
-use crate::error::{KernelError, Result};
-use parking_lot::Mutex;
 use std::ptr::NonNull;
+
+use parking_lot::Mutex;
 use tracing::{debug, trace};
+
+use crate::error::{KernelError, Result};
 
 /// Size of a slab page
 const SLAB_PAGE_SIZE: usize = 4096;

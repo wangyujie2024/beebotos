@@ -1,10 +1,11 @@
 //! BSC-specific types
 
-use crate::chains::common::token::{chain_formatters, parse_native_amount, TransactionPriority};
 use alloy_consensus::Transaction as _;
 use alloy_primitives::U256;
 use alloy_rpc_types::{Block, Log, Transaction, TransactionReceipt};
 use serde::{Deserialize, Serialize};
+
+use crate::chains::common::token::{chain_formatters, parse_native_amount, TransactionPriority};
 
 /// BSC Block representation
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -160,7 +161,8 @@ pub enum ValidatorStatus {
 
 /// Format BNB amount (18 decimals)
 ///
-/// DEPRECATED: Use `chains::common::token::chain_formatters::format_bnb` instead
+/// DEPRECATED: Use `chains::common::token::chain_formatters::format_bnb`
+/// instead
 pub fn format_bnb(wei: U256) -> String {
     chain_formatters::format_bnb(wei)
 }

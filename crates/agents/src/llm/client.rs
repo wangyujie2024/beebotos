@@ -5,6 +5,7 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
+
 use tokio::sync::RwLock;
 use tracing::{instrument, warn};
 
@@ -37,7 +38,7 @@ pub struct LLMClient {
 pub trait ToolHandler: Send + Sync {
     /// Get tool definition
     fn definition(&self) -> Tool;
-    
+
     /// Execute the tool
     async fn execute(&self, arguments: &str) -> Result<String, String>;
 }
@@ -94,7 +95,7 @@ impl LLMClient {
         if let Some(ref limiter) = self.rate_limiter {
             if !limiter.check(&self.rate_limit_key) {
                 return Err(LLMError::RateLimitExceeded(
-                    "LLM request rate limit exceeded. Please try again later.".to_string()
+                    "LLM request rate limit exceeded. Please try again later.".to_string(),
                 ));
             }
         }
@@ -104,10 +105,10 @@ impl LLMClient {
     /// Set system message
     pub async fn set_system_message(&self, content: impl Into<String>) {
         let mut context = self.context.write().await;
-        
+
         // Remove existing system message
         context.retain(|m| m.role != Role::System);
-        
+
         // Add new system message at the beginning
         context.insert(0, Message::system(content));
     }
@@ -118,71 +119,78 @@ impl LLMClient {
         context.iter().map(|m| m.text_content().len() / 4).sum() // Rough estimate: 1 token ~= 4 chars
     }
 
-    /// CODE QUALITY FIX: Limit context window by removing oldest non-system messages
+    /// CODE QUALITY FIX: Limit context window by removing oldest non-system
+    /// messages
     pub async fn limit_context_window(&self, max_messages: usize) {
         let mut context = self.context.write().await;
-        
+
         // Keep system messages and the most recent messages
-        let system_messages: Vec<_> = context.iter()
+        let system_messages: Vec<_> = context
+            .iter()
             .filter(|m| m.role == Role::System)
             .cloned()
             .collect();
-        
-        let non_system_messages: Vec<_> = context.iter()
+
+        let non_system_messages: Vec<_> = context
+            .iter()
             .filter(|m| m.role != Role::System)
             .cloned()
             .collect();
-        
+
         // If we have more non-system messages than max, truncate
         if non_system_messages.len() > max_messages {
             let start_index = non_system_messages.len() - max_messages;
             let recent_messages: Vec<_> = non_system_messages[start_index..].to_vec();
-            
+
             *context = system_messages;
             context.extend(recent_messages);
-            
-            tracing::info!("Context window truncated to {} messages (removed {} old messages)", 
-                context.len(), start_index);
+
+            tracing::info!(
+                "Context window truncated to {} messages (removed {} old messages)",
+                context.len(),
+                start_index
+            );
         }
     }
 
     /// CODE QUALITY FIX: Truncate context if it exceeds a token limit
     pub async fn truncate_context(&self, max_tokens: usize) {
         let mut context = self.context.write().await;
-        
+
         // Calculate total tokens (rough estimate)
-        let total_tokens: usize = context.iter()
-            .map(|m| m.text_content().len() / 4)
-            .sum();
-        
+        let total_tokens: usize = context.iter().map(|m| m.text_content().len() / 4).sum();
+
         if total_tokens <= max_tokens {
             return; // No truncation needed
         }
-        
+
         // Keep system messages
-        let system_messages: Vec<_> = context.iter()
+        let system_messages: Vec<_> = context
+            .iter()
             .filter(|m| m.role == Role::System)
             .cloned()
             .collect();
-        
-        let system_tokens: usize = system_messages.iter()
+
+        let system_tokens: usize = system_messages
+            .iter()
             .map(|m| m.text_content().len() / 4)
             .sum();
-        
+
         // Calculate remaining token budget for non-system messages
         let remaining_budget = max_tokens.saturating_sub(system_tokens);
-        
+
         // Get non-system messages in reverse order (newest first)
-        let non_system: Vec<_> = context.iter()
+        let non_system: Vec<_> = context
+            .iter()
             .filter(|m| m.role != Role::System)
             .rev()
             .cloned()
             .collect();
-        
+
         // Keep adding messages until we hit the budget
         let mut kept_messages = Vec::new();
         let mut current_tokens = 0;
-        
+
         for msg in non_system {
             let msg_tokens = msg.text_content().len() / 4;
             if current_tokens + msg_tokens > remaining_budget && !kept_messages.is_empty() {
@@ -191,23 +199,26 @@ impl LLMClient {
             kept_messages.push(msg);
             current_tokens += msg_tokens;
         }
-        
+
         // Reverse to restore chronological order
         kept_messages.reverse();
-        
+
         // Rebuild context
         *context = system_messages;
         context.extend(kept_messages);
-        
-        tracing::info!("Context truncated to ~{} tokens ({} messages)", 
-            max_tokens, context.len());
+
+        tracing::info!(
+            "Context truncated to ~{} tokens ({} messages)",
+            max_tokens,
+            context.len()
+        );
     }
 
     /// Add a user message and get assistant response
     #[instrument(skip(self, message))]
     pub async fn chat(&self, message: impl Into<String>) -> LLMResult<String> {
         let user_msg = Message::user(message);
-        
+
         // Add to context
         {
             let mut context = self.context.write().await;
@@ -216,7 +227,7 @@ impl LLMClient {
 
         // Get response
         let response = self.execute_with_context().await?;
-        
+
         // Add assistant response to context
         {
             let mut context = self.context.write().await;
@@ -229,14 +240,14 @@ impl LLMClient {
     /// Chat with multimodal content
     pub async fn chat_multimodal(&self, contents: Vec<Content>) -> LLMResult<String> {
         let user_msg = Message::multimodal(Role::User, contents);
-        
+
         {
             let mut context = self.context.write().await;
             context.push(user_msg);
         }
 
         let response = self.execute_with_context().await?;
-        
+
         {
             let mut context = self.context.write().await;
             context.push(Message::assistant(&response));
@@ -245,14 +256,15 @@ impl LLMClient {
         Ok(response)
     }
 
-    /// 🟢 P2 FIX: Chat with optional max_tokens override for dynamic token limiting
+    /// 🟢 P2 FIX: Chat with optional max_tokens override for dynamic token
+    /// limiting
     pub async fn chat_with_max_tokens(
         &self,
         message: impl Into<String>,
         max_tokens: u32,
     ) -> LLMResult<String> {
         let user_msg = Message::user(message);
-        
+
         {
             let mut context = self.context.write().await;
             context.push(user_msg);
@@ -270,9 +282,7 @@ impl LLMClient {
         // Add tools if registered
         let tools = self.tools.read().await;
         if !tools.is_empty() {
-            request.config.tools = Some(
-                tools.values().map(|t| t.definition()).collect()
-            );
+            request.config.tools = Some(tools.values().map(|t| t.definition()).collect());
         }
         drop(tools);
 
@@ -326,16 +336,14 @@ impl LLMClient {
         // Add tools if registered
         let tools = self.tools.read().await;
         if !tools.is_empty() {
-            request.config.tools = Some(
-                tools.values().map(|t| t.definition()).collect()
-            );
+            request.config.tools = Some(tools.values().map(|t| t.definition()).collect());
         }
         drop(tools);
 
         let start = std::time::Instant::now();
-        
+
         let response = self.provider.complete(request).await?;
-        
+
         let latency = start.elapsed();
 
         // Update metrics
@@ -354,7 +362,7 @@ impl LLMClient {
             if let Some(tool_calls) = &choice.message.tool_calls {
                 return self.handle_tool_calls(tool_calls).await;
             }
-            
+
             return Ok(choice.message.text_content());
         }
 
@@ -389,7 +397,7 @@ impl LLMClient {
         message: impl Into<String>,
     ) -> LLMResult<mpsc::Receiver<String>> {
         let user_msg = Message::user(message);
-        
+
         {
             let mut context = self.context.write().await;
             context.push(user_msg);
@@ -410,7 +418,7 @@ impl LLMClient {
         // Convert StreamChunk to String
         tokio::spawn(async move {
             let mut full_response = String::new();
-            
+
             loop {
                 match chunk_rx.recv().await {
                     Some(chunk) => {
@@ -421,7 +429,7 @@ impl LLMClient {
                                     return;
                                 }
                             }
-                            
+
                             if choice.finish_reason.is_some() {
                                 return;
                             }
@@ -517,7 +525,8 @@ impl LLMClientBuilder {
 
     /// Build the client
     pub async fn build(self) -> LLMResult<LLMClient> {
-        let provider = self.provider
+        let provider = self
+            .provider
             .ok_or_else(|| LLMError::InvalidRequest("Provider required".to_string()))?;
 
         let client = LLMClient::new(provider).with_config(self.config);

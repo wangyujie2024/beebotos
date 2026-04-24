@@ -29,10 +29,12 @@
 //! # }
 //! ```
 
-use crate::error::{AgentError, Result};
+use std::fmt;
+
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use std::fmt;
+
+use crate::error::{AgentError, Result};
 
 pub mod android;
 pub mod ios;
@@ -188,11 +190,19 @@ pub struct ScreenBounds {
 
 impl ScreenBounds {
     pub fn new(x: i32, y: i32, width: u32, height: u32) -> Self {
-        Self { x, y, width, height }
+        Self {
+            x,
+            y,
+            width,
+            height,
+        }
     }
 
     pub fn center(&self) -> Point {
-        Point::new(self.x + self.width as i32 / 2, self.y + self.height as i32 / 2)
+        Point::new(
+            self.x + self.width as i32 / 2,
+            self.y + self.height as i32 / 2,
+        )
     }
 }
 
@@ -213,11 +223,19 @@ pub enum GestureAction {
     /// Long press at coordinates
     LongPress { x: i32, y: i32, duration_ms: u64 },
     /// Swipe from one point to another
-    Swipe { from: Point, to: Point, duration_ms: u64 },
+    Swipe {
+        from: Point,
+        to: Point,
+        duration_ms: u64,
+    },
     /// Multi-touch gesture
     MultiTouch { points: Vec<Point> },
     /// Pinch gesture
-    Pinch { center: Point, scale: f64, duration_ms: u64 },
+    Pinch {
+        center: Point,
+        scale: f64,
+        duration_ms: u64,
+    },
 }
 
 /// Locator type for finding elements
@@ -340,13 +358,26 @@ pub trait DeviceAutomation: Send + Sync {
     async fn long_press(&self, x: i32, y: i32, duration_ms: u64) -> Result<()>;
 
     /// Swipe from one point to another
-    async fn swipe(&self, from_x: i32, from_y: i32, to_x: i32, to_y: i32, duration_ms: u64) -> Result<()>;
+    async fn swipe(
+        &self,
+        from_x: i32,
+        from_y: i32,
+        to_x: i32,
+        to_y: i32,
+        duration_ms: u64,
+    ) -> Result<()>;
 
     /// Swipe in direction
-    async fn swipe_direction(&self, direction: SwipeDirection, distance: u32, duration_ms: u64) -> Result<()>;
+    async fn swipe_direction(
+        &self,
+        direction: SwipeDirection,
+        distance: u32,
+        duration_ms: u64,
+    ) -> Result<()>;
 
     /// Pinch gesture
-    async fn pinch(&self, center_x: i32, center_y: i32, scale: f64, duration_ms: u64) -> Result<()>;
+    async fn pinch(&self, center_x: i32, center_y: i32, scale: f64, duration_ms: u64)
+        -> Result<()>;
 
     /// Find element by locator
     async fn find_element(&self, locator: &ElementLocator) -> Result<UiElement>;
@@ -488,7 +519,7 @@ mod tests {
         let locator = ElementLocator::new(LocatorType::Id, "button1")
             .with_index(0)
             .with_timeout(5000);
-        
+
         assert_eq!(locator.locator_type, LocatorType::Id);
         assert_eq!(locator.value, "button1");
         assert_eq!(locator.index, Some(0));

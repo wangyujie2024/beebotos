@@ -8,15 +8,14 @@ use std::sync::Arc;
 
 use tracing::{info, warn};
 
+use super::credential_crypto::ChannelConfigEncryptor;
+use super::user_channel_store::UserChannelStore;
 use crate::communication::channel_instance_manager::ChannelInstanceManager;
 use crate::communication::user_channel::{
     ChannelBindingStatus, ChannelInstanceId, UserChannelBinding, UserChannelConfig,
 };
 use crate::communication::PlatformType;
 use crate::error::{AgentError, Result};
-
-use super::credential_crypto::ChannelConfigEncryptor;
-use super::user_channel_store::UserChannelStore;
 
 /// Service for managing user channel lifecycle.
 pub struct UserChannelService {
@@ -60,7 +59,11 @@ impl UserChannelService {
             )));
         }
 
-        let webhook_path = Some(format!("/webhook/{}/inst-{}", platform, uuid::Uuid::new_v4()));
+        let webhook_path = Some(format!(
+            "/webhook/{}/inst-{}",
+            platform,
+            uuid::Uuid::new_v4()
+        ));
 
         let binding = UserChannelBinding {
             id: uuid::Uuid::new_v4().to_string(),
@@ -76,8 +79,8 @@ impl UserChannelService {
         self.store.create(&binding, &config_encrypted).await?;
 
         let instance_id = ChannelInstanceId::new(&user_id, platform, &instance_name);
-        let config_json = serde_json::to_value(config)
-            .map_err(|e| AgentError::serialization(e.to_string()))?;
+        let config_json =
+            serde_json::to_value(config).map_err(|e| AgentError::serialization(e.to_string()))?;
 
         if let Err(e) = self
             .instance_manager
@@ -88,7 +91,9 @@ impl UserChannelService {
                 "Failed to create runtime instance for user channel {}: {}",
                 binding.id, e
             );
-            self.store.update_status(&binding.id, ChannelBindingStatus::Error).await?;
+            self.store
+                .update_status(&binding.id, ChannelBindingStatus::Error)
+                .await?;
             return Err(e);
         }
 
@@ -96,12 +101,10 @@ impl UserChannelService {
         Ok(binding)
     }
 
-    /// Create a user channel binding record only, without spawning a runtime instance.
-    /// P1 FIX: Used for back-filling bindings when auto-creating user_channel.
-    pub async fn create_binding_only(
-        &self,
-        binding: &UserChannelBinding,
-    ) -> Result<()> {
+    /// Create a user channel binding record only, without spawning a runtime
+    /// instance. P1 FIX: Used for back-filling bindings when auto-creating
+    /// user_channel.
+    pub async fn create_binding_only(&self, binding: &UserChannelBinding) -> Result<()> {
         let config = UserChannelConfig {
             platform: binding.platform,
             connection_mode: crate::communication::channel::ConnectionMode::Webhook,
@@ -115,17 +118,12 @@ impl UserChannelService {
 
     /// Delete a user channel binding and clean up its runtime instance.
     pub async fn delete_user_channel(&self, user_channel_id: &str) -> Result<()> {
-        let binding = self
-            .store
-            .get(user_channel_id)
-            .await?
-            .ok_or_else(|| AgentError::not_found(format!("User channel not found: {}", user_channel_id)))?;
+        let binding = self.store.get(user_channel_id).await?.ok_or_else(|| {
+            AgentError::not_found(format!("User channel not found: {}", user_channel_id))
+        })?;
 
-        let instance_id = ChannelInstanceId::new(
-            &binding.user_id,
-            binding.platform,
-            &binding.instance_name,
-        );
+        let instance_id =
+            ChannelInstanceId::new(&binding.user_id, binding.platform, &binding.instance_name);
 
         if let Err(e) = self.instance_manager.remove_instance(&instance_id).await {
             warn!(
@@ -141,39 +139,35 @@ impl UserChannelService {
 
     /// Connect a specific user channel instance.
     pub async fn connect_user_channel(&self, user_channel_id: &str) -> Result<()> {
-        let binding = self
-            .store
-            .get(user_channel_id)
-            .await?
-            .ok_or_else(|| AgentError::not_found(format!("User channel not found: {}", user_channel_id)))?;
+        let binding = self.store.get(user_channel_id).await?.ok_or_else(|| {
+            AgentError::not_found(format!("User channel not found: {}", user_channel_id))
+        })?;
 
-        let instance_id = ChannelInstanceId::new(
-            &binding.user_id,
-            binding.platform,
-            &binding.instance_name,
-        );
+        let instance_id =
+            ChannelInstanceId::new(&binding.user_id, binding.platform, &binding.instance_name);
 
         self.instance_manager.connect_instance(&instance_id).await?;
-        self.store.update_status(user_channel_id, ChannelBindingStatus::Active).await?;
+        self.store
+            .update_status(user_channel_id, ChannelBindingStatus::Active)
+            .await?;
         Ok(())
     }
 
     /// Disconnect a specific user channel instance.
     pub async fn disconnect_user_channel(&self, user_channel_id: &str) -> Result<()> {
-        let binding = self
-            .store
-            .get(user_channel_id)
-            .await?
-            .ok_or_else(|| AgentError::not_found(format!("User channel not found: {}", user_channel_id)))?;
+        let binding = self.store.get(user_channel_id).await?.ok_or_else(|| {
+            AgentError::not_found(format!("User channel not found: {}", user_channel_id))
+        })?;
 
-        let instance_id = ChannelInstanceId::new(
-            &binding.user_id,
-            binding.platform,
-            &binding.instance_name,
-        );
+        let instance_id =
+            ChannelInstanceId::new(&binding.user_id, binding.platform, &binding.instance_name);
 
-        self.instance_manager.disconnect_instance(&instance_id).await?;
-        self.store.update_status(user_channel_id, ChannelBindingStatus::Paused).await?;
+        self.instance_manager
+            .disconnect_instance(&instance_id)
+            .await?;
+        self.store
+            .update_status(user_channel_id, ChannelBindingStatus::Paused)
+            .await?;
         Ok(())
     }
 
@@ -193,6 +187,8 @@ impl UserChannelService {
         platform: PlatformType,
         platform_user_id: &str,
     ) -> Result<Option<UserChannelBinding>> {
-        self.store.find_by_platform_user(platform, platform_user_id).await
+        self.store
+            .find_by_platform_user(platform, platform_user_id)
+            .await
     }
 }

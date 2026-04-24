@@ -113,10 +113,11 @@ impl DiscoveryService {
     }
 
     /// Get the public key for an agent
-    /// 
+    ///
     /// SECURITY FIX: Returns the agent's public key for E2E encryption
     pub fn get_agent_public_key(&self, agent_id: &str) -> Option<Vec<u8>> {
-        self.agents.get(agent_id)
+        self.agents
+            .get(agent_id)
             .and_then(|agent| agent.public_key.clone())
     }
 }

@@ -2,8 +2,9 @@
 //!
 //! 提供 Gateway API 端点配置和连接管理
 
-use crate::gateway::{GatewayConfig, GatewayScope};
 use serde::{Deserialize, Serialize};
+
+use crate::gateway::{GatewayConfig, GatewayScope};
 
 /// Gateway API 端点配置
 #[derive(Clone, Debug, Serialize, Deserialize)]

@@ -1,7 +1,8 @@
 //! 用量面板组件
 
-use crate::webchat::{TokenUsage, UsagePanel};
 use leptos::prelude::*;
+
+use crate::webchat::{TokenUsage, UsagePanel};
 
 /// 用量面板属性
 pub struct UsagePanelProps {

@@ -1,12 +1,12 @@
 //! Gateway Application Message Bus Integration
 //!
-//! Provides integration between Gateway application and the unified Message Bus.
+//! Provides integration between Gateway application and the unified Message
+//! Bus.
 
 use std::sync::Arc;
-use beebotos_message_bus::{
-    DefaultMessageBus, MemoryTransport, JsonCodec,
-    gateway::GatewayEventAdapter
-};
+
+use beebotos_message_bus::gateway::GatewayEventAdapter;
+use beebotos_message_bus::{DefaultMessageBus, JsonCodec, MemoryTransport};
 
 /// Message Bus configuration
 #[derive(Debug, Clone)]
@@ -43,13 +43,10 @@ impl GatewayMessageBus {
     /// Create a new Gateway Message Bus
     pub fn new() -> Self {
         let transport = MemoryTransport::new();
-        let bus: Arc<MessageBusType> = Arc::new(DefaultMessageBus::new(
-            transport,
-            Box::new(JsonCodec),
-            None,
-        ));
+        let bus: Arc<MessageBusType> =
+            Arc::new(DefaultMessageBus::new(transport, Box::new(JsonCodec), None));
         let adapter = GatewayEventAdapter::new(Arc::clone(&bus));
-        
+
         Self { adapter, bus }
     }
 
@@ -92,9 +89,7 @@ pub fn global_message_bus() -> Option<Arc<GatewayMessageBus>> {
 #[allow(dead_code)]
 pub async fn init_from_config(config: &MessageBusConfig) -> anyhow::Result<GatewayMessageBus> {
     match config.transport.as_str() {
-        "memory" => {
-            Ok(GatewayMessageBus::new())
-        }
+        "memory" => Ok(GatewayMessageBus::new()),
         "grpc" => {
             // gRPC transport is not fully implemented yet
             // For now, fall back to memory transport
@@ -114,8 +109,11 @@ mod tests {
     #[tokio::test]
     async fn test_gateway_message_bus() {
         let bus = GatewayMessageBus::new();
-        
+
         // Publish a WebSocket event
-        bus.adapter.publish_ws_connected("conn-123", "192.168.1.1:12345").await.unwrap();
+        bus.adapter
+            .publish_ws_connected("conn-123", "192.168.1.1:12345")
+            .await
+            .unwrap();
     }
 }

@@ -4,9 +4,10 @@
 //! Requires `sqlite` feature to be enabled.
 
 #[cfg(feature = "sqlite")]
-use parking_lot::Mutex;
-#[cfg(feature = "sqlite")]
 use std::path::Path;
+
+#[cfg(feature = "sqlite")]
+use parking_lot::Mutex;
 
 #[cfg(feature = "sqlite")]
 use crate::storage::{EntryMetadata, StorageBackend, StorageEntry, StorageError};

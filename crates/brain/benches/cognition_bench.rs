@@ -1,10 +1,10 @@
 //! Cognitive System Benchmarks
 
-use beebotos_brain::{
-    cognition::decision::{DecisionOption, RiskLevel, TimeHorizon},
-    cognition::{decision::DecisionContext, CognitiveState, Goal, MemoryItem, WorkingMemory},
-    SocialBrainApi,
+use beebotos_brain::cognition::decision::{
+    DecisionContext, DecisionOption, RiskLevel, TimeHorizon,
 };
+use beebotos_brain::cognition::{CognitiveState, Goal, MemoryItem, WorkingMemory};
+use beebotos_brain::SocialBrainApi;
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use serde_json::json;
 

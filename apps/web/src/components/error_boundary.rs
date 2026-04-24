@@ -110,7 +110,8 @@ fn Toast(#[prop(into)] message: String, on_dismiss: impl Fn() + 'static) -> impl
 }
 
 /// Async error handler wrapper - simplified for CSR
-/// Note: In CSR mode with Leptos 0.8, use LocalResource instead of this component
+/// Note: In CSR mode with Leptos 0.8, use LocalResource instead of this
+/// component
 #[component]
 pub fn AsyncHandler<T, E, F, V>(
     #[prop(into)] _future: F,

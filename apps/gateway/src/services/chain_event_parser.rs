@@ -3,9 +3,7 @@
 //! Parses events from transaction receipts and logs.
 //! Supports AgentIdentity, AgentDAO, and other BeeBotOS contract events.
 
-
 use alloy_sol_types::{sol, SolEvent};
-
 
 /// Parsed event from transaction receipt
 #[derive(Debug, Clone)]
@@ -155,7 +153,7 @@ sol! {
     event AgentDeactivated(bytes32 indexed agentId);
     event CapabilityGranted(bytes32 indexed agentId, bytes32 capability);
     event CapabilityRevoked(bytes32 indexed agentId, bytes32 capability);
-    
+
     // AgentDAO events
     event ProposalCreated(
         uint256 indexed proposalId,
@@ -203,7 +201,12 @@ impl ChainEventParser {
     }
 
     /// Parse a single log entry
-    pub fn parse_log(&self, log: &beebotos_chain::compat::LogEntry, block_number: u64, tx_hash: &str) -> Option<ParsedEvent> {
+    pub fn parse_log(
+        &self,
+        log: &beebotos_chain::compat::LogEntry,
+        block_number: u64,
+        tx_hash: &str,
+    ) -> Option<ParsedEvent> {
         if log.topics.is_empty() {
             return None;
         }
@@ -212,11 +215,17 @@ impl ChainEventParser {
         let address = hex::encode(&log.address);
 
         // Check if this is from a known contract
-        let is_identity_contract = self.config.identity_contract.as_ref()
+        let is_identity_contract = self
+            .config
+            .identity_contract
+            .as_ref()
             .map(|c| c.eq_ignore_ascii_case(&format!("0x{}", address)))
             .unwrap_or(false);
-        
-        let is_dao_contract = self.config.dao_contract.as_ref()
+
+        let is_dao_contract = self
+            .config
+            .dao_contract
+            .as_ref()
             .map(|c| c.eq_ignore_ascii_case(&format!("0x{}", address)))
             .unwrap_or(false);
 
@@ -236,8 +245,14 @@ impl ChainEventParser {
     }
 
     /// Parse events from a transaction receipt
-    pub fn parse_receipt(&self, receipt: &beebotos_chain::compat::TransactionReceipt, tx_hash: &str) -> Vec<ParsedEvent> {
-        receipt.logs.iter()
+    pub fn parse_receipt(
+        &self,
+        receipt: &beebotos_chain::compat::TransactionReceipt,
+        tx_hash: &str,
+    ) -> Vec<ParsedEvent> {
+        receipt
+            .logs
+            .iter()
             .filter_map(|log| self.parse_log(log, receipt.block_number, tx_hash))
             .collect()
     }
@@ -300,7 +315,12 @@ impl ChainEventParser {
         }
     }
 
-    fn parse_agent_registered(&self, log: &beebotos_chain::compat::LogEntry, block_number: u64, tx_hash: &str) -> Option<ParsedEvent> {
+    fn parse_agent_registered(
+        &self,
+        log: &beebotos_chain::compat::LogEntry,
+        block_number: u64,
+        tx_hash: &str,
+    ) -> Option<ParsedEvent> {
         if log.topics.len() < 3 {
             return None;
         }
@@ -320,7 +340,12 @@ impl ChainEventParser {
         }))
     }
 
-    fn parse_agent_updated(&self, log: &beebotos_chain::compat::LogEntry, block_number: u64, tx_hash: &str) -> Option<ParsedEvent> {
+    fn parse_agent_updated(
+        &self,
+        log: &beebotos_chain::compat::LogEntry,
+        block_number: u64,
+        tx_hash: &str,
+    ) -> Option<ParsedEvent> {
         if log.topics.len() < 2 {
             return None;
         }
@@ -336,7 +361,12 @@ impl ChainEventParser {
         }))
     }
 
-    fn parse_agent_deactivated(&self, log: &beebotos_chain::compat::LogEntry, block_number: u64, tx_hash: &str) -> Option<ParsedEvent> {
+    fn parse_agent_deactivated(
+        &self,
+        log: &beebotos_chain::compat::LogEntry,
+        block_number: u64,
+        tx_hash: &str,
+    ) -> Option<ParsedEvent> {
         if log.topics.len() < 2 {
             return None;
         }
@@ -350,7 +380,12 @@ impl ChainEventParser {
         }))
     }
 
-    fn parse_capability_granted(&self, log: &beebotos_chain::compat::LogEntry, block_number: u64, tx_hash: &str) -> Option<ParsedEvent> {
+    fn parse_capability_granted(
+        &self,
+        log: &beebotos_chain::compat::LogEntry,
+        block_number: u64,
+        tx_hash: &str,
+    ) -> Option<ParsedEvent> {
         if log.topics.len() < 3 {
             return None;
         }
@@ -366,7 +401,12 @@ impl ChainEventParser {
         }))
     }
 
-    fn parse_capability_revoked(&self, log: &beebotos_chain::compat::LogEntry, block_number: u64, tx_hash: &str) -> Option<ParsedEvent> {
+    fn parse_capability_revoked(
+        &self,
+        log: &beebotos_chain::compat::LogEntry,
+        block_number: u64,
+        tx_hash: &str,
+    ) -> Option<ParsedEvent> {
         if log.topics.len() < 3 {
             return None;
         }
@@ -382,14 +422,25 @@ impl ChainEventParser {
         }))
     }
 
-    fn parse_proposal_created(&self, log: &beebotos_chain::compat::LogEntry, block_number: u64, tx_hash: &str) -> Option<ParsedEvent> {
+    fn parse_proposal_created(
+        &self,
+        log: &beebotos_chain::compat::LogEntry,
+        block_number: u64,
+        tx_hash: &str,
+    ) -> Option<ParsedEvent> {
         if log.topics.len() < 2 {
             return None;
         }
 
         let proposal_id = u64::from_be_bytes([
-            log.topics[1][24], log.topics[1][25], log.topics[1][26], log.topics[1][27],
-            log.topics[1][28], log.topics[1][29], log.topics[1][30], log.topics[1][31],
+            log.topics[1][24],
+            log.topics[1][25],
+            log.topics[1][26],
+            log.topics[1][27],
+            log.topics[1][28],
+            log.topics[1][29],
+            log.topics[1][30],
+            log.topics[1][31],
         ]);
 
         // For complex events with dynamic data, we'd need full RLP decoding
@@ -409,15 +460,26 @@ impl ChainEventParser {
         }))
     }
 
-    fn parse_vote_cast(&self, log: &beebotos_chain::compat::LogEntry, block_number: u64, tx_hash: &str) -> Option<ParsedEvent> {
+    fn parse_vote_cast(
+        &self,
+        log: &beebotos_chain::compat::LogEntry,
+        block_number: u64,
+        tx_hash: &str,
+    ) -> Option<ParsedEvent> {
         if log.topics.len() < 3 {
             return None;
         }
 
         let voter = format!("0x{}", hex::encode(&log.topics[1][12..]));
         let proposal_id = u64::from_be_bytes([
-            log.topics[2][24], log.topics[2][25], log.topics[2][26], log.topics[2][27],
-            log.topics[2][28], log.topics[2][29], log.topics[2][30], log.topics[2][31],
+            log.topics[2][24],
+            log.topics[2][25],
+            log.topics[2][26],
+            log.topics[2][27],
+            log.topics[2][28],
+            log.topics[2][29],
+            log.topics[2][30],
+            log.topics[2][31],
         ]);
 
         // Support and weight would be decoded from data
@@ -432,14 +494,25 @@ impl ChainEventParser {
         }))
     }
 
-    fn parse_proposal_executed(&self, log: &beebotos_chain::compat::LogEntry, block_number: u64, tx_hash: &str) -> Option<ParsedEvent> {
+    fn parse_proposal_executed(
+        &self,
+        log: &beebotos_chain::compat::LogEntry,
+        block_number: u64,
+        tx_hash: &str,
+    ) -> Option<ParsedEvent> {
         if log.topics.len() < 2 {
             return None;
         }
 
         let proposal_id = u64::from_be_bytes([
-            log.topics[1][24], log.topics[1][25], log.topics[1][26], log.topics[1][27],
-            log.topics[1][28], log.topics[1][29], log.topics[1][30], log.topics[1][31],
+            log.topics[1][24],
+            log.topics[1][25],
+            log.topics[1][26],
+            log.topics[1][27],
+            log.topics[1][28],
+            log.topics[1][29],
+            log.topics[1][30],
+            log.topics[1][31],
         ]);
 
         Some(ParsedEvent::ProposalExecuted(ProposalExecutedEvent {
@@ -449,14 +522,25 @@ impl ChainEventParser {
         }))
     }
 
-    fn parse_proposal_queued(&self, log: &beebotos_chain::compat::LogEntry, block_number: u64, tx_hash: &str) -> Option<ParsedEvent> {
+    fn parse_proposal_queued(
+        &self,
+        log: &beebotos_chain::compat::LogEntry,
+        block_number: u64,
+        tx_hash: &str,
+    ) -> Option<ParsedEvent> {
         if log.topics.len() < 2 {
             return None;
         }
 
         let proposal_id = u64::from_be_bytes([
-            log.topics[1][24], log.topics[1][25], log.topics[1][26], log.topics[1][27],
-            log.topics[1][28], log.topics[1][29], log.topics[1][30], log.topics[1][31],
+            log.topics[1][24],
+            log.topics[1][25],
+            log.topics[1][26],
+            log.topics[1][27],
+            log.topics[1][28],
+            log.topics[1][29],
+            log.topics[1][30],
+            log.topics[1][31],
         ]);
 
         Some(ParsedEvent::ProposalQueued(ProposalQueuedEvent {
@@ -467,14 +551,25 @@ impl ChainEventParser {
         }))
     }
 
-    fn parse_proposal_canceled(&self, log: &beebotos_chain::compat::LogEntry, block_number: u64, tx_hash: &str) -> Option<ParsedEvent> {
+    fn parse_proposal_canceled(
+        &self,
+        log: &beebotos_chain::compat::LogEntry,
+        block_number: u64,
+        tx_hash: &str,
+    ) -> Option<ParsedEvent> {
         if log.topics.len() < 2 {
             return None;
         }
 
         let proposal_id = u64::from_be_bytes([
-            log.topics[1][24], log.topics[1][25], log.topics[1][26], log.topics[1][27],
-            log.topics[1][28], log.topics[1][29], log.topics[1][30], log.topics[1][31],
+            log.topics[1][24],
+            log.topics[1][25],
+            log.topics[1][26],
+            log.topics[1][27],
+            log.topics[1][28],
+            log.topics[1][29],
+            log.topics[1][30],
+            log.topics[1][31],
         ]);
 
         Some(ParsedEvent::ProposalCanceled(ProposalCanceledEvent {
@@ -505,7 +600,10 @@ mod tests {
         let agent_registered_sig = get_event_signature("AgentRegistered(bytes32,address,string)");
         assert_eq!(agent_registered_sig.len(), 64);
 
-        let proposal_created_sig = get_event_signature("ProposalCreated(uint256,address,address[],uint256[],string[],bytes[],uint256,uint256,string)");
+        let proposal_created_sig = get_event_signature(
+            "ProposalCreated(uint256,address,address[],uint256[],string[],bytes[],uint256,uint256,\
+             string)",
+        );
         assert_eq!(proposal_created_sig.len(), 64);
     }
 

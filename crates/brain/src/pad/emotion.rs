@@ -2,8 +2,9 @@
 //!
 //! Pleasure-Arousal-Dominance 3D emotional state.
 
-use serde::{Deserialize, Serialize};
 use std::fmt;
+
+use serde::{Deserialize, Serialize};
 
 /// PAD emotional state
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]

@@ -42,7 +42,8 @@ mod p0_tests {
     fn test_agent_wallet_creation() {
         use beebotos_agents::wallet::{AgentWallet, WalletBuilder, WalletConfig};
 
-        const TEST_MNEMONIC: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+        const TEST_MNEMONIC: &str = "abandon abandon abandon abandon abandon abandon abandon \
+                                     abandon abandon abandon abandon about";
 
         // Create wallet from mnemonic
         let wallet = AgentWallet::from_mnemonic(TEST_MNEMONIC, WalletConfig::default())
@@ -58,7 +59,8 @@ mod p0_tests {
     fn test_wallet_builder() {
         use beebotos_agents::wallet::{WalletBuilder, WalletConfig};
 
-        const TEST_MNEMONIC: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+        const TEST_MNEMONIC: &str = "abandon abandon abandon abandon abandon abandon abandon \
+                                     abandon abandon abandon abandon about";
 
         let wallet = WalletBuilder::new()
             .mnemonic(TEST_MNEMONIC)
@@ -73,8 +75,9 @@ mod p0_tests {
     // Test 3: TaskType enum
     #[test]
     fn test_task_type_enum() {
-        use beebotos_agents::TaskType;
         use std::str::FromStr;
+
+        use beebotos_agents::TaskType;
 
         // Test all predefined variants
         assert_eq!(TaskType::LlmChat.as_str(), "llm_chat");
@@ -232,12 +235,11 @@ mod p0_tests {
     // Integration test: Agent with wallet
     #[tokio::test]
     async fn test_agent_with_wallet() {
-        use beebotos_agents::{
-            wallet::{WalletBuilder, WalletConfig},
-            AgentBuilder,
-        };
+        use beebotos_agents::wallet::{WalletBuilder, WalletConfig};
+        use beebotos_agents::AgentBuilder;
 
-        const TEST_MNEMONIC: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+        const TEST_MNEMONIC: &str = "abandon abandon abandon abandon abandon abandon abandon \
+                                     abandon abandon abandon abandon about";
 
         let wallet = WalletBuilder::new()
             .mnemonic(TEST_MNEMONIC)
@@ -245,8 +247,7 @@ mod p0_tests {
             .expect("Build wallet");
 
         // Create agent with wallet capability
-        let _agent = AgentBuilder::new("TestAgent")
-            .with_capability("wallet");
+        let _agent = AgentBuilder::new("TestAgent").with_capability("wallet");
 
         // Verify wallet was created successfully
         let address = wallet.address().await;
@@ -256,8 +257,9 @@ mod p0_tests {
     // Integration test: Task with enum type
     #[test]
     fn test_task_with_enum_type() {
-        use beebotos_agents::{Task, TaskType};
         use std::collections::HashMap;
+
+        use beebotos_agents::{Task, TaskType};
 
         let task = Task {
             id: "test-task".to_string(),

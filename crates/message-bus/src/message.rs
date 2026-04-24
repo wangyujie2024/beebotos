@@ -1,9 +1,11 @@
 //! Message types for the message bus
 
-use crate::error::{MessageBusError, Result};
+use std::collections::HashMap;
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+
+use crate::error::{MessageBusError, Result};
 
 /// Unique message identifier
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -281,9 +283,9 @@ impl MessageBuilder {
 
     /// Build the message
     pub fn build(self) -> Result<Message> {
-        let payload = self.payload.ok_or_else(|| {
-            MessageBusError::Serialization("Payload not set".to_string())
-        })?;
+        let payload = self
+            .payload
+            .ok_or_else(|| MessageBusError::Serialization("Payload not set".to_string()))?;
 
         Ok(Message {
             metadata: self.metadata,
@@ -386,8 +388,8 @@ mod tests {
 
     #[test]
     fn test_message_reply() {
-        let original = Message::new("test/request", b"request data".to_vec())
-            .with_correlation_id("req-123");
+        let original =
+            Message::new("test/request", b"request data".to_vec()).with_correlation_id("req-123");
 
         let reply = original.create_reply(b"response data".to_vec());
 
@@ -398,8 +400,7 @@ mod tests {
 
     #[test]
     fn test_priority_clamping() {
-        let msg = Message::new("test/priority", b"test".to_vec())
-            .with_priority(15);
+        let msg = Message::new("test/priority", b"test".to_vec()).with_priority(15);
 
         assert_eq!(msg.metadata.priority, 9);
     }

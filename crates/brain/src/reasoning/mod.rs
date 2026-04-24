@@ -2,8 +2,9 @@
 //!
 //! Deductive, inductive, and abductive reasoning.
 
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+
+use serde::{Deserialize, Serialize};
 
 pub mod deductive;
 

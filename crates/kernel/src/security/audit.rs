@@ -15,12 +15,12 @@
 //! The encryption key is automatically zeroed from memory when the
 //! audit log is dropped.
 
-use serde::{Deserialize, Serialize};
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::time::SystemTime;
 
 use parking_lot::Mutex;
-use std::time::SystemTime;
+use serde::{Deserialize, Serialize};
 use tracing::{debug, error, info, warn};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
@@ -393,7 +393,7 @@ impl AuditLog {
     /// # Example
     ///
     /// ```rust
-    /// use beebotos_kernel::security::audit::{AuditLog, AuditConfig, AuditEncryptionKey};
+    /// use beebotos_kernel::security::audit::{AuditConfig, AuditEncryptionKey, AuditLog};
     ///
     /// let key = AuditEncryptionKey::generate();
     /// let log = AuditLog::with_encryption(AuditConfig::default(), key)
@@ -864,8 +864,9 @@ pub struct AuditStats {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use tempfile::TempDir;
+
+    use super::*;
 
     fn test_context() -> SecurityContext {
         SecurityContext {

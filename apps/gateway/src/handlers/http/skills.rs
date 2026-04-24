@@ -3,14 +3,15 @@
 //! Handles skill installation, management, and execution through Gateway.
 //! Acts as a proxy to ClawHub/BeeHub for skill downloads.
 
+use std::sync::Arc;
+
 use axum::extract::{Path, Query, State};
 use axum::response::IntoResponse;
 use axum::Json;
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 use tracing::{info, warn};
 
-use crate::clients::{ClawHubClient, BeeHubClient, HubType, SkillMetadata};
+use crate::clients::{BeeHubClient, ClawHubClient, HubType, SkillMetadata};
 use crate::error::GatewayError;
 use crate::AppState;
 
@@ -141,23 +142,24 @@ pub async fn install_skill(
     Json(req): Json<InstallSkillRequest>,
 ) -> Result<Json<InstallSkillResponse>, GatewayError> {
     info!("Installing skill: {} from hub: {:?}", req.source, req.hub);
-    
+
     // Determine which hub to use
-    let hub_type = req.hub
+    let hub_type = req
+        .hub
         .as_deref()
         .and_then(|h| h.parse::<HubType>().ok())
         .unwrap_or_default();
-    
+
     // Fetch skill metadata from hub
     let metadata = match hub_type {
         HubType::ClawHub => {
-            let client = ClawHubClient::new()
-                .map_err(|e| GatewayError::Internal {
-                    message: format!("Failed to create ClawHub client: {}", e),
-                    correlation_id: uuid::Uuid::new_v4().to_string(),
-                })?;
-            
-            client.get_skill(&req.source)
+            let client = ClawHubClient::new().map_err(|e| GatewayError::Internal {
+                message: format!("Failed to create ClawHub client: {}", e),
+                correlation_id: uuid::Uuid::new_v4().to_string(),
+            })?;
+
+            client
+                .get_skill(&req.source)
                 .await
                 .map_err(|e| GatewayError::Internal {
                     message: format!("Failed to get skill from ClawHub: {}", e),
@@ -165,13 +167,13 @@ pub async fn install_skill(
                 })?
         }
         HubType::BeeHub => {
-            let client = BeeHubClient::new()
-                .map_err(|e| GatewayError::Internal {
-                    message: format!("Failed to create BeeHub client: {}", e),
-                    correlation_id: uuid::Uuid::new_v4().to_string(),
-                })?;
-            
-            client.get_skill(&req.source)
+            let client = BeeHubClient::new().map_err(|e| GatewayError::Internal {
+                message: format!("Failed to create BeeHub client: {}", e),
+                correlation_id: uuid::Uuid::new_v4().to_string(),
+            })?;
+
+            client
+                .get_skill(&req.source)
                 .await
                 .map_err(|e| GatewayError::Internal {
                     message: format!("Failed to get skill from BeeHub: {}", e),
@@ -179,13 +181,19 @@ pub async fn install_skill(
                 })?
         }
     };
-    
-    info!("Found skill: {} v{} from {}", metadata.name, metadata.version, metadata.author);
-    
+
+    info!(
+        "Found skill: {} v{} from {}",
+        metadata.name, metadata.version, metadata.author
+    );
+
     // Check if already installed
     let skill_dir = get_skill_install_path(&metadata.id);
     if skill_dir.exists() {
-        warn!("Skill {} is already installed at {:?}", metadata.id, skill_dir);
+        warn!(
+            "Skill {} is already installed at {:?}",
+            metadata.id, skill_dir
+        );
         return Ok(Json(InstallSkillResponse {
             success: true,
             skill_id: metadata.id,
@@ -195,18 +203,18 @@ pub async fn install_skill(
             installed_path: skill_dir.to_string_lossy().to_string(),
         }));
     }
-    
+
     // Download skill package
     info!("Downloading skill package for {}", metadata.id);
     let package_bytes = match hub_type {
         HubType::ClawHub => {
-            let client = ClawHubClient::new()
-                .map_err(|e| GatewayError::Internal {
-                    message: format!("Failed to create ClawHub client: {}", e),
-                    correlation_id: uuid::Uuid::new_v4().to_string(),
-                })?;
-            
-            client.download_skill(&req.source, req.version.as_deref())
+            let client = ClawHubClient::new().map_err(|e| GatewayError::Internal {
+                message: format!("Failed to create ClawHub client: {}", e),
+                correlation_id: uuid::Uuid::new_v4().to_string(),
+            })?;
+
+            client
+                .download_skill(&req.source, req.version.as_deref())
                 .await
                 .map_err(|e| GatewayError::Internal {
                     message: format!("Failed to download skill: {}", e),
@@ -214,13 +222,13 @@ pub async fn install_skill(
                 })?
         }
         HubType::BeeHub => {
-            let client = BeeHubClient::new()
-                .map_err(|e| GatewayError::Internal {
-                    message: format!("Failed to create BeeHub client: {}", e),
-                    correlation_id: uuid::Uuid::new_v4().to_string(),
-                })?;
-            
-            client.download_skill(&req.source, req.version.as_deref())
+            let client = BeeHubClient::new().map_err(|e| GatewayError::Internal {
+                message: format!("Failed to create BeeHub client: {}", e),
+                correlation_id: uuid::Uuid::new_v4().to_string(),
+            })?;
+
+            client
+                .download_skill(&req.source, req.version.as_deref())
                 .await
                 .map_err(|e| GatewayError::Internal {
                     message: format!("Failed to download skill: {}", e),
@@ -228,7 +236,7 @@ pub async fn install_skill(
                 })?
         }
     };
-    
+
     // Extract and install skill
     install_skill_package(&metadata, &package_bytes)
         .await
@@ -236,14 +244,24 @@ pub async fn install_skill(
             message: format!("Failed to install skill package: {}", e),
             correlation_id: uuid::Uuid::new_v4().to_string(),
         })?;
-    
+
     // Load and register to SkillRegistry if available
     if let Some(ref registry) = state.skill_registry {
         let mut loader = beebotos_agents::skills::SkillLoader::new();
         loader.add_path(get_skills_base_dir());
         match loader.load_skill(&metadata.id).await {
             Ok(skill) => {
-                registry.register(skill, metadata.tags.first().map(|s| s.as_str()).unwrap_or("general"), metadata.tags.clone()).await;
+                registry
+                    .register(
+                        skill,
+                        metadata
+                            .tags
+                            .first()
+                            .map(|s| s.as_str())
+                            .unwrap_or("general"),
+                        metadata.tags.clone(),
+                    )
+                    .await;
                 info!("Registered skill {} to registry", metadata.id);
             }
             Err(e) => {
@@ -251,9 +269,12 @@ pub async fn install_skill(
             }
         }
     }
-    
-    info!("Successfully installed skill {} to {:?}", metadata.id, skill_dir);
-    
+
+    info!(
+        "Successfully installed skill {} to {:?}",
+        metadata.id, skill_dir
+    );
+
     Ok(Json(InstallSkillResponse {
         success: true,
         skill_id: metadata.id.clone(),
@@ -269,45 +290,42 @@ pub async fn list_skills(
     State(state): State<Arc<AppState>>,
     Query(query): Query<ListSkillsQuery>,
 ) -> Result<Json<Vec<SkillInfoResponse>>, GatewayError> {
-    let hub_type = query.hub
-        .as_deref()
-        .and_then(|h| h.parse::<HubType>().ok());
-    
+    let hub_type = query.hub.as_deref().and_then(|h| h.parse::<HubType>().ok());
+
     // If hub is specified, search from remote hub
     if let Some(hub) = hub_type {
-        let skills = match hub {
-            HubType::ClawHub => {
-                let client = ClawHubClient::new()
-                    .map_err(|e| GatewayError::Internal {
+        let skills =
+            match hub {
+                HubType::ClawHub => {
+                    let client = ClawHubClient::new().map_err(|e| GatewayError::Internal {
                         message: format!("Failed to create ClawHub client: {}", e),
                         correlation_id: uuid::Uuid::new_v4().to_string(),
                     })?;
-                
-                let search_query = query.search.as_deref().unwrap_or("");
-                client.search_skills(search_query)
-                    .await
-                    .map_err(|e| GatewayError::Internal {
-                        message: format!("Failed to search skills: {}", e),
-                        correlation_id: uuid::Uuid::new_v4().to_string(),
+
+                    let search_query = query.search.as_deref().unwrap_or("");
+                    client.search_skills(search_query).await.map_err(|e| {
+                        GatewayError::Internal {
+                            message: format!("Failed to search skills: {}", e),
+                            correlation_id: uuid::Uuid::new_v4().to_string(),
+                        }
                     })?
-            }
-            HubType::BeeHub => {
-                let client = BeeHubClient::new()
-                    .map_err(|e| GatewayError::Internal {
+                }
+                HubType::BeeHub => {
+                    let client = BeeHubClient::new().map_err(|e| GatewayError::Internal {
                         message: format!("Failed to create BeeHub client: {}", e),
                         correlation_id: uuid::Uuid::new_v4().to_string(),
                     })?;
-                
-                let search_query = query.search.as_deref().unwrap_or("");
-                client.search_skills(search_query)
-                    .await
-                    .map_err(|e| GatewayError::Internal {
-                        message: format!("Failed to list skills: {}", e),
-                        correlation_id: uuid::Uuid::new_v4().to_string(),
+
+                    let search_query = query.search.as_deref().unwrap_or("");
+                    client.search_skills(search_query).await.map_err(|e| {
+                        GatewayError::Internal {
+                            message: format!("Failed to list skills: {}", e),
+                            correlation_id: uuid::Uuid::new_v4().to_string(),
+                        }
                     })?
-            }
-        };
-        
+                }
+            };
+
         let responses: Vec<SkillInfoResponse> = skills
             .into_iter()
             .map(|s| SkillInfoResponse {
@@ -324,10 +342,10 @@ pub async fn list_skills(
                 rating: s.rating,
             })
             .collect();
-        
+
         return Ok(Json(responses));
     }
-    
+
     // Otherwise, list locally installed skills
     let skills = list_installed_skills()
         .await
@@ -335,7 +353,7 @@ pub async fn list_skills(
             message: format!("Failed to list installed skills: {}", e),
             correlation_id: uuid::Uuid::new_v4().to_string(),
         })?;
-    
+
     Ok(Json(skills))
 }
 
@@ -350,7 +368,7 @@ pub async fn get_skill(
             resource: format!("Skill: {}", id),
             id: id.clone(),
         })?;
-    
+
     Ok(Json(skill))
 }
 
@@ -360,7 +378,7 @@ pub async fn uninstall_skill(
     Path(id): Path<String>,
 ) -> Result<Json<serde_json::Value>, GatewayError> {
     info!("Uninstalling skill: {}", id);
-    
+
     let skill_dir = get_skill_install_path(&id);
     if !skill_dir.exists() {
         return Err(GatewayError::NotFound {
@@ -368,16 +386,16 @@ pub async fn uninstall_skill(
             id: id.clone(),
         });
     }
-    
+
     tokio::fs::remove_dir_all(&skill_dir)
         .await
         .map_err(|e| GatewayError::Internal {
             message: format!("Failed to uninstall skill: {}", e),
             correlation_id: uuid::Uuid::new_v4().to_string(),
         })?;
-    
+
     info!("Successfully uninstalled skill: {}", id);
-    
+
     Ok(Json(serde_json::json!({
         "success": true,
         "message": format!("Skill {} uninstalled", id),
@@ -391,7 +409,7 @@ pub async fn execute_skill(
     Json(req): Json<ExecuteSkillRequest>,
 ) -> Result<Json<ExecuteSkillResponse>, GatewayError> {
     info!("Executing skill: {} with input: {:?}", id, req.input);
-    
+
     // Check if skill is installed
     let skill_dir = get_skill_install_path(&id);
     if !skill_dir.exists() {
@@ -400,27 +418,29 @@ pub async fn execute_skill(
             id: id.clone(),
         });
     }
-    
+
     // Load skill
     let mut loader = beebotos_agents::skills::SkillLoader::new();
     loader.add_path(get_skills_base_dir());
-    let skill = loader.load_skill(&id).await
+    let skill = loader
+        .load_skill(&id)
+        .await
         .map_err(|e| GatewayError::Internal {
             message: format!("Failed to load skill: {}", e),
             correlation_id: uuid::Uuid::new_v4().to_string(),
         })?;
-    
+
     // Get cached executor or create fallback
     let executor = match state.skill_executor.as_ref() {
         Some(exec) => exec.clone(),
-        None => {
-            Arc::new(beebotos_agents::skills::SkillExecutor::new().map_err(|e| GatewayError::Internal {
+        None => Arc::new(beebotos_agents::skills::SkillExecutor::new().map_err(|e| {
+            GatewayError::Internal {
                 message: format!("Failed to create skill executor: {}", e),
                 correlation_id: uuid::Uuid::new_v4().to_string(),
-            })?)
-        }
+            }
+        })?),
     };
-    
+
     // Build context
     let input = match &req.input {
         serde_json::Value::String(s) => s.clone(),
@@ -430,19 +450,21 @@ pub async fn execute_skill(
         input,
         parameters: std::collections::HashMap::new(),
     };
-    
+
     // Execute
-    let result = executor.execute(&skill, context).await
+    let result = executor
+        .execute(&skill, context)
+        .await
         .map_err(|e| GatewayError::Internal {
             message: format!("Skill execution failed: {}", e),
             correlation_id: uuid::Uuid::new_v4().to_string(),
         })?;
-    
+
     // Record usage if registry is available
     if let Some(ref registry) = state.skill_registry {
         registry.record_usage(&id).await;
     }
-    
+
     Ok(Json(ExecuteSkillResponse {
         success: result.success,
         output: result.output,
@@ -489,7 +511,10 @@ pub async fn create_instance(
 
     // Auto-transition to Running
     manager
-        .update_status(&instance_id, beebotos_agents::skills::InstanceStatus::Running)
+        .update_status(
+            &instance_id,
+            beebotos_agents::skills::InstanceStatus::Running,
+        )
         .await
         .map_err(|e| GatewayError::Internal {
             message: format!("Failed to start instance: {}", e),
@@ -670,7 +695,10 @@ pub async fn execute_instance(
     Path(id): Path<String>,
     Json(req): Json<ExecuteInstanceRequest>,
 ) -> Result<Json<ExecuteSkillResponse>, GatewayError> {
-    info!("Executing instance: {} function: {:?}", id, req.function_name);
+    info!(
+        "Executing instance: {} function: {:?}",
+        id, req.function_name
+    );
 
     let manager = state
         .skill_instance_manager
@@ -698,23 +726,24 @@ pub async fn execute_instance(
     // Load skill
     let mut loader = beebotos_agents::skills::SkillLoader::new();
     loader.add_path(get_skills_base_dir());
-    let skill = loader
-        .load_skill(&instance.skill_id)
-        .await
-        .map_err(|e| GatewayError::Internal {
-            message: format!("Failed to load skill: {}", e),
-            correlation_id: uuid::Uuid::new_v4().to_string(),
-        })?;
+    let skill =
+        loader
+            .load_skill(&instance.skill_id)
+            .await
+            .map_err(|e| GatewayError::Internal {
+                message: format!("Failed to load skill: {}", e),
+                correlation_id: uuid::Uuid::new_v4().to_string(),
+            })?;
 
     // Get executor
     let executor = match state.skill_executor.as_ref() {
         Some(exec) => exec.clone(),
-        None => {
-            Arc::new(beebotos_agents::skills::SkillExecutor::new().map_err(|e| GatewayError::Internal {
+        None => Arc::new(beebotos_agents::skills::SkillExecutor::new().map_err(|e| {
+            GatewayError::Internal {
                 message: format!("Failed to create skill executor: {}", e),
                 correlation_id: uuid::Uuid::new_v4().to_string(),
-            })?)
-        }
+            }
+        })?),
     };
 
     // Convert parameters: map<string, json_value> -> map<string, bytes>
@@ -785,19 +814,19 @@ fn map_instance_to_response(instance: &beebotos_agents::skills::SkillInstance) -
 pub async fn hub_health() -> Result<Json<serde_json::Value>, GatewayError> {
     let clawhub_client = ClawHubClient::new();
     let beehub_client = BeeHubClient::new();
-    
+
     let clawhub_healthy = if let Ok(client) = clawhub_client {
         client.health_check().await.unwrap_or(false)
     } else {
         false
     };
-    
+
     let beehub_healthy = if let Ok(client) = beehub_client {
         client.health_check().await.unwrap_or(false)
     } else {
         false
     };
-    
+
     Ok(Json(serde_json::json!({
         "clawhub": {
             "status": if clawhub_healthy { "healthy" } else { "unhealthy" },
@@ -835,29 +864,31 @@ async fn install_skill_package(
     package_bytes: &[u8],
 ) -> Result<(), Box<dyn std::error::Error>> {
     let skill_dir = get_skill_install_path(&metadata.id);
-    
+
     // Create directory
     tokio::fs::create_dir_all(&skill_dir).await?;
-    
+
     // Write package
     let package_path = skill_dir.join("package.zip");
     tokio::fs::write(&package_path, package_bytes).await?;
-    
+
     // Extract archive in blocking task
     let skill_dir_clone = skill_dir.clone();
     let package_path_clone = package_path.clone();
     tokio::task::spawn_blocking(move || {
         let file = std::fs::File::open(&package_path_clone)
             .map_err(|e| format!("Failed to open package: {}", e))?;
-        let mut archive = zip::ZipArchive::new(file)
-            .map_err(|e| format!("Failed to read zip archive: {}", e))?;
-        archive.extract(&skill_dir_clone)
+        let mut archive =
+            zip::ZipArchive::new(file).map_err(|e| format!("Failed to read zip archive: {}", e))?;
+        archive
+            .extract(&skill_dir_clone)
             .map_err(|e| format!("Failed to extract archive: {}", e))?;
         Ok::<(), String>(())
-    }).await
+    })
+    .await
     .map_err(|e| format!("Blocking task failed: {}", e))?
     .map_err(|e| format!("Extraction failed: {}", e))?;
-    
+
     // Create skill.yaml manifest if not present in archive
     let manifest_path = skill_dir.join("skill.yaml");
     if !manifest_path.exists() {
@@ -871,21 +902,22 @@ async fn install_skill_package(
             "capabilities": metadata.capabilities,
             "entry_point": "skill.wasm",
         }))?;
-        
+
         tokio::fs::write(&manifest_path, manifest).await?;
     }
-    
+
     // Validate WASM if present
     let wasm_path = skill_dir.join("skill.wasm");
     if wasm_path.exists() {
         let wasm_bytes = tokio::fs::read(&wasm_path).await?;
         let validator = beebotos_agents::skills::SkillSecurityValidator::new(
-            beebotos_agents::skills::SkillSecurityPolicy::default()
+            beebotos_agents::skills::SkillSecurityPolicy::default(),
         );
-        validator.validate(&wasm_bytes)
+        validator
+            .validate(&wasm_bytes)
             .map_err(|e| format!("WASM security validation failed: {}", e))?;
     }
-    
+
     info!("Installed skill package to {:?}", skill_dir);
     Ok(())
 }
@@ -893,7 +925,8 @@ async fn install_skill_package(
 /// List installed skills
 /// Extract string array from yaml value
 fn yaml_string_array(value: &serde_yaml::Value) -> Vec<String> {
-    value.as_sequence()
+    value
+        .as_sequence()
         .map(|seq| {
             seq.iter()
                 .filter_map(|v| v.as_str().map(|s| s.to_string()))
@@ -905,16 +938,17 @@ fn yaml_string_array(value: &serde_yaml::Value) -> Vec<String> {
 async fn list_installed_skills() -> Result<Vec<SkillInfoResponse>, Box<dyn std::error::Error>> {
     let base_dir = get_skills_base_dir();
     let mut skills = Vec::new();
-    
+
     if let Ok(mut entries) = tokio::fs::read_dir(&base_dir).await {
         while let Some(entry) = entries.next_entry().await? {
             let path = entry.path();
             if path.is_dir() {
-                let skill_id = path.file_name()
+                let skill_id = path
+                    .file_name()
                     .and_then(|n| n.to_str())
                     .unwrap_or("unknown")
                     .to_string();
-                
+
                 // Try to read manifest
                 let manifest_path = path.join("skill.yaml");
                 if let Ok(content) = tokio::fs::read_to_string(&manifest_path).await {
@@ -937,7 +971,7 @@ async fn list_installed_skills() -> Result<Vec<SkillInfoResponse>, Box<dyn std::
             }
         }
     }
-    
+
     Ok(skills)
 }
 
@@ -945,10 +979,10 @@ async fn list_installed_skills() -> Result<Vec<SkillInfoResponse>, Box<dyn std::
 async fn get_skill_info(skill_id: &str) -> Result<SkillInfoResponse, Box<dyn std::error::Error>> {
     let skill_dir = get_skill_install_path(skill_id);
     let manifest_path = skill_dir.join("skill.yaml");
-    
+
     let content = tokio::fs::read_to_string(&manifest_path).await?;
     let manifest: serde_yaml::Value = serde_yaml::from_str(&content)?;
-    
+
     Ok(SkillInfoResponse {
         id: skill_id.to_string(),
         name: manifest["name"].as_str().unwrap_or(skill_id).to_string(),

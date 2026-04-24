@@ -1,7 +1,8 @@
 //! Chain HTTP Handlers (V2 - Using split services)
 //!
 //! 🟢 P1 FIX: Migrated to use WalletService, DaoService, and IdentityService.
-//! This version separates concerns: wallet operations, DAO governance, and identity.
+//! This version separates concerns: wallet operations, DAO governance, and
+//! identity.
 
 use std::sync::Arc;
 
@@ -9,10 +10,8 @@ use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::Json;
-use gateway::{
-    error::GatewayError,
-    middleware::{require_any_role, AuthUser},
-};
+use gateway::error::GatewayError;
+use gateway::middleware::{require_any_role, AuthUser};
 use serde::Deserialize;
 use serde_json::json;
 
@@ -28,10 +27,9 @@ pub async fn get_wallet_info(
     require_any_role(&user, &["user", "admin"])?;
 
     // 🟢 P1 FIX: Use WalletService instead of ChainService
-    let wallet_service = state
-        .wallet_service
-        .as_ref()
-        .ok_or_else(|| GatewayError::service_unavailable("wallet", "Wallet service not initialized"))?;
+    let wallet_service = state.wallet_service.as_ref().ok_or_else(|| {
+        GatewayError::service_unavailable("wallet", "Wallet service not initialized")
+    })?;
 
     let info = wallet_service
         .get_wallet_info()
@@ -60,14 +58,15 @@ pub async fn transfer(
 ) -> Result<impl IntoResponse, GatewayError> {
     require_any_role(&user, &["admin"])?;
 
-    let wallet_service = state
-        .wallet_service
-        .as_ref()
-        .ok_or_else(|| GatewayError::service_unavailable("wallet", "Wallet service not initialized"))?;
+    let wallet_service = state.wallet_service.as_ref().ok_or_else(|| {
+        GatewayError::service_unavailable("wallet", "Wallet service not initialized")
+    })?;
 
     // Parse address
     let to_address = parse_address(&req.to)?;
-    let amount = req.amount_wei.parse::<u128>()
+    let amount = req
+        .amount_wei
+        .parse::<u128>()
         .map_err(|_| GatewayError::bad_request("Invalid amount"))?;
 
     let tx_hash = wallet_service
@@ -102,10 +101,9 @@ pub async fn register_agent_identity(
     require_any_role(&user, &["user", "admin"])?;
 
     // 🟢 P1 FIX: Use IdentityService instead of ChainService
-    let identity_service = state
-        .identity_service
-        .as_ref()
-        .ok_or_else(|| GatewayError::service_unavailable("identity", "Identity service not initialized"))?;
+    let identity_service = state.identity_service.as_ref().ok_or_else(|| {
+        GatewayError::service_unavailable("identity", "Identity service not initialized")
+    })?;
 
     // Parse public key
     let public_key = parse_hex_32(&req.public_key)?;
@@ -142,16 +140,17 @@ pub async fn get_agent_identity(
     _user: AuthUser,
     Path(agent_id): Path<String>,
 ) -> Result<Json<serde_json::Value>, GatewayError> {
-    let identity_service = state
-        .identity_service
-        .as_ref()
-        .ok_or_else(|| GatewayError::service_unavailable("identity", "Identity service not initialized"))?;
+    let identity_service = state.identity_service.as_ref().ok_or_else(|| {
+        GatewayError::service_unavailable("identity", "Identity service not initialized")
+    })?;
 
     let info = identity_service
         .get_identity(&agent_id)
         .await
         .map_err(|e| match e {
-            crate::error::AppError::NotFound(_) => GatewayError::not_found("agent identity", &agent_id),
+            crate::error::AppError::NotFound(_) => {
+                GatewayError::not_found("agent identity", &agent_id)
+            }
             _ => GatewayError::agent(format!("Failed to get identity: {}", e)),
         })?;
 
@@ -170,10 +169,9 @@ pub async fn has_agent_identity(
     _user: AuthUser,
     Path(agent_id): Path<String>,
 ) -> Result<Json<serde_json::Value>, GatewayError> {
-    let identity_service = state
-        .identity_service
-        .as_ref()
-        .ok_or_else(|| GatewayError::service_unavailable("identity", "Identity service not initialized"))?;
+    let identity_service = state.identity_service.as_ref().ok_or_else(|| {
+        GatewayError::service_unavailable("identity", "Identity service not initialized")
+    })?;
 
     let has_identity = identity_service
         .has_identity(&agent_id)
@@ -263,7 +261,9 @@ pub async fn cast_vote(
         .as_ref()
         .ok_or_else(|| GatewayError::service_unavailable("dao", "DAO service not initialized"))?;
 
-    let proposal_id = req.proposal_id.parse::<u64>()
+    let proposal_id = req
+        .proposal_id
+        .parse::<u64>()
         .map_err(|_| GatewayError::bad_request("Invalid proposal ID"))?;
 
     let vote_type = match req.vote_type.as_str() {
@@ -304,7 +304,8 @@ pub async fn get_proposal(
         .as_ref()
         .ok_or_else(|| GatewayError::service_unavailable("dao", "DAO service not initialized"))?;
 
-    let proposal_id = id.parse::<u64>()
+    let proposal_id = id
+        .parse::<u64>()
         .map_err(|_| GatewayError::bad_request("Invalid proposal ID"))?;
 
     let info = dao_service
@@ -380,8 +381,8 @@ fn parse_hex_32(hex_str: &str) -> Result<[u8; 32], GatewayError> {
         hex_str
     };
 
-    let bytes = hex::decode(hex_str)
-        .map_err(|_| GatewayError::bad_request("Invalid hex format"))?;
+    let bytes =
+        hex::decode(hex_str).map_err(|_| GatewayError::bad_request("Invalid hex format"))?;
 
     if bytes.len() != 32 {
         return Err(GatewayError::bad_request("Expected 32 bytes"));

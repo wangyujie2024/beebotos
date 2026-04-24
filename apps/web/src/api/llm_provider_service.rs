@@ -1,7 +1,8 @@
 //! LLM Provider Admin API Service
 
-use super::client::{ApiClient, ApiError};
 use serde::{Deserialize, Serialize};
+
+use super::client::{ApiClient, ApiError};
 
 /// LLM Provider (admin view with full fields)
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -14,6 +15,9 @@ pub struct LlmProvider {
     pub api_key_masked: Option<String>,
     pub enabled: bool,
     pub is_default_provider: bool,
+    pub icon: Option<String>,
+    pub icon_color: Option<String>,
+    pub type_label: Option<String>,
     pub models: Vec<LlmModel>,
 }
 
@@ -115,11 +119,7 @@ impl LlmProviderService {
     }
 
     /// Delete a model
-    pub async fn delete_model(
-        &self,
-        provider_id: i64,
-        model_id: i64,
-    ) -> Result<(), ApiError> {
+    pub async fn delete_model(&self, provider_id: i64, model_id: i64) -> Result<(), ApiError> {
         self.client
             .delete(&format!(
                 "/admin/llm/providers/{}/models/{}",

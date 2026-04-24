@@ -12,16 +12,13 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, error, info, warn};
 
+// Import common webhook utilities
+use super::common::{compute_hmac_sha256, MetadataBuilder, TokenVerifier};
 use crate::communication::webhook::{
     SignatureVerification, WebhookConfig, WebhookEvent, WebhookEventType, WebhookHandler,
 };
 use crate::communication::{AgentMessageDispatcher, Message, MessageType, PlatformType};
 use crate::error::{AgentError, Result};
-
-// Import common webhook utilities
-use super::common::{
-    compute_hmac_sha256, MetadataBuilder, TokenVerifier,
-};
 
 /// Slack webhook payload types
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -545,14 +542,16 @@ impl WebhookHandler for SlackWebhookHandler {
                         msg.content, msg.message_type
                     );
 
-                    // P0 FIX: Removed dispatcher.dispatch() to avoid duplicate processing.
-                    // Messages are now routed exclusively through channel_event_bus →
+                    // P0 FIX: Removed dispatcher.dispatch() to avoid duplicate
+                    // processing. Messages are now routed
+                    // exclusively through channel_event_bus →
                     // MessageProcessor → AgentResolver path in webhook_handler.
                     // if let Some(dispatcher) = &self.dispatcher {
                     //     let platform_user_id = event.metadata.get("team_id")
                     //         .cloned()
                     //         .unwrap_or_default();
-                    //     let target_channel_id = msg.metadata.get("channel_id")
+                    //     let target_channel_id =
+                    // msg.metadata.get("channel_id")
                     //         .cloned()
                     //         .unwrap_or_default();
                     //

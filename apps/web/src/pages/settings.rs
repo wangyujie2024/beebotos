@@ -1,11 +1,14 @@
-use crate::api::{Settings as ApiSettings, SettingsService, Theme};
-use crate::state::use_app_state;
-use crate::utils::{event_target_checked, event_target_value, use_theme, FormValidator, StringValidators};
 use gloo_storage::Storage;
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 use leptos::view;
 use leptos_meta::*;
+
+use crate::api::{Settings as ApiSettings, SettingsService, Theme};
+use crate::state::use_app_state;
+use crate::utils::{
+    event_target_checked, event_target_value, use_theme, FormValidator, StringValidators,
+};
 
 #[component]
 pub fn SettingsPage() -> impl IntoView {
@@ -40,7 +43,8 @@ pub fn SettingsPage() -> impl IntoView {
                 }
                 Err(_) => {
                     // Fallback to localStorage
-                    let result: Result<String, _> = gloo_storage::LocalStorage::get("beebotos_settings");
+                    let result: Result<String, _> =
+                        gloo_storage::LocalStorage::get("beebotos_settings");
                     if let Ok(stored) = result {
                         if let Ok(parsed) = serde_json::from_str::<ApiSettings>(&stored) {
                             app_state.settings.set(parsed);
@@ -421,5 +425,3 @@ fn ThemeOption(
         </button>
     }
 }
-
-

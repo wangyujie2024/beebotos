@@ -932,7 +932,10 @@ impl MatrixVideoContent {
             url: self.url.clone(),
             width: self.info.as_ref().and_then(|i| i.w.map(|w| w as i32)),
             height: self.info.as_ref().and_then(|i| i.h.map(|h| h as i32)),
-            duration: self.info.as_ref().and_then(|i| i.duration.map(|d| d as i32)),
+            duration: self
+                .info
+                .as_ref()
+                .and_then(|i| i.duration.map(|d| d as i32)),
             mime_type: self.info.as_ref().and_then(|i| i.mimetype.clone()),
             filename: Some(self.body.clone()),
             caption: Some(self.body.clone()),
@@ -967,7 +970,10 @@ impl MatrixAudioContent {
             mime_type: self.info.as_ref().and_then(|i| i.mimetype.clone()),
             filename: Some(self.body.clone()),
             size: self.info.as_ref().and_then(|i| i.size.map(|s| s as i64)),
-            duration: self.info.as_ref().and_then(|i| i.duration.map(|d| d as i32)),
+            duration: self
+                .info
+                .as_ref()
+                .and_then(|i| i.duration.map(|d| d as i32)),
             width: None,
             height: None,
             caption: None,

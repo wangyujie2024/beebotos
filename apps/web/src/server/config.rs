@@ -2,8 +2,9 @@
 //!
 //! 支持 TOML 配置文件和环境变量覆盖
 
-use serde::{Deserialize, Serialize};
 use std::path::Path;
+
+use serde::{Deserialize, Serialize};
 
 /// 应用配置
 #[derive(Debug, Clone, Serialize, Deserialize)]

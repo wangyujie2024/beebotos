@@ -2,8 +2,9 @@
 //!
 //! Execution context for agents.
 
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+
+use serde::{Deserialize, Serialize};
 
 use crate::types::{SessionId, TaskId};
 use crate::AgentId;
@@ -115,18 +116,12 @@ impl AgentContext {
 
     /// Get transcript path
     pub fn transcript_path(&self) -> String {
-        format!(
-            "data/transcripts/{}/{}",
-            self.agent_id, self.session_id
-        )
+        format!("data/transcripts/{}/{}", self.agent_id, self.session_id)
     }
 
     /// Get workspace path
     pub fn workspace_path(&self) -> String {
-        format!(
-            "data/workspaces/{}/{}",
-            self.agent_id, self.session_id
-        )
+        format!("data/workspaces/{}/{}", self.agent_id, self.session_id)
     }
 }
 

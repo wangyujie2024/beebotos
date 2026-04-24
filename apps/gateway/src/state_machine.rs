@@ -6,20 +6,22 @@
 //! 🔒 P1 FIX: Enhanced state machine with strict transition validation and
 //! comprehensive lifecycle management.
 
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
 use std::time::{Duration, Instant};
 
+use serde::{Deserialize, Serialize};
+
 /// Agent lifecycle states
 ///
-/// Represents the complete lifecycle of an agent from registration to termination.
-/// Each state transition is validated to ensure correct lifecycle progression.
+/// Represents the complete lifecycle of an agent from registration to
+/// termination. Each state transition is validated to ensure correct lifecycle
+/// progression.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AgentLifecycleState {
     /// Agent is registered but not yet initialized
-    /// 
+    ///
     /// Valid transitions: Initializing, Error
     Pending,
 
@@ -146,7 +148,10 @@ impl AgentLifecycleState {
 
     /// Check if this state allows task execution
     pub fn can_execute_tasks(&self) -> bool {
-        matches!(self, AgentLifecycleState::Idle | AgentLifecycleState::Working)
+        matches!(
+            self,
+            AgentLifecycleState::Idle | AgentLifecycleState::Working
+        )
     }
 
     /// Check if this state allows configuration changes
@@ -164,7 +169,9 @@ impl AgentLifecycleState {
     pub fn description(&self) -> &'static str {
         match self {
             AgentLifecycleState::Pending => "Agent is registered but not yet initialized",
-            AgentLifecycleState::Initializing => "Agent is loading configuration and connecting to services",
+            AgentLifecycleState::Initializing => {
+                "Agent is loading configuration and connecting to services"
+            }
             AgentLifecycleState::Idle => "Agent is ready to accept tasks",
             AgentLifecycleState::Working => "Agent is actively processing a task",
             AgentLifecycleState::Paused => "Agent is paused and can be resumed",
@@ -403,7 +410,9 @@ impl Default for StateMachineContext {
 /// State machine errors
 #[derive(Debug, thiserror::Error)]
 pub enum StateMachineError {
-    #[error("Invalid state transition from {from} to {to}. Valid transitions: {valid_transitions:?}")]
+    #[error(
+        "Invalid state transition from {from} to {to}. Valid transitions: {valid_transitions:?}"
+    )]
     InvalidTransition {
         from: AgentLifecycleState,
         to: AgentLifecycleState,

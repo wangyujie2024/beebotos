@@ -9,21 +9,23 @@
 //! - TTL support
 //! - Automatic cleanup
 
+use std::collections::HashMap;
+use std::num::NonZeroUsize;
+use std::path::Path;
+use std::sync::Arc;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+
+use lru::LruCache;
+use parking_lot::{Mutex, RwLock};
+use serde::{Deserialize, Serialize};
+use tracing::{debug, error, info, warn};
+
 use crate::compat::{Address, B256, U256};
 use crate::constants::{
     CACHE_SAVE_INTERVAL_SECS, CONTRACT_CACHE_TTL_SECS, DEFAULT_CACHE_CAPACITY,
     IDENTITY_CACHE_TTL_SECS,
 };
 use crate::{ChainError, Result};
-use lru::LruCache;
-use parking_lot::{Mutex, RwLock};
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::num::NonZeroUsize;
-use std::path::Path;
-use std::sync::Arc;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use tracing::{debug, error, info, warn};
 
 /// Cache entry with metadata
 #[derive(Debug, Clone, Serialize, Deserialize)]

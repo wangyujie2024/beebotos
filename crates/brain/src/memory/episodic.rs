@@ -2,8 +2,9 @@
 //!
 //! Long-term memory for events with spatiotemporal context.
 
-use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+
+use serde::{Deserialize, Serialize};
 
 /// Episodic memory store
 #[derive(Debug, Clone, Serialize, Deserialize)]

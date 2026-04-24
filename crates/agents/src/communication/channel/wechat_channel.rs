@@ -3,7 +3,8 @@
 //! Unified Channel trait implementation for WeChat Work (企业微信).
 //! Uses HTTP API for sending messages and webhook for receiving.
 //!
-//! 🔧 P0 FIX: Added LinkHandler and CommandHandler for feature parity with OpenClaw
+//! 🔧 P0 FIX: Added LinkHandler and CommandHandler for feature parity with
+//! OpenClaw
 
 use std::sync::Arc;
 
@@ -157,8 +158,9 @@ struct TokenCache {
 }
 
 /// WeChat Channel implementation
-/// 
-/// 🔧 P0 FIX: Integrated LinkHandler and CommandHandler for enhanced functionality
+///
+/// 🔧 P0 FIX: Integrated LinkHandler and CommandHandler for enhanced
+/// functionality
 pub struct WeChatChannel {
     config: WeChatChannelConfig,
     http_client: reqwest::Client,
@@ -207,10 +209,13 @@ impl WeChatChannel {
         self
     }
 
-    /// 🔧 P0 FIX: Handle incoming message with link detection and command processing
+    /// 🔧 P0 FIX: Handle incoming message with link detection and command
+    /// processing
     pub async fn handle_message(&self, message: &Message) -> Result<Option<String>> {
         let content = &message.content;
-        let sender = message.metadata.get("from_user")
+        let sender = message
+            .metadata
+            .get("from_user")
             .map(|s| s.as_str())
             .unwrap_or("unknown");
 
@@ -222,7 +227,7 @@ impl WeChatChannel {
                     channel: "wechat".to_string(),
                     metadata: message.metadata.clone(),
                 };
-                
+
                 match cmd_handler.execute(content, ctx).await {
                     CommandResult::Success(response) => return Ok(Some(response)),
                     CommandResult::NotFound => {} // Continue to other handlers
@@ -237,10 +242,12 @@ impl WeChatChannel {
         if let Some(ref link_handler) = self.link_handler {
             if let Some(url) = self.extract_url(content) {
                 info!("Detected URL in message: {}", url);
-                
+
                 // Send "processing" message
-                let _ = self.send_text_message(sender, "⏳ 正在处理链接,请稍候...").await;
-                
+                let _ = self
+                    .send_text_message(sender, "⏳ 正在处理链接,请稍候...")
+                    .await;
+
                 match link_handler.process(&url).await {
                     Ok(summary) => {
                         let formatted = format_summary_for_display(&summary);
@@ -261,9 +268,10 @@ impl WeChatChannel {
     fn extract_url(&self, text: &str) -> Option<String> {
         // Simple URL regex pattern
         let url_regex = regex::Regex::new(
-            r"https?://[a-zA-Z0-9][-a-zA-Z0-9]*[\.a-zA-Z0-9]*[a-zA-Z0-9][a-zA-Z0-9._/-]*"
-        ).ok()?;
-        
+            r"https?://[a-zA-Z0-9][-a-zA-Z0-9]*[\.a-zA-Z0-9]*[a-zA-Z0-9][a-zA-Z0-9._/-]*",
+        )
+        .ok()?;
+
         url_regex.find(text).map(|m| m.as_str().to_string())
     }
 
@@ -351,7 +359,10 @@ impl WeChatChannel {
             .await
             .map_err(|e| AgentError::platform(format!("Failed to parse send response: {}", e)))?;
 
-        info!("WeChat send response: errcode={}, errmsg={}", send_response.errcode, send_response.errmsg);
+        info!(
+            "WeChat send response: errcode={}, errmsg={}",
+            send_response.errcode, send_response.errmsg
+        );
 
         if send_response.errcode != 0 {
             return Err(AgentError::platform(format!(
@@ -388,10 +399,11 @@ impl WeChatChannel {
     }
 
     /// 🔧 P0 FIX: Send image message to user
-    /// 
+    ///
     /// # Arguments
     /// * `to_user` - Target user ID
-    /// * `media_id` - Media ID obtained from upload_temp_media or upload_permanent_media
+    /// * `media_id` - Media ID obtained from upload_temp_media or
+    ///   upload_permanent_media
     pub async fn send_image(&self, to_user: &str, media_id: &str) -> Result<()> {
         let recipient = WeChatRecipient {
             touser: Some(to_user.to_string()),
@@ -410,7 +422,7 @@ impl WeChatChannel {
     }
 
     /// 🔧 P0 FIX: Send file message to user
-    /// 
+    ///
     /// # Arguments
     /// * `to_user` - Target user ID
     /// * `media_id` - Media ID of the file
@@ -432,7 +444,7 @@ impl WeChatChannel {
     }
 
     /// 🔧 P0 FIX: Send video message to user
-    /// 
+    ///
     /// # Arguments
     /// * `to_user` - Target user ID
     /// * `media_id` - Media ID of the video
@@ -448,7 +460,7 @@ impl WeChatChannel {
         let mut video_content = serde_json::json!({
             "media_id": media_id
         });
-        
+
         if let Some(t) = title {
             video_content["title"] = serde_json::json!(t);
         }
@@ -469,7 +481,7 @@ impl WeChatChannel {
     }
 
     /// 🔧 P0 FIX: Send voice message to user
-    /// 
+    ///
     /// # Arguments
     /// * `to_user` - Target user ID
     /// * `media_id` - Media ID of the voice file
@@ -491,17 +503,21 @@ impl WeChatChannel {
     }
 
     /// 🔧 P0 FIX: Send news/article message to user
-    /// 
+    ///
     /// # Arguments
     /// * `to_user` - Target user ID
     /// * `articles` - List of articles (max 8 for WeChat Work)
-    pub async fn send_news(&self, to_user: &str, articles: Vec<super::wechat_content::WeChatArticle>) -> Result<()> {
+    pub async fn send_news(
+        &self,
+        to_user: &str,
+        articles: Vec<super::wechat_content::WeChatArticle>,
+    ) -> Result<()> {
         #[allow(unused_imports)]
         use super::wechat_content::WeChatArticle;
-        
+
         if articles.is_empty() || articles.len() > 8 {
             return Err(AgentError::invalid_input(
-                "Articles count must be between 1 and 8"
+                "Articles count must be between 1 and 8",
             ));
         }
 
@@ -529,7 +545,7 @@ impl WeChatChannel {
     }
 
     /// 🔧 P0 FIX: Send markdown message to user (WeChat Work only)
-    /// 
+    ///
     /// # Arguments
     /// * `to_user` - Target user ID
     /// * `content` - Markdown content
@@ -551,7 +567,7 @@ impl WeChatChannel {
     }
 
     /// 🔧 P0 FIX: Send message to multiple users (broadcast)
-    /// 
+    ///
     /// # Arguments
     /// * `to_users` - List of target user IDs (max 1000)
     /// * `message_fn` - Function that creates the message recipient

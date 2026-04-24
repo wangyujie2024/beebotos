@@ -3,17 +3,16 @@
 //! Provides REST APIs for managing per-user preferences (theme, language,
 //! notifications, etc.).
 
+use std::sync::Arc;
+
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::Json;
-use gateway::{
-    error::GatewayError,
-    middleware::{require_any_role, AuthUser},
-};
+use gateway::error::GatewayError;
+use gateway::middleware::{require_any_role, AuthUser};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::sync::Arc;
 
 use crate::AppState;
 
@@ -91,7 +90,8 @@ pub async fn update_user_settings(
     let auto_update = req.auto_update.unwrap_or(true);
 
     sqlx::query(
-        "INSERT INTO user_settings (user_id, theme, language, notifications_enabled, auto_update, api_endpoint, wallet_address)
+        "INSERT INTO user_settings (user_id, theme, language, notifications_enabled, auto_update, \
+         api_endpoint, wallet_address)
          VALUES (?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(user_id) DO UPDATE SET
              theme = excluded.theme,

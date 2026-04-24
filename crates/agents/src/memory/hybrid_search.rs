@@ -1,7 +1,7 @@
 //! Hybrid Search Mechanism
 //!
-//! Implements a hybrid search strategy combining vector search and BM25 keyword search,
-//! similar to OpenClaw's memory retrieval system.
+//! Implements a hybrid search strategy combining vector search and BM25 keyword
+//! search, similar to OpenClaw's memory retrieval system.
 //!
 //! # Architecture
 //!
@@ -33,10 +33,12 @@
 //! - Result Fusion: Weighted combination (70% vector + 30% BM25)
 //! - SQLite Backend: Efficient indexing and storage
 
-use crate::error::Result;
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+
+use crate::error::Result;
 
 /// Default weight for vector search results
 pub const DEFAULT_VECTOR_WEIGHT: f32 = 0.7;
@@ -114,7 +116,7 @@ impl Default for HybridSearchConfig {
             vector_weight: DEFAULT_VECTOR_WEIGHT,
             bm25_weight: DEFAULT_BM25_WEIGHT,
             max_results: DEFAULT_MAX_RESULTS,
-            min_score_threshold: 0.01,  // Lower threshold to avoid floating-point precision issues
+            min_score_threshold: 0.01, // Lower threshold to avoid floating-point precision issues
             enable_reranking: true,
             embedding_dimension: 1536, // OpenAI ada-002 dimension
             bm25_k1: 1.5,
@@ -128,9 +130,10 @@ impl HybridSearchConfig {
     pub fn validate(&self) -> Result<()> {
         let total_weight = self.vector_weight + self.bm25_weight;
         if (total_weight - 1.0).abs() > 0.01 {
-            return Err(crate::error::AgentError::configuration(
-                format!("Search weights must sum to 1.0, got {}", total_weight)
-            ));
+            return Err(crate::error::AgentError::configuration(format!(
+                "Search weights must sum to 1.0, got {}",
+                total_weight
+            )));
         }
         Ok(())
     }
@@ -180,7 +183,7 @@ impl HybridSearchEngine {
     ) -> Result<()> {
         // Normalize embedding vector
         let normalized = Self::normalize_vector(&embedding);
-        
+
         // Store vector embedding
         let vector = VectorEmbedding {
             id,
@@ -206,7 +209,7 @@ impl HybridSearchEngine {
 
         // Update statistics
         self.update_statistics();
-        
+
         // Clear IDF cache as document frequencies changed
         self.idf_cache.clear();
 
@@ -225,43 +228,50 @@ impl HybridSearchEngine {
         if let Some(embedding) = query_embedding {
             let normalized = Self::normalize_vector(&embedding);
             let vector_results = self.vector_search(&normalized)?;
-            
+
             for (id, score) in vector_results {
-                results_map.insert(id, SearchResult {
+                results_map.insert(
                     id,
-                    content: String::new(), // Will be filled later
-                    score: score * self.config.vector_weight,
-                    vector_score: score,
-                    bm25_score: 0.0,
-                    metadata: HashMap::new(),
-                    timestamp: chrono::Utc::now(),
-                });
+                    SearchResult {
+                        id,
+                        content: String::new(), // Will be filled later
+                        score: score * self.config.vector_weight,
+                        vector_score: score,
+                        bm25_score: 0.0,
+                        metadata: HashMap::new(),
+                        timestamp: chrono::Utc::now(),
+                    },
+                );
             }
         }
 
         // 2. BM25 keyword search
         let bm25_results = self.bm25_search(query)?;
-        
+
         for (id, score) in bm25_results {
             if let Some(existing) = results_map.get_mut(&id) {
                 // Combine scores
                 existing.bm25_score = score;
                 existing.score += score * self.config.bm25_weight;
             } else {
-                results_map.insert(id, SearchResult {
+                results_map.insert(
                     id,
-                    content: String::new(),
-                    score: score * self.config.bm25_weight,
-                    vector_score: 0.0,
-                    bm25_score: score,
-                    metadata: HashMap::new(),
-                    timestamp: chrono::Utc::now(),
-                });
+                    SearchResult {
+                        id,
+                        content: String::new(),
+                        score: score * self.config.bm25_weight,
+                        vector_score: 0.0,
+                        bm25_score: score,
+                        metadata: HashMap::new(),
+                        timestamp: chrono::Utc::now(),
+                    },
+                );
             }
         }
 
         // 3. Convert to vector and sort by score
-        let mut results: Vec<SearchResult> = results_map.into_values()
+        let mut results: Vec<SearchResult> = results_map
+            .into_values()
             .filter(|r| r.score >= self.config.min_score_threshold)
             .collect();
 
@@ -271,7 +281,11 @@ impl HybridSearchEngine {
         }
 
         // 5. Sort by final score and limit results
-        results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        results.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         results.truncate(self.config.max_results);
 
         Ok(results)
@@ -331,10 +345,11 @@ impl HybridSearchEngine {
             if tf > 0.0 {
                 let idf = self.get_idf_immutable(token);
                 let numerator = tf * (self.config.bm25_k1 + 1.0);
-                let denominator = tf + self.config.bm25_k1 * (
-                    1.0 - self.config.bm25_b + 
-                    self.config.bm25_b * (entry.doc_length as f32 / self.avg_doc_length.max(1.0))
-                );
+                let denominator = tf
+                    + self.config.bm25_k1
+                        * (1.0 - self.config.bm25_b
+                            + self.config.bm25_b
+                                * (entry.doc_length as f32 / self.avg_doc_length.max(1.0)));
                 score += idf * numerator / denominator;
             }
         }
@@ -349,7 +364,9 @@ impl HybridSearchEngine {
             return idf;
         }
 
-        let doc_freq = self.bm25_index.values()
+        let doc_freq = self
+            .bm25_index
+            .values()
             .filter(|entry| entry.term_frequencies.contains_key(term))
             .count() as f32;
 
@@ -367,7 +384,9 @@ impl HybridSearchEngine {
             return idf;
         }
 
-        let doc_freq = self.bm25_index.values()
+        let doc_freq = self
+            .bm25_index
+            .values()
             .filter(|entry| entry.term_frequencies.contains_key(term))
             .count() as f32;
 
@@ -380,8 +399,9 @@ impl HybridSearchEngine {
     fn rerank_results(&self, results: Vec<SearchResult>, _query: &str) -> Vec<SearchResult> {
         // Simple reranking: boost recent entries
         let now = chrono::Utc::now();
-        
-        results.into_iter()
+
+        results
+            .into_iter()
             .map(|mut r| {
                 // Time decay factor (boost entries from last 24 hours)
                 let hours_old = (now - r.timestamp).num_hours() as f32;
@@ -390,7 +410,7 @@ impl HybridSearchEngine {
                 } else {
                     1.0
                 };
-                
+
                 r.score *= time_boost;
                 r
             })
@@ -409,11 +429,9 @@ impl HybridSearchEngine {
     /// Update index statistics
     fn update_statistics(&mut self) {
         self.total_docs = self.bm25_index.len();
-        
+
         if self.total_docs > 0 {
-            let total_length: u32 = self.bm25_index.values()
-                .map(|e| e.doc_length)
-                .sum();
+            let total_length: u32 = self.bm25_index.values().map(|e| e.doc_length).sum();
             self.avg_doc_length = total_length as f32 / self.total_docs as f32;
         } else {
             self.avg_doc_length = 0.0;
@@ -541,28 +559,34 @@ mod tests {
     #[tokio::test]
     async fn test_hybrid_search_engine() {
         let mut engine = HybridSearchEngine::default().unwrap();
-        
+
         // Index some entries
         let id1 = Uuid::new_v4();
-        engine.index_entry(
-            id1,
-            "SQLite database configuration",
-            vec![1.0, 0.0, 0.0],
-            HashMap::new(),
-        ).unwrap();
+        engine
+            .index_entry(
+                id1,
+                "SQLite database configuration",
+                vec![1.0, 0.0, 0.0],
+                HashMap::new(),
+            )
+            .unwrap();
 
         let id2 = Uuid::new_v4();
-        engine.index_entry(
-            id2,
-            "MySQL server setup guide",
-            vec![0.0, 1.0, 0.0],
-            HashMap::new(),
-        ).unwrap();
+        engine
+            .index_entry(
+                id2,
+                "MySQL server setup guide",
+                vec![0.0, 1.0, 0.0],
+                HashMap::new(),
+            )
+            .unwrap();
 
         // Search with both vector and BM25
-        let results = engine.search("database", Some(vec![1.0, 0.0, 0.0])).unwrap();
+        let results = engine
+            .search("database", Some(vec![1.0, 0.0, 0.0]))
+            .unwrap();
         assert!(!results.is_empty());
-        
+
         // First result should be the SQLite entry
         assert_eq!(results[0].id, id1);
     }

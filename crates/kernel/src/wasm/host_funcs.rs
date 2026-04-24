@@ -3,9 +3,10 @@
 //! Provides host functions that WASM modules can call.
 //! Updated for wasmtime 34.0 API
 
-use crate::error::Result;
 use tracing::debug;
 use wasmtime::{Caller, Linker};
+
+use crate::error::Result;
 
 /// Host function context passed to WASM instances
 #[derive(Debug, Clone)]

@@ -6,11 +6,11 @@
 
 use std::collections::HashMap;
 
+use serde::{Deserialize, Serialize};
+
 use crate::communication::channel::content::{
     ContentType as UnifiedContentType, MediaContent, PlatformContent,
 };
-use serde::{Deserialize, Serialize};
-
 use crate::error::{AgentError, Result};
 
 /// Lark message content types

@@ -44,9 +44,8 @@ pub async fn create_user_channel(
 
     // Deserialize config into UserChannelConfig
     let config: beebotos_agents::communication::UserChannelConfig =
-        serde_json::from_value(req.config.clone()).map_err(|e| {
-            GatewayError::bad_request(format!("Invalid channel config: {}", e))
-        })?;
+        serde_json::from_value(req.config.clone())
+            .map_err(|e| GatewayError::bad_request(format!("Invalid channel config: {}", e)))?;
 
     let binding = user_ch_svc
         .create_user_channel(

@@ -4,17 +4,16 @@
 //! Full CDP integration is a future enhancement; this module provides
 //! the API surface and SQLite-backed profile storage.
 
+use std::sync::Arc;
+
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::Json;
-use gateway::{
-    error::GatewayError,
-    middleware::{require_any_role, AuthUser},
-};
+use gateway::error::GatewayError;
+use gateway::middleware::{require_any_role, AuthUser};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::AppState;
@@ -39,9 +38,15 @@ pub struct BrowserProfile {
     pub viewport_height: i64,
 }
 
-fn default_cdp_port() -> i64 { 9222 }
-fn default_viewport_width() -> i64 { 1920 }
-fn default_viewport_height() -> i64 { 1080 }
+fn default_cdp_port() -> i64 {
+    9222
+}
+fn default_viewport_width() -> i64 {
+    1920
+}
+fn default_viewport_height() -> i64 {
+    1080
+}
 
 #[derive(Debug, Deserialize)]
 pub struct CreateProfileRequest {
@@ -60,8 +65,12 @@ pub struct CreateProfileRequest {
     pub viewport_height: i64,
 }
 
-fn default_color() -> String { "#3b82f6".to_string() }
-fn default_headless() -> i64 { 1 }
+fn default_color() -> String {
+    "#3b82f6".to_string()
+}
+fn default_headless() -> i64 {
+    1
+}
 
 #[derive(Debug, Serialize)]
 pub struct BrowserInstance {
@@ -179,12 +188,11 @@ pub async fn get_status(
         .await
         .unwrap_or(0);
 
-    let active_instances: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM browser_instances WHERE status = 'connected'"
-    )
-    .fetch_one(&state.db)
-    .await
-    .unwrap_or(0);
+    let active_instances: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM browser_instances WHERE status = 'connected'")
+            .fetch_one(&state.db)
+            .await
+            .unwrap_or(0);
 
     Ok(Json(BrowserStatus {
         enabled: true,
@@ -199,8 +207,9 @@ pub async fn list_profiles(
     _user: AuthUser,
 ) -> Result<Json<Vec<BrowserProfile>>, GatewayError> {
     let rows: Vec<BrowserProfile> = sqlx::query_as(
-        "SELECT id, name, color, cdp_port, headless, proxy, user_agent, viewport_width, viewport_height
-         FROM browser_profiles ORDER BY created_at DESC"
+        "SELECT id, name, color, cdp_port, headless, proxy, user_agent, viewport_width, \
+         viewport_height
+         FROM browser_profiles ORDER BY created_at DESC",
     )
     .fetch_all(&state.db)
     .await
@@ -218,8 +227,9 @@ pub async fn create_profile(
     let id = Uuid::new_v4().to_string();
 
     sqlx::query(
-        "INSERT INTO browser_profiles (id, name, color, cdp_port, headless, proxy, user_agent, viewport_width, viewport_height)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)"
+        "INSERT INTO browser_profiles (id, name, color, cdp_port, headless, proxy, user_agent, \
+         viewport_width, viewport_height)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
     )
     .bind(&id)
     .bind(&req.name)
@@ -270,11 +280,12 @@ pub async fn connect(
     Json(req): Json<ConnectRequest>,
 ) -> Result<Json<BrowserInstance>, GatewayError> {
     // Verify profile exists
-    let exists: bool = sqlx::query_scalar("SELECT COUNT(*) > 0 FROM browser_profiles WHERE id = ?1")
-        .bind(&req.profile_id)
-        .fetch_one(&state.db)
-        .await
-        .unwrap_or(false);
+    let exists: bool =
+        sqlx::query_scalar("SELECT COUNT(*) > 0 FROM browser_profiles WHERE id = ?1")
+            .bind(&req.profile_id)
+            .fetch_one(&state.db)
+            .await
+            .unwrap_or(false);
 
     if !exists {
         return Err(GatewayError::not_found("BrowserProfile", &req.profile_id));
@@ -284,7 +295,7 @@ pub async fn connect(
 
     sqlx::query(
         "INSERT INTO browser_instances (id, profile_id, status, current_url, connected_at)
-         VALUES (?1, ?2, 'connected', 'about:blank', datetime('now'))"
+         VALUES (?1, ?2, 'connected', 'about:blank', datetime('now'))",
     )
     .bind(&instance_id)
     .bind(&req.profile_id)
@@ -307,14 +318,17 @@ pub async fn disconnect(
     Json(req): Json<DisconnectRequest>,
 ) -> Result<Json<serde_json::Value>, GatewayError> {
     sqlx::query(
-        "UPDATE browser_instances SET status = 'disconnected', disconnected_at = datetime('now') WHERE id = ?1"
+        "UPDATE browser_instances SET status = 'disconnected', disconnected_at = datetime('now') \
+         WHERE id = ?1",
     )
     .bind(&req.instance_id)
     .execute(&state.db)
     .await
     .map_err(|e| GatewayError::internal(format!("Failed to disconnect: {}", e)))?;
 
-    Ok(Json(json!({ "success": true, "message": "Browser disconnected" })))
+    Ok(Json(
+        json!({ "success": true, "message": "Browser disconnected" }),
+    ))
 }
 
 /// Navigate to a URL (stub — records intent, returns simulated result)
@@ -345,7 +359,10 @@ pub async fn evaluate(
 ) -> Result<Json<EvaluateResponse>, GatewayError> {
     // Stub: in a full implementation this would send CDP Runtime.evaluate
     Ok(Json(EvaluateResponse {
-        result: serde_json::Value::String(format!("Evaluated: {} (stub result)", req.script.chars().take(40).collect::<String>())),
+        result: serde_json::Value::String(format!(
+            "Evaluated: {} (stub result)",
+            req.script.chars().take(40).collect::<String>()
+        )),
         exception: None,
     }))
 }
@@ -399,7 +416,8 @@ pub async fn list_sandboxes(
     _user: AuthUser,
 ) -> Result<Json<Vec<BrowserSandbox>>, GatewayError> {
     let rows: Vec<BrowserSandbox> = sqlx::query_as(
-        "SELECT id, name, profile_id, status, created_at FROM browser_sandboxes ORDER BY created_at DESC"
+        "SELECT id, name, profile_id, status, created_at FROM browser_sandboxes ORDER BY \
+         created_at DESC",
     )
     .fetch_all(&state.db)
     .await
@@ -417,7 +435,8 @@ pub async fn create_sandbox(
     let id = Uuid::new_v4().to_string();
 
     sqlx::query(
-        "INSERT INTO browser_sandboxes (id, name, profile_id, status) VALUES (?1, ?2, ?3, 'active')"
+        "INSERT INTO browser_sandboxes (id, name, profile_id, status) VALUES (?1, ?2, ?3, \
+         'active')",
     )
     .bind(&id)
     .bind(&req.name)
@@ -454,7 +473,9 @@ pub async fn delete_sandbox(
         return Err(GatewayError::not_found("BrowserSandbox", &id));
     }
 
-    Ok(Json(json!({ "success": true, "message": "Sandbox deleted" })))
+    Ok(Json(
+        json!({ "success": true, "message": "Sandbox deleted" }),
+    ))
 }
 
 /// Get sandbox statistics (stub)
@@ -464,7 +485,7 @@ pub async fn get_sandbox_stats(
     Path(id): Path<String>,
 ) -> Result<Json<SandboxStats>, GatewayError> {
     let sandbox: Option<BrowserSandbox> = sqlx::query_as(
-        "SELECT id, name, profile_id, status, created_at FROM browser_sandboxes WHERE id = ?1"
+        "SELECT id, name, profile_id, status, created_at FROM browser_sandboxes WHERE id = ?1",
     )
     .bind(&id)
     .fetch_optional(&state.db)
@@ -476,7 +497,8 @@ pub async fn get_sandbox_stats(
     }
 
     let instance_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM browser_instances WHERE profile_id IN (SELECT profile_id FROM browser_sandboxes WHERE id = ?1)"
+        "SELECT COUNT(*) FROM browser_instances WHERE profile_id IN (SELECT profile_id FROM \
+         browser_sandboxes WHERE id = ?1)",
     )
     .bind(&id)
     .fetch_one(&state.db)

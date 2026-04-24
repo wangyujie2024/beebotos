@@ -14,10 +14,7 @@ pub enum AgentLifecycleEvent {
         capabilities: Vec<String>,
     },
     /// Agent initialized
-    Initialized {
-        agent_id: String,
-        duration_ms: u64,
-    },
+    Initialized { agent_id: String, duration_ms: u64 },
     /// Agent started
     Started {
         agent_id: String,
@@ -37,19 +34,11 @@ pub enum AgentLifecycleEvent {
         duration_ms: u64,
     },
     /// Agent paused
-    Paused {
-        agent_id: String,
-        reason: String,
-    },
+    Paused { agent_id: String, reason: String },
     /// Agent resumed
-    Resumed {
-        agent_id: String,
-    },
+    Resumed { agent_id: String },
     /// Agent stopped
-    Stopped {
-        agent_id: String,
-        reason: String,
-    },
+    Stopped { agent_id: String, reason: String },
     /// Agent error
     Error {
         agent_id: String,

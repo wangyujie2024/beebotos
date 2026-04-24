@@ -257,7 +257,8 @@ impl MultimodalProcessor {
         let mut metadata = HashMap::new();
 
         // Check if message contains image references in content
-        let image_key = self.extract_image_key(&message.content)
+        let image_key = self
+            .extract_image_key(&message.content)
             .or_else(|| message.metadata.get("image_url").cloned())
             .or_else(|| message.metadata.get("image_key").cloned());
 
@@ -390,7 +391,8 @@ impl MultimodalProcessor {
         let mut metadata = HashMap::new();
 
         // Check if message contains image references in content or metadata
-        let image_key = self.extract_image_key(&message.content)
+        let image_key = self
+            .extract_image_key(&message.content)
             .or_else(|| message.metadata.get("image_url").cloned())
             .or_else(|| message.metadata.get("image_key").cloned());
 

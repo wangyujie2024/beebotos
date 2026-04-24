@@ -1,7 +1,8 @@
 //! DAO Proposal Module
 
-use crate::compat::{Address, Bytes, U256};
 use serde::{Deserialize, Serialize};
+
+use crate::compat::{Address, Bytes, U256};
 
 /// Proposal status
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]

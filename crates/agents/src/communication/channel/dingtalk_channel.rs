@@ -405,49 +405,64 @@ impl DingTalkChannel {
         Ok(())
     }
 
-    /// P2 OPTIMIZE: Robustly extract text content from a DingTalk event payload.
-    /// Handles multiple message types and nested structures.
+    /// P2 OPTIMIZE: Robustly extract text content from a DingTalk event
+    /// payload. Handles multiple message types and nested structures.
     fn extract_event_content(data: &serde_json::Value) -> String {
         // Try direct content field first
         if let Some(s) = data.get("content").and_then(|v| v.as_str()) {
-            if !s.is_empty() { return s.to_string(); }
+            if !s.is_empty() {
+                return s.to_string();
+            }
         }
         // Try text.msg_type content
         if let Some(text_obj) = data.get("text") {
             if let Some(s) = text_obj.get("content").and_then(|v| v.as_str()) {
-                if !s.is_empty() { return s.to_string(); }
+                if !s.is_empty() {
+                    return s.to_string();
+                }
             }
         }
         // Try markdown content
         if let Some(md) = data.get("markdown") {
             if let Some(s) = md.get("text").and_then(|v| v.as_str()) {
-                if !s.is_empty() { return s.to_string(); }
+                if !s.is_empty() {
+                    return s.to_string();
+                }
             }
         }
         // Try action card
         if let Some(card) = data.get("action_card") {
             if let Some(s) = card.get("markdown").and_then(|v| v.as_str()) {
-                if !s.is_empty() { return s.to_string(); }
+                if !s.is_empty() {
+                    return s.to_string();
+                }
             }
         }
         // Try rich text (oa message)
         if let Some(body) = data.get("body") {
             if let Some(s) = body.get("content").and_then(|v| v.as_str()) {
-                if !s.is_empty() { return s.to_string(); }
+                if !s.is_empty() {
+                    return s.to_string();
+                }
             }
         }
         // Try title as last resort
         if let Some(s) = data.get("title").and_then(|v| v.as_str()) {
-            if !s.is_empty() { return s.to_string(); }
+            if !s.is_empty() {
+                return s.to_string();
+            }
         }
         String::new()
     }
 
-    /// P2 OPTIMIZE: Extract a string field from a JSON object using a prioritized list of keys.
+    /// P2 OPTIMIZE: Extract a string field from a JSON object using a
+    /// prioritized list of keys.
     fn extract_event_field(data: &serde_json::Value, keys: &[&str]) -> String {
         for key in keys {
             if let Some(s) = data.get(*key).and_then(|v| v.as_str()) {
-                if !s.is_empty() { return s.to_string(); }
+                if !s.is_empty() {
+                    return s.to_string();
+                }
             }
         }
         String::new()
@@ -466,43 +481,57 @@ impl DingTalkChannel {
                     }
                     DingTalkWsMessage::Event { data } => {
                         debug!("Received event: {:?}", data);
-                        // P1/P2 FIX: Emit ChannelEvent through event_bus with robust field extraction
+                        // P1/P2 FIX: Emit ChannelEvent through event_bus with robust field
+                        // extraction
                         if let Some(bus) = event_bus.read().await.as_ref() {
                             // Robust content extraction: handles text, markdown, rich text, etc.
                             let content = Self::extract_event_content(&data);
                             // Robust sender ID extraction with multiple fallback keys
-                            let sender_id = Self::extract_event_field(&data, &[
-                                "senderStaffId", "senderUserId", "senderStaffId",
-                                "staffId", "userId", "senderNick", "senderName",
-                            ]);
+                            let sender_id = Self::extract_event_field(
+                                &data,
+                                &[
+                                    "senderStaffId",
+                                    "senderUserId",
+                                    "senderStaffId",
+                                    "staffId",
+                                    "userId",
+                                    "senderNick",
+                                    "senderName",
+                                ],
+                            );
                             // Robust chat/channel ID extraction with multiple fallback keys
-                            let chat_id = Self::extract_event_field(&data, &[
-                                "conversationId", "chatId", "openConversationId",
-                                "groupId", "chatbotCorpId", "corpId",
-                            ]);
+                            let chat_id = Self::extract_event_field(
+                                &data,
+                                &[
+                                    "conversationId",
+                                    "chatId",
+                                    "openConversationId",
+                                    "groupId",
+                                    "chatbotCorpId",
+                                    "corpId",
+                                ],
+                            );
 
                             if content.is_empty() {
                                 debug!("DingTalk event has no extractable content, skipping");
                             } else {
-                                let mut message = Message::new(
-                                    Uuid::new_v4(),
-                                    PlatformType::DingTalk,
-                                    content,
-                                );
-                                message.metadata.insert(
-                                    "sender_id".to_string(),
-                                    sender_id.clone(),
-                                );
-                                message.metadata.insert(
-                                    "channel_id".to_string(),
-                                    chat_id.clone(),
-                                );
+                                let mut message =
+                                    Message::new(Uuid::new_v4(), PlatformType::DingTalk, content);
+                                message
+                                    .metadata
+                                    .insert("sender_id".to_string(), sender_id.clone());
+                                message
+                                    .metadata
+                                    .insert("channel_id".to_string(), chat_id.clone());
                                 // Preserve raw event type if available
-                                if let Some(event_type) = data.get("msgtype")
+                                if let Some(event_type) = data
+                                    .get("msgtype")
                                     .or_else(|| data.get("msgType"))
                                     .and_then(|v| v.as_str())
                                 {
-                                    message.metadata.insert("msg_type".to_string(), event_type.to_string());
+                                    message
+                                        .metadata
+                                        .insert("msg_type".to_string(), event_type.to_string());
                                 }
                                 if let Err(e) = bus
                                     .send(ChannelEvent::MessageReceived {
@@ -514,7 +543,10 @@ impl DingTalkChannel {
                                 {
                                     warn!("Failed to emit DingTalk ChannelEvent: {}", e);
                                 } else {
-                                    info!("📨 Emitted DingTalk ChannelEvent from sender {}", sender_id);
+                                    info!(
+                                        "📨 Emitted DingTalk ChannelEvent from sender {}",
+                                        sender_id
+                                    );
                                 }
                             }
                         }
@@ -774,7 +806,10 @@ impl ChannelFactory for DingTalkChannelFactory {
         super::PlatformType::DingTalk
     }
 
-    async fn create(&self, config: &Value) -> crate::error::Result<Arc<RwLock<dyn super::Channel>>> {
+    async fn create(
+        &self,
+        config: &Value,
+    ) -> crate::error::Result<Arc<RwLock<dyn super::Channel>>> {
         use crate::error::AgentError;
 
         let app_key = config
@@ -798,7 +833,10 @@ impl ChannelFactory for DingTalkChannelFactory {
                 auto_reconnect: true,
                 max_reconnect_attempts: 10,
                 webhook_url: None,
-                webhook_port: config.get("webhook_port").and_then(|v| v.as_u64()).unwrap_or(8080) as u16,
+                webhook_port: config
+                    .get("webhook_port")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(8080) as u16,
             },
         });
 

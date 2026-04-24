@@ -156,8 +156,9 @@ pub enum MessagePayload {
         message: String,
     },
     /// Encrypted payload for end-to-end encryption
-    /// 
-    /// SECURITY FIX: Contains encrypted data that can only be decrypted by the recipient
+    ///
+    /// SECURITY FIX: Contains encrypted data that can only be decrypted by the
+    /// recipient
     Encrypted(super::security::EncryptedMessage),
     /// Plain binary data
     Plain(Vec<u8>),

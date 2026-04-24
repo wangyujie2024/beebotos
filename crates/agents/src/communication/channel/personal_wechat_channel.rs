@@ -1,7 +1,8 @@
 //! Personal WeChat Channel Implementation (iLink Protocol)
 //!
-//! Direct implementation of Tencent's iLink Bot API for WeChat personal accounts.
-//! Based on the official OpenClaw/iLink protocol without requiring a middle-layer service.
+//! Direct implementation of Tencent's iLink Bot API for WeChat personal
+//! accounts. Based on the official OpenClaw/iLink protocol without requiring a
+//! middle-layer service.
 //!
 //! Features:
 //! - Direct iLink API communication (https://ilinkai.weixin.qq.com)
@@ -104,8 +105,8 @@ impl ChannelConfig for PersonalWeChatConfig {
     where
         Self: Sized,
     {
-        let base_url = std::env::var("PERSONAL_WECHAT_BASE_URL")
-            .unwrap_or_else(|_| default_ilink_base_url());
+        let base_url =
+            std::env::var("PERSONAL_WECHAT_BASE_URL").unwrap_or_else(|_| default_ilink_base_url());
         let bot_token = std::env::var("PERSONAL_WECHAT_BOT_TOKEN").ok();
         let bot_base_url = std::env::var("PERSONAL_WECHAT_BOT_BASE_URL").ok();
 
@@ -133,7 +134,8 @@ impl ChannelConfig for PersonalWeChatConfig {
     }
 
     fn is_valid(&self) -> bool {
-        // Config is valid if we have bot_token (already logged in) or we're ready for QR login
+        // Config is valid if we have bot_token (already logged in) or we're ready for
+        // QR login
         true
     }
 
@@ -285,7 +287,10 @@ impl PersonalWeChatChannel {
                 }
             }
             Err(e) => {
-                debug!("未找到个人微信 session 文件 {:?}: {}", self.session_store_path, e);
+                debug!(
+                    "未找到个人微信 session 文件 {:?}: {}",
+                    self.session_store_path, e
+                );
                 None
             }
         }
@@ -316,7 +321,10 @@ impl PersonalWeChatChannel {
         println!("[PERSONAL_WECHAT] Logging QR code URL...");
         info!(
             "个人微信登录二维码已生成，请将以下链接在微信中打开并扫码:\n{}",
-            qr_resp.qrcode_img_content.as_deref().unwrap_or(&qr_resp.qrcode)
+            qr_resp
+                .qrcode_img_content
+                .as_deref()
+                .unwrap_or(&qr_resp.qrcode)
         );
         println!("[PERSONAL_WECHAT] get_qr_code() completed successfully");
 
@@ -375,11 +383,7 @@ impl PersonalWeChatChannel {
         while *self.connected.read().await {
             match self
                 .ilink_client
-                .get_updates(
-                    &session.bot_token,
-                    Some(&session.base_url),
-                    &updates_buf,
-                )
+                .get_updates(&session.bot_token, Some(&session.base_url), &updates_buf)
                 .await
             {
                 Ok(updates) => {
@@ -393,7 +397,10 @@ impl PersonalWeChatChannel {
                         for msg in msgs {
                             // Skip system messages (type 10) and unknown types
                             // Process user messages: text(1), image(2), voice(3), video(4), etc.
-                            if msg.message_type == 10 || msg.message_type < 1 || msg.message_type > 9 {
+                            if msg.message_type == 10
+                                || msg.message_type < 1
+                                || msg.message_type > 9
+                            {
                                 debug!("跳过系统消息或未知类型: type={}", msg.message_type);
                                 continue;
                             }
@@ -436,7 +443,11 @@ impl PersonalWeChatChannel {
 
         // iLink may put the actual content type in item_list[0].item_type
         // rather than in message_type. Use item_type when available.
-        let actual_type = msg.item_list.first().map(|item| item.item_type).unwrap_or(msg_type);
+        let actual_type = msg
+            .item_list
+            .first()
+            .map(|item| item.item_type)
+            .unwrap_or(msg_type);
 
         // Log raw message structure for debugging
         if let Ok(json) = serde_json::to_string(&msg) {
@@ -478,13 +489,18 @@ impl PersonalWeChatChannel {
                     metadata.insert("image_size".to_string(), pic.pic_size.to_string());
                     metadata.insert("image_name".to_string(), pic.file_name.clone());
                     // Format required by multimodal processor to detect image_key
-                    (MessageType::Image, format!("[图片] image_key: {}", pic.pic_url))
+                    (
+                        MessageType::Image,
+                        format!("[图片] image_key: {}", pic.pic_url),
+                    )
                 } else {
                     // iLink personal WeChat protocol does not provide image URL in getupdates
                     info!("🖼️ 图片消息 from={} (iLink 协议限制，无图片 URL)", from_id);
                     (
                         MessageType::Image,
-                        "[图片] 说明：由于个人微信 iLink 协议限制，Bot 无法查看图片内容。请用文字描述图片，我会尽力帮您分析。".to_string(),
+                        "[图片] 说明：由于个人微信 iLink 协议限制，Bot \
+                         无法查看图片内容。请用文字描述图片，我会尽力帮您分析。"
+                            .to_string(),
                     )
                 }
             }
@@ -493,16 +509,24 @@ impl PersonalWeChatChannel {
                 if let Some(voice) = msg.voice() {
                     info!("🎤 语音消息 from={}, url={}", from_id, voice.voice_url);
                     metadata.insert("voice_url".to_string(), voice.voice_url.clone());
-                    metadata.insert("voice_duration".to_string(), voice.voice_duration.to_string());
+                    metadata.insert(
+                        "voice_duration".to_string(),
+                        voice.voice_duration.to_string(),
+                    );
                     metadata.insert("voice_size".to_string(), voice.voice_size.to_string());
                     metadata.insert("voice_name".to_string(), voice.file_name.clone());
-                    (MessageType::Voice, format!("[语音 {}秒] {}", voice.voice_duration, voice.file_name))
+                    (
+                        MessageType::Voice,
+                        format!("[语音 {}秒] {}", voice.voice_duration, voice.file_name),
+                    )
                 } else {
                     // iLink personal WeChat protocol does not provide voice URL in getupdates
                     info!("🎤 语音消息 from={} (iLink 协议限制，无语音 URL)", from_id);
                     (
                         MessageType::Voice,
-                        "[语音] 说明：由于个人微信 iLink 协议限制，Bot 无法收听语音消息。请将语音转换为文字发送，我会帮您分析。".to_string(),
+                        "[语音] 说明：由于个人微信 iLink 协议限制，Bot \
+                         无法收听语音消息。请将语音转换为文字发送，我会帮您分析。"
+                            .to_string(),
                     )
                 }
             }
@@ -511,28 +535,42 @@ impl PersonalWeChatChannel {
                 if let Some(video) = msg.video() {
                     info!("🎬 视频消息 from={}, url={}", from_id, video.video_url);
                     metadata.insert("video_url".to_string(), video.video_url.clone());
-                    metadata.insert("video_duration".to_string(), video.video_duration.to_string());
+                    metadata.insert(
+                        "video_duration".to_string(),
+                        video.video_duration.to_string(),
+                    );
                     metadata.insert("video_size".to_string(), video.video_size.to_string());
                     metadata.insert("video_name".to_string(), video.file_name.clone());
                     if let Some(thumb) = &video.thumb_url {
                         metadata.insert("video_thumb".to_string(), thumb.clone());
                     }
-                    (MessageType::Video, format!("[视频 {}秒] {}", video.video_duration, video.file_name))
+                    (
+                        MessageType::Video,
+                        format!("[视频 {}秒] {}", video.video_duration, video.file_name),
+                    )
                 } else {
                     // iLink personal WeChat protocol does not provide video URL in getupdates
                     info!("🎬 视频消息 from={} (iLink 协议限制，无视频 URL)", from_id);
                     (
                         MessageType::Video,
-                        "[视频] 说明：由于个人微信 iLink 协议限制，Bot 无法查看视频内容。请用文字描述视频内容，我会帮您分析。".to_string(),
+                        "[视频] 说明：由于个人微信 iLink 协议限制，Bot \
+                         无法查看视频内容。请用文字描述视频内容，我会帮您分析。"
+                            .to_string(),
                     )
                 }
             }
             _ => {
                 // Other message types
-                info!("📨 其他类型消息 from={}, message_type={}, actual_type={}", from_id, msg_type, actual_type);
+                info!(
+                    "📨 其他类型消息 from={}, message_type={}, actual_type={}",
+                    from_id, msg_type, actual_type
+                );
                 metadata.insert("raw_message_type".to_string(), msg_type.to_string());
                 metadata.insert("raw_actual_type".to_string(), actual_type.to_string());
-                (MessageType::Text, format!("[{}消息]", msg.message_type_name()))
+                (
+                    MessageType::Text,
+                    format!("[{}消息]", msg.message_type_name()),
+                )
             }
         };
 
@@ -676,7 +714,10 @@ impl PersonalWeChatChannel {
             ticket: ticket.clone(),
             cached_at: std::time::Instant::now(),
         };
-        self.typing_tickets.write().await.insert(user_id.to_string(), info);
+        self.typing_tickets
+            .write()
+            .await
+            .insert(user_id.to_string(), info);
 
         Ok(ticket)
     }
@@ -689,7 +730,8 @@ impl PersonalWeChatChannel {
 
         let channel = self.clone();
         let handle = tokio::spawn(async move {
-            let mut check_interval = interval(Duration::from_secs(channel.config.reconnect_interval_secs));
+            let mut check_interval =
+                interval(Duration::from_secs(channel.config.reconnect_interval_secs));
 
             loop {
                 check_interval.tick().await;
@@ -698,14 +740,17 @@ impl PersonalWeChatChannel {
                     if let Some(ref session) = *channel.session.read().await {
                         let remaining = session.remaining_secs();
                         let warning_threshold = channel.config.warning_before_secs;
-                        remaining < warning_threshold && remaining > channel.config.force_before_secs
+                        remaining < warning_threshold
+                            && remaining > channel.config.force_before_secs
                     } else {
                         false
                     }
                 };
 
                 if should_warn && !*channel.reconnect_pending.read().await {
-                    if let Some((user_id, _context_token)) = channel.last_contact.read().await.clone() {
+                    if let Some((user_id, _context_token)) =
+                        channel.last_contact.read().await.clone()
+                    {
                         let remaining_text = channel
                             .session
                             .read()
@@ -721,11 +766,13 @@ impl PersonalWeChatChannel {
 
                         // Send warning message
                         let warning_msg = format!(
-                            "[提醒] 微信 Bot 连接还剩 {}，即将需要重新扫码登录。\n回复 Y 立即重连，N 稍后提醒。",
+                            "[提醒] 微信 Bot 连接还剩 {}，即将需要重新扫码登录。\n回复 Y \
+                             立即重连，N 稍后提醒。",
                             remaining_text
                         );
 
-                        if let Err(e) = channel.send_message_internal(&user_id, &warning_msg).await {
+                        if let Err(e) = channel.send_message_internal(&user_id, &warning_msg).await
+                        {
                             error!("发送重连提醒失败: {}", e);
                         } else {
                             *channel.reconnect_pending.write().await = true;
@@ -843,7 +890,10 @@ impl Channel for PersonalWeChatChannel {
         println!("[PERSONAL_WECHAT] Checking session valid...");
         let session_valid = self.is_session_valid().await;
         println!("[PERSONAL_WECHAT] Session valid={}", session_valid);
-        info!("连接状态检查: connected={}, session_valid={}", already_connected, session_valid);
+        info!(
+            "连接状态检查: connected={}, session_valid={}",
+            already_connected, session_valid
+        );
 
         if already_connected && session_valid {
             info!("个人微信已连接且会话有效");
@@ -868,7 +918,11 @@ impl Channel for PersonalWeChatChannel {
             if !token.is_empty() {
                 let session = BotSession {
                     bot_token: token.clone(),
-                    base_url: self.config.bot_base_url.clone().unwrap_or_else(|| self.config.base_url.clone()),
+                    base_url: self
+                        .config
+                        .bot_base_url
+                        .clone()
+                        .unwrap_or_else(|| self.config.base_url.clone()),
                     login_time: std::time::Instant::now(), // Assume just logged in
                     wxid: None,
                     nickname: None,
@@ -1015,14 +1069,14 @@ impl Channel for PersonalWeChatChannel {
     async fn download_image(&self, file_key: &str, _message_id: Option<&str>) -> Result<Vec<u8>> {
         // file_key is the image URL for iLink
         info!("🖼️ 下载图片: {}", file_key);
-        
+
         let session = self.session.read().await.clone();
         if let Some(session) = session {
-            match self.ilink_client.download_media(
-                &session.bot_token,
-                Some(&session.base_url),
-                file_key,
-            ).await {
+            match self
+                .ilink_client
+                .download_media(&session.bot_token, Some(&session.base_url), file_key)
+                .await
+            {
                 Ok(data) => {
                     info!("✅ 图片下载成功: {} bytes", data.len());
                     Ok(data)

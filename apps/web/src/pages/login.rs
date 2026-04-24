@@ -1,14 +1,15 @@
 //! Login Page
 
-use crate::api::AuthService;
-use crate::i18n::I18nContext;
-use crate::state::{use_auth_state, Permission, Role, User};
 use gloo_storage::Storage;
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 use leptos::view;
 use leptos_router::components::A;
 use leptos_router::hooks::use_navigate;
+
+use crate::api::AuthService;
+use crate::i18n::I18nContext;
+use crate::state::{use_auth_state, User};
 
 #[component]
 pub fn LoginPage() -> impl IntoView {
@@ -54,40 +55,6 @@ pub fn LoginPage() -> impl IntoView {
                             email: response.user.email,
                             avatar: response.user.avatar,
                             wallet_address: response.user.wallet_address,
-                            roles: response
-                                .user
-                                .roles
-                                .into_iter()
-                                .map(|r| match r.as_str() {
-                                    "admin" => Role::Admin,
-                                    "operator" => Role::Operator,
-                                    "guest" => Role::Guest,
-                                    _ => Role::Member,
-                                })
-                                .collect(),
-                            permissions: response
-                                .user
-                                .permissions
-                                .into_iter()
-                                .map(|p| match p.as_str() {
-                                    "agentCreate" => Permission::AgentCreate,
-                                    "agentRead" => Permission::AgentRead,
-                                    "agentUpdate" => Permission::AgentUpdate,
-                                    "agentDelete" => Permission::AgentDelete,
-                                    "agentStart" => Permission::AgentStart,
-                                    "agentStop" => Permission::AgentStop,
-                                    "daoVote" => Permission::DaoVote,
-                                    "daoCreateProposal" => Permission::DaoCreateProposal,
-                                    "daoExecute" => Permission::DaoExecute,
-                                    "treasuryView" => Permission::TreasuryView,
-                                    "treasuryDeposit" => Permission::TreasuryDeposit,
-                                    "treasuryWithdraw" => Permission::TreasuryWithdraw,
-                                    "settingsRead" => Permission::SettingsRead,
-                                    "settingsWrite" => Permission::SettingsWrite,
-                                    "userManage" => Permission::UserManage,
-                                    _ => Permission::AgentRead,
-                                })
-                                .collect(),
                         };
 
                         // Set authenticated state
@@ -105,15 +72,12 @@ pub fn LoginPage() -> impl IntoView {
                             .flatten()
                             .filter(|p| !p.is_empty() && p != "/login" && p != "/register")
                             .unwrap_or_else(|| "/".to_string());
-                        let _ = gloo_storage::SessionStorage::raw().remove_item("redirect_after_login");
+                        let _ =
+                            gloo_storage::SessionStorage::raw().remove_item("redirect_after_login");
                         nav(&redirect_path, Default::default());
                     }
                     Err(e) => {
-                        set_error.set(Some(format!(
-                            "{}: {}",
-                            i18n.t("login-error-failed"),
-                            e
-                        )));
+                        set_error.set(Some(format!("{}: {}", i18n.t("login-error-failed"), e)));
                     }
                 }
 

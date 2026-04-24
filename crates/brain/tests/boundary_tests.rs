@@ -31,7 +31,8 @@ fn test_pad_nan_handling() {
     // NaN should be handled gracefully
     let pad = Pad::new(f32::NAN, 0.5, 0.5);
     // The pad module should handle or propagate NaN appropriately
-    assert!(pad.pleasure.is_nan() || pad.pleasure == 0.0); // Depends on implementation
+    assert!(pad.pleasure.is_nan() || pad.pleasure == 0.0); // Depends on
+                                                           // implementation
 }
 
 // =============================================================================
@@ -46,7 +47,8 @@ fn test_stm_zero_capacity() {
 
     // Pushing to zero capacity should handle gracefully
     let evicted = stm.push("test");
-    // Depending on implementation, might return Some(evicted) or handle differently
+    // Depending on implementation, might return Some(evicted) or handle
+    // differently
 }
 
 #[test]

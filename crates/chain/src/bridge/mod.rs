@@ -1,14 +1,16 @@
 //! Cross-chain bridge module
 //!
 //! This module provides unified cross-chain functionality:
-//! - BridgeClient: Integration with Solidity CrossChainBridge contract (lock/release mechanism)
+//! - BridgeClient: Integration with Solidity CrossChainBridge contract
+//!   (lock/release mechanism)
 //! - AtomicSwapClient: Peer-to-peer atomic swaps using HTLC
 //! - CrossChainRouter: Route selection for different bridge providers
 
-use crate::compat::{Address, B256, U256};
-use crate::{ChainError, Result};
 // Note: keccak256 imported from alloy_primitives where needed
 use serde::{Deserialize, Serialize};
+
+use crate::compat::{Address, B256, U256};
+use crate::{ChainError, Result};
 
 /// Bridge transaction status (legacy, for compatibility)
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -133,4 +135,5 @@ pub mod router;
 
 pub use router::{BridgeRoute, RouteFinder};
 // Note: HTLC is now defined in client.rs
-// pub use atomic_swap::HTLC as HTLCLegacy; // Removed - use client::HTLC instead
+// pub use atomic_swap::HTLC as HTLCLegacy; // Removed - use client::HTLC
+// instead

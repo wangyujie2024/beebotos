@@ -5,8 +5,9 @@
 //! **注意**: EmotionState 现在基于 Pad 类型实现，以统一情感模型。
 //! 为了保持向后兼容，EmotionState 仍然是独立类型，但内部使用 Pad。
 
-use crate::pad::Pad;
 use serde::{Deserialize, Serialize};
+
+use crate::pad::Pad;
 
 /// PAD emotional state (基于 Pad 的包装类型)
 ///

@@ -9,22 +9,21 @@ use axum::extract::{Extension, Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::IntoResponse;
 use axum::Json;
+use beebotos_agents::communication::channel::ChannelEvent;
 use beebotos_agents::communication::webhook::{
     DingTalkWebhookHandler, DiscordWebhookHandler, IMessageWebhookHandler, LarkWebhookHandler,
     MatrixWebhookHandler, SignalWebhookHandler, SlackWebhookHandler, TeamsWebhookHandler,
     TelegramWebhookConfig, TelegramWebhookHandler, TwitterWebhookHandler, WeChatWebhookHandler,
     WebhookConfig, WebhookHandler, WebhookManager, WhatsAppWebhookHandler,
 };
-use beebotos_agents::communication::channel::ChannelEvent;
 use beebotos_agents::communication::{AgentMessageDispatcher, PlatformType};
 use serde_json::json;
+// WeChat signature verification
+use sha1::{Digest, Sha1};
 use tracing::{debug, error, info, warn};
 
 use crate::error::GatewayError;
 use crate::AppState;
-
-// WeChat signature verification
-use sha1::{Digest, Sha1};
 
 /// Helper function to create internal error with correlation_id
 fn internal_error(message: impl Into<String>) -> GatewayError {
@@ -76,9 +75,12 @@ impl WebhookHandlerState {
             if let Some(ref d) = dispatcher {
                 handler = handler.with_dispatcher(d.clone());
             }
-            self.manager.register_handler(Arc::new(handler)).await.map_err(|e| {
-                internal_error(format!("Failed to register DingTalk handler: {}", e))
-            })?;
+            self.manager
+                .register_handler(Arc::new(handler))
+                .await
+                .map_err(|e| {
+                    internal_error(format!("Failed to register DingTalk handler: {}", e))
+                })?;
             info!("Registered DingTalk webhook handler at /webhook/dingtalk");
         }
 
@@ -88,9 +90,12 @@ impl WebhookHandlerState {
             if let Some(ref d) = dispatcher {
                 handler = handler.with_dispatcher(d.clone());
             }
-            self.manager.register_handler(Arc::new(handler)).await.map_err(|e| {
-                internal_error(format!("Failed to register Telegram handler: {}", e))
-            })?;
+            self.manager
+                .register_handler(Arc::new(handler))
+                .await
+                .map_err(|e| {
+                    internal_error(format!("Failed to register Telegram handler: {}", e))
+                })?;
             info!(
                 "Registered Telegram webhook handler at {}",
                 telegram_config.endpoint_path
@@ -103,9 +108,12 @@ impl WebhookHandlerState {
             if let Some(ref d) = dispatcher {
                 handler = handler.with_dispatcher(d.clone());
             }
-            self.manager.register_handler(Arc::new(handler)).await.map_err(|e| {
-                internal_error(format!("Failed to register Discord handler: {}", e))
-            })?;
+            self.manager
+                .register_handler(Arc::new(handler))
+                .await
+                .map_err(|e| {
+                    internal_error(format!("Failed to register Discord handler: {}", e))
+                })?;
             info!("Registered Discord webhook handler at /webhook/discord");
         }
 
@@ -203,9 +211,12 @@ impl Default for WebhookHandlerState {
 }
 
 /// Extract webhook signature headers based on platform
-fn extract_signature_headers<'a>(platform: &'a str, headers: &'a HeaderMap) -> (Option<&'a str>, Option<&'a str>) {
+fn extract_signature_headers<'a>(
+    platform: &'a str,
+    headers: &'a HeaderMap,
+) -> (Option<&'a str>, Option<&'a str>) {
     let platform_lower = platform.to_lowercase();
-    
+
     match platform_lower.as_str() {
         // Slack: X-Slack-Signature, X-Slack-Request-Timestamp
         "slack" => {
@@ -241,9 +252,7 @@ fn extract_signature_headers<'a>(platform: &'a str, headers: &'a HeaderMap) -> (
         }
         // DingTalk: timestamp header
         "dingtalk" => {
-            let ts = headers
-                .get("timestamp")
-                .and_then(|v| v.to_str().ok());
+            let ts = headers.get("timestamp").and_then(|v| v.to_str().ok());
             // Signature in query or body for DingTalk
             (None, ts)
         }
@@ -341,25 +350,33 @@ pub async fn wechat_get_handler(
     debug!("Received WeChat GET request, params: {:?}", params);
 
     // URL verification request must have echostr
-    let echostr = params.get("echostr").ok_or_else(|| GatewayError::BadRequest {
-        message: "Missing echostr parameter".to_string(),
-        field: Some("echostr".to_string()),
-    })?;
+    let echostr = params
+        .get("echostr")
+        .ok_or_else(|| GatewayError::BadRequest {
+            message: "Missing echostr parameter".to_string(),
+            field: Some("echostr".to_string()),
+        })?;
 
-    let msg_signature = params.get("msg_signature").ok_or_else(|| GatewayError::BadRequest {
-        message: "Missing msg_signature parameter".to_string(),
-        field: Some("msg_signature".to_string()),
-    })?;
+    let msg_signature = params
+        .get("msg_signature")
+        .ok_or_else(|| GatewayError::BadRequest {
+            message: "Missing msg_signature parameter".to_string(),
+            field: Some("msg_signature".to_string()),
+        })?;
 
-    let timestamp = params.get("timestamp").ok_or_else(|| GatewayError::BadRequest {
-        message: "Missing timestamp parameter".to_string(),
-        field: Some("timestamp".to_string()),
-    })?;
+    let timestamp = params
+        .get("timestamp")
+        .ok_or_else(|| GatewayError::BadRequest {
+            message: "Missing timestamp parameter".to_string(),
+            field: Some("timestamp".to_string()),
+        })?;
 
-    let nonce = params.get("nonce").ok_or_else(|| GatewayError::BadRequest {
-        message: "Missing nonce parameter".to_string(),
-        field: Some("nonce".to_string()),
-    })?;
+    let nonce = params
+        .get("nonce")
+        .ok_or_else(|| GatewayError::BadRequest {
+            message: "Missing nonce parameter".to_string(),
+            field: Some("nonce".to_string()),
+        })?;
 
     info!("Handling WeChat URL verification request");
 
@@ -382,7 +399,10 @@ pub async fn wechat_get_handler(
         }
     } else {
         warn!("WeChat config not available for URL verification");
-        Err(GatewayError::service_unavailable("WeChat", "WeChat not configured"))
+        Err(GatewayError::service_unavailable(
+            "WeChat",
+            "WeChat not configured",
+        ))
     }
 }
 
@@ -414,7 +434,10 @@ pub async fn wechat_post_handler_impl(
         let expected_sig = compute_wechat_signature(&token, timestamp, nonce, &msg_encrypt);
 
         if msg_signature != expected_sig {
-            warn!("WeChat signature mismatch: expected={}, got={}", expected_sig, msg_signature);
+            warn!(
+                "WeChat signature mismatch: expected={}, got={}",
+                expected_sig, msg_signature
+            );
             return "success"; // Return success to avoid retries
         }
 
@@ -431,7 +454,9 @@ pub async fn wechat_post_handler_impl(
                 tokio::spawn(async move {
                     for event in events {
                         if let Some(message) = event.message {
-                            if let Err(e) = process_message_async(state_clone.clone(), message).await {
+                            if let Err(e) =
+                                process_message_async(state_clone.clone(), message).await
+                            {
                                 error!("Failed to process message: {}", e);
                             }
                         }
@@ -461,7 +486,7 @@ fn extract_xml_value(xml: &str, tag: &str) -> Option<String> {
                 let value = &xml[start_idx..end];
                 // Strip CDATA wrapper if present
                 if value.starts_with("<![CDATA[") && value.ends_with("]]>") {
-                    return Some(value[9..value.len()-3].to_string());
+                    return Some(value[9..value.len() - 3].to_string());
                 }
                 return Some(value.to_string());
             }
@@ -471,7 +496,12 @@ fn extract_xml_value(xml: &str, tag: &str) -> Option<String> {
 }
 
 /// Helper function to compute WeChat signature
-fn compute_wechat_signature(token: &str, timestamp: &str, nonce: &str, msg_encrypt: &str) -> String {
+fn compute_wechat_signature(
+    token: &str,
+    timestamp: &str,
+    nonce: &str,
+    msg_encrypt: &str,
+) -> String {
     let mut params = vec![
         token.to_string(),
         timestamp.to_string(),
@@ -507,7 +537,8 @@ async fn process_message(
     );
 
     // Extract channel_id from metadata for reply
-    // P1 FIX: Support platform-specific equivalents (chat_id, room_id, conversation_id)
+    // P1 FIX: Support platform-specific equivalents (chat_id, room_id,
+    // conversation_id)
     let channel_id = message
         .metadata
         .get("channel_id")
@@ -563,23 +594,32 @@ async fn process_message(
         Ok(response) => {
             info!(
                 "Generated response for {:?} message: content_length={}",
-                message.platform, response.len()
+                message.platform,
+                response.len()
             );
             response
         }
         Err(e) => {
             error!("Failed to process message with LLM: {}", e);
-            "抱歉，我暂时无法处理您的消息。请稍后再试。\nSorry, I'm unable to process your message at the moment. Please try again later.".to_string()
+            "抱歉，我暂时无法处理您的消息。请稍后再试。\nSorry, I'm unable to process your message \
+             at the moment. Please try again later."
+                .to_string()
         }
     };
 
     // Send reply via ChannelRegistry
-    info!("Attempting to send reply via ChannelRegistry, platform: {:?}", message.platform);
+    info!(
+        "Attempting to send reply via ChannelRegistry, platform: {:?}",
+        message.platform
+    );
     if let Some(ref registry) = state.channel_registry {
         info!("ChannelRegistry is available, looking up channel...");
         match registry.get_channel_by_platform(message.platform).await {
             Some(channel) => {
-                info!("Found channel for platform {:?}, sending reply...", message.platform);
+                info!(
+                    "Found channel for platform {:?}, sending reply...",
+                    message.platform
+                );
                 // Create reply message
                 let reply = beebotos_agents::communication::Message {
                     id: uuid::Uuid::new_v4(),
@@ -598,7 +638,10 @@ async fn process_message(
 
                 match channel.read().await.send(&sender_id, &reply).await {
                     Ok(_) => {
-                        info!("Reply sent successfully to {} on {:?}", sender_id, message.platform);
+                        info!(
+                            "Reply sent successfully to {} on {:?}",
+                            sender_id, message.platform
+                        );
                     }
                     Err(e) => {
                         error!("Failed to send reply via channel: {}", e);
@@ -662,7 +705,8 @@ fn load_slack_config() -> Result<String, Box<dyn std::error::Error>> {
     Ok(signing_secret)
 }
 
-fn load_wechat_config() -> Result<(String, String, Option<String>), Box<dyn std::error::Error + Send + Sync>> {
+fn load_wechat_config(
+) -> Result<(String, String, Option<String>), Box<dyn std::error::Error + Send + Sync>> {
     let corp_id = std::env::var("WECHAT_CORP_ID").map_err(|_| "WECHAT_CORP_ID not set")?;
     let token = std::env::var("WECHAT_TOKEN").map_err(|_| "WECHAT_TOKEN not set")?;
     let encoding_aes_key = std::env::var("WECHAT_ENCODING_AES_KEY").ok();
@@ -763,10 +807,11 @@ fn load_imessage_config() -> Result<WebhookConfig, Box<dyn std::error::Error>> {
     })
 }
 
+use std::sync::LazyLock;
 /// Message deduplication cache
 /// Stores recently processed message IDs to prevent duplicate processing
 use std::time::{Duration, Instant};
-use std::sync::LazyLock;
+
 use tokio::sync::Mutex;
 
 /// Entry in the deduplication cache

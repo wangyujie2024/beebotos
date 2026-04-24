@@ -1,9 +1,10 @@
 //! Gateway Configuration Wizard Components
 
-use crate::state::wizard::*;
-use crate::utils::{event_target_checked, event_target_value};
 use leptos::prelude::*;
 use leptos::view;
+
+use crate::state::wizard::*;
+use crate::utils::{event_target_checked, event_target_value};
 
 /// Stepper showing current progress through wizard steps
 #[component]
@@ -194,10 +195,7 @@ pub fn ProviderCard(
 
 /// Configuration preview with tabbed TOML/ENV view
 #[component]
-pub fn ConfigPreview(
-    toml_content: Signal<String>,
-    env_content: Signal<String>,
-) -> impl IntoView {
+pub fn ConfigPreview(toml_content: Signal<String>, env_content: Signal<String>) -> impl IntoView {
     let active_tab = RwSignal::new("toml".to_string());
 
     view! {
@@ -233,9 +231,7 @@ pub fn ConfigPreview(
 
 /// Channel platform configuration form
 #[component]
-pub fn ChannelPlatformForm(
-    platform: RwSignal<PlatformDraft>,
-) -> impl IntoView {
+pub fn ChannelPlatformForm(platform: RwSignal<PlatformDraft>) -> impl IntoView {
     let name = platform.get().name.clone();
     let enabled = RwSignal::new(platform.get().enabled);
 
@@ -270,5 +266,3 @@ pub fn ChannelPlatformForm(
         </div>
     }
 }
-
-

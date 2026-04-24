@@ -2,11 +2,11 @@
 //!
 //! Provides clients for ClawHub, BeeHub, and other external services.
 
-pub mod clawhub;
 pub mod beehub;
+pub mod clawhub;
 
-pub use clawhub::ClawHubClient;
 pub use beehub::BeeHubClient;
+pub use clawhub::ClawHubClient;
 
 /// Hub type for skill discovery and download
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

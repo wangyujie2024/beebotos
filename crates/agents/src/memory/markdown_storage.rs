@@ -1,7 +1,8 @@
 //! Markdown File Storage
 //!
-//! Implements OpenClaw's "File is Truth" architecture where all memories are stored
-//! as human-readable, editable Markdown files rather than opaque databases.
+//! Implements OpenClaw's "File is Truth" architecture where all memories are
+//! stored as human-readable, editable Markdown files rather than opaque
+//! databases.
 //!
 //! # File Structure
 //!
@@ -25,14 +26,16 @@
 //! - File watching for external edits
 //! - Atomic writes for data integrity
 
-use crate::error::Result;
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+
+use serde::{Deserialize, Serialize};
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
-use tracing::{info, debug};
+use tracing::{debug, info};
 use uuid::Uuid;
+
+use crate::error::Result;
 
 /// Default workspace directory name
 pub const DEFAULT_WORKSPACE_DIR: &str = "data";
@@ -161,7 +164,7 @@ impl MarkdownMemoryEntry {
         output.push_str(&format!("timestamp: {}\n", self.timestamp.to_rfc3339()));
         output.push_str(&format!("category: {}\n", self.category));
         output.push_str(&format!("importance: {}\n", self.importance));
-        
+
         if let Some(ref session_id) = self.session_id {
             output.push_str(&format!("session_id: {}\n", session_id));
         }
@@ -204,7 +207,8 @@ impl MarkdownMemoryEntry {
 
         if in_frontmatter && frontmatter_end > 0 {
             // Parse frontmatter
-            let frontmatter: &str = &text.lines()
+            let frontmatter: &str = &text
+                .lines()
                 .take(frontmatter_end)
                 .skip(1)
                 .collect::<Vec<_>>()
@@ -214,7 +218,7 @@ impl MarkdownMemoryEntry {
                 if let Some((key, value)) = line.split_once(':') {
                     let key = key.trim();
                     let value = value.trim();
-                    
+
                     match key {
                         "id" => {
                             if let Ok(id) = Uuid::parse_str(value) {
@@ -243,7 +247,7 @@ impl MarkdownMemoryEntry {
 
         // Parse content
         let content_lines: Vec<_> = text.lines().skip(content_start).collect();
-        
+
         // Extract title from first heading (skip empty lines)
         let mut title_line_idx = 0;
         for (idx, line) in content_lines.iter().enumerate() {
@@ -260,7 +264,11 @@ impl MarkdownMemoryEntry {
         }
 
         // Join remaining lines as content (skip lines up to and including title)
-        entry.content = content_lines.into_iter().skip(title_line_idx).collect::<Vec<_>>().join("\n");
+        entry.content = content_lines
+            .into_iter()
+            .skip(title_line_idx)
+            .collect::<Vec<_>>()
+            .join("\n");
         entry.content = entry.content.trim().to_string();
 
         Ok(entry)
@@ -313,22 +321,28 @@ impl MarkdownStorage {
     /// Initialize workspace directories
     pub async fn initialize_workspace(&self) -> Result<()> {
         // Create main workspace
-        fs::create_dir_all(&self.config.workspace_dir).await
-            .map_err(|e| crate::error::AgentError::storage(
-                format!("Failed to create workspace directory: {}", e)
-            ))?;
+        fs::create_dir_all(&self.config.workspace_dir)
+            .await
+            .map_err(|e| {
+                crate::error::AgentError::storage(format!(
+                    "Failed to create workspace directory: {}",
+                    e
+                ))
+            })?;
 
         // Create memory subdirectory
         let memory_dir = self.config.workspace_dir.join(MEMORY_SUBDIR);
-        fs::create_dir_all(&memory_dir).await
-            .map_err(|e| crate::error::AgentError::storage(
-                format!("Failed to create memory directory: {}", e)
-            ))?;
+        fs::create_dir_all(&memory_dir).await.map_err(|e| {
+            crate::error::AgentError::storage(format!("Failed to create memory directory: {}", e))
+        })?;
 
         // Initialize default files if they don't exist
         self.initialize_default_files().await?;
 
-        info!("Markdown storage workspace initialized at: {:?}", self.config.workspace_dir);
+        info!(
+            "Markdown storage workspace initialized at: {:?}",
+            self.config.workspace_dir
+        );
         Ok(())
     }
 
@@ -341,7 +355,7 @@ impl MarkdownStorage {
             (AGENTS_MANUAL_FILE, self.agents_manual_template()),
             (HEARTBEAT_FILE, self.heartbeat_template()),
         ];
-        
+
         for (filename, template) in files {
             let path = self.config.workspace_dir.join(filename);
             if !path.exists() {
@@ -359,35 +373,30 @@ impl MarkdownStorage {
     async fn write_file_atomic(&self, path: &Path, content: &str) -> Result<()> {
         if self.config.atomic_writes {
             let temp_path = path.with_extension("tmp");
-            
+
             // Write to temp file
-            let mut file = fs::File::create(&temp_path).await
-                .map_err(|e| crate::error::AgentError::storage(
-                    format!("Failed to create temp file: {}", e)
-                ))?;
-            
-            file.write_all(content.as_bytes()).await
-                .map_err(|e| crate::error::AgentError::storage(
-                    format!("Failed to write temp file: {}", e)
-                ))?;
-            
-            file.flush().await
-                .map_err(|e| crate::error::AgentError::storage(
-                    format!("Failed to flush temp file: {}", e)
-                ))?;
-            
+            let mut file = fs::File::create(&temp_path).await.map_err(|e| {
+                crate::error::AgentError::storage(format!("Failed to create temp file: {}", e))
+            })?;
+
+            file.write_all(content.as_bytes()).await.map_err(|e| {
+                crate::error::AgentError::storage(format!("Failed to write temp file: {}", e))
+            })?;
+
+            file.flush().await.map_err(|e| {
+                crate::error::AgentError::storage(format!("Failed to flush temp file: {}", e))
+            })?;
+
             drop(file);
 
             // Atomic rename
-            fs::rename(&temp_path, path).await
-                .map_err(|e| crate::error::AgentError::storage(
-                    format!("Failed to rename temp file: {}", e)
-                ))?;
+            fs::rename(&temp_path, path).await.map_err(|e| {
+                crate::error::AgentError::storage(format!("Failed to rename temp file: {}", e))
+            })?;
         } else {
-            fs::write(path, content).await
-                .map_err(|e| crate::error::AgentError::storage(
-                    format!("Failed to write file: {}", e)
-                ))?;
+            fs::write(path, content).await.map_err(|e| {
+                crate::error::AgentError::storage(format!("Failed to write file: {}", e))
+            })?;
         }
 
         Ok(())
@@ -401,14 +410,14 @@ impl MarkdownStorage {
         date: Option<chrono::NaiveDate>,
     ) -> Result<()> {
         let path = self.get_file_path(file_type, date)?;
-        
+
         // Ensure directory exists
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).await.ok();
         }
 
         let markdown = entry.to_markdown();
-        
+
         // Check file size for rotation
         if path.exists() {
             let metadata = fs::metadata(&path).await?;
@@ -423,14 +432,13 @@ impl MarkdownStorage {
             .append(true)
             .open(&path)
             .await
-            .map_err(|e| crate::error::AgentError::storage(
-                format!("Failed to open memory file: {}", e)
-            ))?;
+            .map_err(|e| {
+                crate::error::AgentError::storage(format!("Failed to open memory file: {}", e))
+            })?;
 
-        file.write_all(markdown.as_bytes()).await
-            .map_err(|e| crate::error::AgentError::storage(
-                format!("Failed to append to memory file: {}", e)
-            ))?;
+        file.write_all(markdown.as_bytes()).await.map_err(|e| {
+            crate::error::AgentError::storage(format!("Failed to append to memory file: {}", e))
+        })?;
 
         debug!("Appended entry to {:?}", path);
         Ok(())
@@ -443,21 +451,20 @@ impl MarkdownStorage {
         date: Option<chrono::NaiveDate>,
     ) -> Result<Vec<MarkdownMemoryEntry>> {
         let path = self.get_file_path(file_type, date)?;
-        
+
         if !path.exists() {
             return Ok(Vec::new());
         }
 
-        let content = fs::read_to_string(&path).await
-            .map_err(|e| crate::error::AgentError::storage(
-                format!("Failed to read memory file: {}", e)
-            ))?;
+        let content = fs::read_to_string(&path).await.map_err(|e| {
+            crate::error::AgentError::storage(format!("Failed to read memory file: {}", e))
+        })?;
 
         // Parse entries by looking for valid frontmatter + title patterns
         let mut entries = Vec::new();
         let lines: Vec<_> = content.lines().collect();
         let mut i = 0;
-        
+
         while i < lines.len() {
             // Look for frontmatter start (---)
             if lines[i].trim() == "---" {
@@ -481,7 +488,7 @@ impl MarkdownStorage {
         date: Option<chrono::NaiveDate>,
     ) -> Result<PathBuf> {
         let filename = file_type.filename(date);
-        
+
         let path = match file_type.subdirectory() {
             Some(subdir) => self.config.workspace_dir.join(subdir).join(filename),
             None => self.config.workspace_dir.join(filename),
@@ -496,7 +503,7 @@ impl MarkdownStorage {
         if lines[start_idx].trim() != "---" {
             return None;
         }
-        
+
         // Find frontmatter end (next ---)
         let mut frontmatter_end = None;
         let mut i = start_idx + 1;
@@ -507,13 +514,13 @@ impl MarkdownStorage {
             }
             i += 1;
         }
-        
+
         let fm_end = frontmatter_end?;
         if fm_end == start_idx + 1 {
             // Empty frontmatter, not a valid entry
             return None;
         }
-        
+
         // Find title (## Title)
         let mut title_line = None;
         i = fm_end + 1;
@@ -533,9 +540,9 @@ impl MarkdownStorage {
             }
             i += 1;
         }
-        
+
         let title_idx = title_line?;
-        
+
         // Reconstruct the entry markdown
         let mut entry_text = String::new();
         for j in start_idx..=fm_end {
@@ -543,7 +550,7 @@ impl MarkdownStorage {
             entry_text.push('\n');
         }
         entry_text.push('\n');
-        
+
         // Add title and content
         for j in title_idx..lines.len() {
             let trimmed = lines[j].trim();
@@ -555,7 +562,7 @@ impl MarkdownStorage {
             entry_text.push('\n');
         }
         entry_text.push('\n');
-        
+
         match MarkdownMemoryEntry::from_markdown(&entry_text) {
             Ok(entry) => Some((entry, fm_end + 1)),
             Err(_) => None,
@@ -565,23 +572,28 @@ impl MarkdownStorage {
     /// Rotate a file (rename with timestamp)
     async fn rotate_file(&self, path: &Path) -> Result<()> {
         let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S");
-        let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("memory");
+        let stem = path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("memory");
         let extension = path.extension().and_then(|s| s.to_str()).unwrap_or("md");
-        
+
         let rotated_name = format!("{}_{}.{}", stem, timestamp, extension);
         let rotated_path = path.with_file_name(rotated_name);
-        
-        fs::rename(path, rotated_path).await
-            .map_err(|e| crate::error::AgentError::storage(
-                format!("Failed to rotate file: {}", e)
-            ))?;
+
+        fs::rename(path, rotated_path).await.map_err(|e| {
+            crate::error::AgentError::storage(format!("Failed to rotate file: {}", e))
+        })?;
 
         info!("Rotated memory file: {:?}", path);
         Ok(())
     }
 
     /// Get recent daily logs
-    pub async fn get_recent_daily_logs(&self, days: usize) -> Result<Vec<(chrono::NaiveDate, Vec<MarkdownMemoryEntry>)>> {
+    pub async fn get_recent_daily_logs(
+        &self,
+        days: usize,
+    ) -> Result<Vec<(chrono::NaiveDate, Vec<MarkdownMemoryEntry>)>> {
         let mut results = Vec::new();
         let today = chrono::Local::now().date_naive();
 
@@ -645,7 +657,8 @@ impl MarkdownStorage {
 
         // Sort by relevance
         matches.sort_by(|a, b| {
-            b.relevance_score.partial_cmp(&a.relevance_score)
+            b.relevance_score
+                .partial_cmp(&a.relevance_score)
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
 
@@ -695,7 +708,8 @@ impl MarkdownStorage {
 
     // Template methods
     fn core_memory_template(&self) -> String {
-        format!(r#"# Core Memory
+        format!(
+            r#"# Core Memory
 
 This file contains permanent memories that the AI should always remember.
 
@@ -725,7 +739,8 @@ This is your core memory file. Important information will be automatically saved
     }
 
     fn user_profile_template(&self) -> String {
-        format!(r#"# User Profile
+        format!(
+            r#"# User Profile
 
 Personal information and preferences about the user.
 
@@ -763,7 +778,8 @@ importance: 1.0
     }
 
     fn soul_template(&self) -> String {
-        format!(r#"# AI Soul
+        format!(
+            r#"# AI Soul
 
 Personality configuration and behavior guidelines.
 
@@ -800,7 +816,8 @@ importance: 1.0
     }
 
     fn agents_manual_template(&self) -> String {
-        format!(r#"# Agents Manual
+        format!(
+            r#"# Agents Manual
 
 Operation manual for AI workflows and procedures.
 
@@ -845,7 +862,8 @@ Conversations are automatically logged to memory/YYYY-MM-DD.md
     }
 
     fn heartbeat_template(&self) -> String {
-        format!(r#"# Heartbeat Tasks
+        format!(
+            r#"# Heartbeat Tasks
 
 Periodic tasks and scheduled checks.
 
@@ -894,12 +912,9 @@ mod tests {
     fn test_memory_file_type_filename() {
         assert_eq!(MemoryFileType::Core.filename(None), "MEMORY.md");
         assert_eq!(MemoryFileType::User.filename(None), "USER.md");
-        
+
         let date = chrono::NaiveDate::from_ymd_opt(2026, 4, 6).unwrap();
-        assert_eq!(
-            MemoryFileType::Daily.filename(Some(date)),
-            "2026-04-06.md"
-        );
+        assert_eq!(MemoryFileType::Daily.filename(Some(date)), "2026-04-06.md");
     }
 
     #[test]
@@ -911,7 +926,7 @@ mod tests {
             .with_metadata("key", "value");
 
         let markdown = entry.to_markdown();
-        
+
         assert!(markdown.contains("id:"));
         assert!(markdown.contains("category: test"));
         assert!(markdown.contains("importance: 0.8"));
@@ -956,16 +971,26 @@ mod tests {
         storage.initialize_workspace().await.unwrap();
 
         let entry = MarkdownMemoryEntry::new("Test", "Content");
-        storage.append_entry(MemoryFileType::Core, &entry, None).await.unwrap();
+        storage
+            .append_entry(MemoryFileType::Core, &entry, None)
+            .await
+            .unwrap();
 
-        let entries = storage.read_entries(MemoryFileType::Core, None).await.unwrap();
-        
+        let entries = storage
+            .read_entries(MemoryFileType::Core, None)
+            .await
+            .unwrap();
+
         // Filter to find our test entry (workspace has default template entries too)
-        let test_entries: Vec<_> = entries.iter()
+        let test_entries: Vec<_> = entries
+            .iter()
             .filter(|e| e.title == "Test" && e.content == "Content")
             .collect();
-        
-        assert!(!test_entries.is_empty(), "Test entry not found in {:?}", 
-            entries.iter().map(|e| &e.title).collect::<Vec<_>>());
+
+        assert!(
+            !test_entries.is_empty(),
+            "Test entry not found in {:?}",
+            entries.iter().map(|e| &e.title).collect::<Vec<_>>()
+        );
     }
 }

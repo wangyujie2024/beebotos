@@ -1,7 +1,8 @@
 //! 消息列表组件
 
-use crate::webchat::ChatMessage;
 use leptos::prelude::*;
+
+use crate::webchat::ChatMessage;
 
 /// 消息列表组件
 #[component]
@@ -39,7 +40,11 @@ pub fn MessageList(
 #[component]
 fn MessageItem(message: ChatMessage) -> impl IntoView {
     let is_user = matches!(message.role, crate::webchat::MessageRole::User);
-    let class = if is_user { "message user" } else { "message assistant" };
+    let class = if is_user {
+        "message user"
+    } else {
+        "message assistant"
+    };
 
     view! {
         <div class=class>

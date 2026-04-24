@@ -5,8 +5,9 @@
 
 #![allow(dead_code)]
 
-use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
+
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Goal {

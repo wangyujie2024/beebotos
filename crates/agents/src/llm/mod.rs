@@ -32,38 +32,27 @@ pub mod traits;
 pub mod types;
 
 // Re-export HTTP client types
-pub use http_client::{
-    LLMHttpClient, OpenAIRequestBuilder, ProviderConfig, ProviderInitParams,
-};
-
 // Re-export main types
 pub use adapter::{LLMClientAdapter, LegacyLLMClientBuilder};
-pub use client::{LLMClient, LLMClientBuilder, ToolHandler, ClientMetrics};
-
+pub use client::{ClientMetrics, LLMClient, LLMClientBuilder, ToolHandler};
 // Re-export failover types
 pub use failover::{FailoverConfig, FailoverProvider, FailoverProviderBuilder};
+pub use http_client::{LLMHttpClient, OpenAIRequestBuilder, ProviderConfig, ProviderInitParams};
+// Re-export model name modules
+pub use providers::{anthropic_models, ollama_models, openai_models};
+// Re-export providers
+pub use providers::{
+    AnthropicConfig, AnthropicProvider, OllamaConfig, OllamaProvider, OpenAIConfig, OpenAIProvider,
+    ProviderFactory,
+};
 pub use traits::{
     ContextManager, LLMProvider, MetricsCollector, ModelCapabilities, ModelInfo,
     ProviderCapabilities, RetryPolicy, ToolExecutor,
 };
 pub use types::{
-    Choice, Content, Delta, FunctionCall, FunctionDefinition, FunctionChoice,
-    ImageUrlContent, LLMError, LLMRequest, LLMResponse, LLMResult, Message,
-    RequestConfig, ResponseFormat, Role, StreamChunk, StreamChoice, Tool, ToolCall,
-    ToolChoice, ToolResult, Usage,
-};
-
-// Re-export model name modules
-pub use providers::{
-    openai_models, anthropic_models, ollama_models,
-};
-
-// Re-export providers
-pub use providers::{
-    AnthropicConfig, AnthropicProvider,
-    OllamaConfig, OllamaProvider,
-    OpenAIConfig, OpenAIProvider,
-    ProviderFactory,
+    Choice, Content, Delta, FunctionCall, FunctionChoice, FunctionDefinition, ImageUrlContent,
+    LLMError, LLMRequest, LLMResponse, LLMResult, Message, RequestConfig, ResponseFormat, Role,
+    StreamChoice, StreamChunk, Tool, ToolCall, ToolChoice, ToolResult, Usage,
 };
 
 /// Create an OpenAI-compatible client from environment variables
@@ -106,8 +95,8 @@ mod tests {
 
     #[test]
     fn test_message_with_image() {
-        let msg = Message::user("What's in this image?")
-            .with_image("https://example.com/image.png");
+        let msg =
+            Message::user("What's in this image?").with_image("https://example.com/image.png");
 
         assert_eq!(msg.content.len(), 2);
     }

@@ -4,6 +4,7 @@
 //! BeeBotOSConfig TOML file as the source of truth.
 
 use std::sync::Arc;
+
 use tokio::sync::RwLock;
 use tracing::{info, warn};
 
@@ -31,24 +32,30 @@ impl GatewayConfigManager {
 
     /// Check if reload is possible
     pub fn can_reload(&self) -> bool {
-        self.source_path.as_ref().map(|p| p.exists()).unwrap_or(false)
+        self.source_path
+            .as_ref()
+            .map(|p| p.exists())
+            .unwrap_or(false)
     }
 
     /// Reload configuration from the TOML source file
     ///
     /// Returns true if the configuration was actually changed.
     pub async fn reload(&self) -> Result<bool, ConfigError> {
-        let path = self.source_path.as_ref()
+        let path = self
+            .source_path
+            .as_ref()
             .ok_or_else(|| ConfigError::NoSource)?;
 
         info!("Reloading configuration from {:?}...", path);
 
         // Re-read the TOML file
-        let content = tokio::fs::read_to_string(path).await
+        let content = tokio::fs::read_to_string(path)
+            .await
             .map_err(|e| ConfigError::Io(e.to_string()))?;
 
-        let new_config: crate::config::BeeBotOSConfig = toml::from_str(&content)
-            .map_err(|e| ConfigError::Parse(e.to_string()))?;
+        let new_config: crate::config::BeeBotOSConfig =
+            toml::from_str(&content).map_err(|e| ConfigError::Parse(e.to_string()))?;
 
         let mut config = self.config.write().await;
 
@@ -70,8 +77,7 @@ impl GatewayConfigManager {
     /// Export current configuration as JSON
     pub async fn export(&self) -> Result<serde_json::Value, ConfigError> {
         let config = self.config.read().await;
-        serde_json::to_value(&*config)
-            .map_err(|e| ConfigError::Serialize(e.to_string()))
+        serde_json::to_value(&*config).map_err(|e| ConfigError::Serialize(e.to_string()))
     }
 }
 

@@ -1,16 +1,19 @@
 //! Health Check Module
 //!
-//! Provides health check endpoints and system status monitoring for the chain module.
+//! Provides health check endpoints and system status monitoring for the chain
+//! module.
 
-use crate::compat::Address;
-use crate::constants::{HEALTH_CHECK_RPC_TIMEOUT, MAX_BLOCK_AGE_SECS, MAX_SYNC_LAG_BLOCKS};
-use alloy_provider::Provider as AlloyProvider;
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+
+use alloy_provider::Provider as AlloyProvider;
+use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 use tracing::{error, info, instrument, warn};
+
+use crate::compat::Address;
+use crate::constants::{HEALTH_CHECK_RPC_TIMEOUT, MAX_BLOCK_AGE_SECS, MAX_SYNC_LAG_BLOCKS};
 
 /// Health status levels
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

@@ -22,7 +22,9 @@ impl MattermostContentParser {
         let mut mentions = Vec::new();
         for word in content.split_whitespace() {
             if word.starts_with('@') {
-                let mention = word.trim_start_matches('@').trim_matches(|c: char| !c.is_alphanumeric());
+                let mention = word
+                    .trim_start_matches('@')
+                    .trim_matches(|c: char| !c.is_alphanumeric());
                 if !mention.is_empty() {
                     mentions.push(mention.to_string());
                 }
@@ -37,7 +39,9 @@ impl MattermostContentParser {
         let mut channels = Vec::new();
         for word in content.split_whitespace() {
             if word.starts_with('~') {
-                let channel = word.trim_start_matches('~').trim_matches(|c: char| !c.is_alphanumeric());
+                let channel = word
+                    .trim_start_matches('~')
+                    .trim_matches(|c: char| !c.is_alphanumeric());
                 if !channel.is_empty() {
                     channels.push(channel.to_string());
                 }
@@ -55,7 +59,7 @@ impl MattermostContentParser {
     pub fn parse_message(&self, content: &str, author_id: &str) -> Result<ParsedMattermostMessage> {
         let mentions = self.extract_mentions(content);
         let channels = self.extract_channels(content);
-        
+
         Ok(ParsedMattermostMessage {
             content: content.to_string(),
             author_id: author_id.to_string(),
@@ -162,7 +166,7 @@ mod tests {
     fn test_extract_mentions() {
         let parser = MattermostContentParser::new();
         let mentions = parser.extract_mentions("Hello @alice and @bob!");
-        
+
         assert_eq!(mentions.len(), 2);
         assert!(mentions.contains(&"alice".to_string()));
         assert!(mentions.contains(&"bob".to_string()));
@@ -172,7 +176,7 @@ mod tests {
     fn test_extract_channels() {
         let parser = MattermostContentParser::new();
         let channels = parser.extract_channels("Check out ~general and ~random");
-        
+
         assert_eq!(channels.len(), 2);
         assert!(channels.contains(&"general".to_string()));
         assert!(channels.contains(&"random".to_string()));
@@ -182,7 +186,7 @@ mod tests {
     fn test_parse_message() {
         let parser = MattermostContentParser::new();
         let parsed = parser.parse_message("Hello @alice!", "user-1").unwrap();
-        
+
         assert_eq!(parsed.content, "Hello @alice!");
         assert_eq!(parsed.author_id, "user-1");
         assert_eq!(parsed.mentions.len(), 1);

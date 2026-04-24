@@ -4,9 +4,9 @@
 //! or OpenClaw's command panel.
 
 use leptos::prelude::*;
+use leptos_router::hooks::use_navigate;
 
 use crate::state::use_app_state;
-use leptos_router::hooks::use_navigate;
 
 /// Command palette item
 #[derive(Clone, Debug)]

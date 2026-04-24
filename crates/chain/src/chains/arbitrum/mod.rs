@@ -1,6 +1,7 @@
 //! Arbitrum Module
 //!
-//! Arbitrum is a leading Layer 2 scaling solution for Ethereum using Optimistic Rollups.
+//! Arbitrum is a leading Layer 2 scaling solution for Ethereum using Optimistic
+//! Rollups.
 //! - Chain ID: 42161 (Mainnet), 421614 (Sepolia Testnet)
 //! - Block Time: ~0.25 seconds (sub-second finality)
 //! - Consensus: Optimistic Rollup with fraud proofs

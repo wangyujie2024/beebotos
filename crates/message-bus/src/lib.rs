@@ -1,6 +1,7 @@
 //! BeeBotOS Unified Message Bus - Phase 1 Implementation
 //!
-//! A high-performance, type-safe message bus for decoupled inter-module communication.
+//! A high-performance, type-safe message bus for decoupled inter-module
+//! communication.
 //!
 //! # Features
 //! - Topic-based publish/subscribe messaging
@@ -51,30 +52,29 @@ pub mod transport;
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 // Re-export core types
-pub use codec::{JsonCodec, MessageCodec};
 #[cfg(feature = "msgpack-codec")]
 pub use codec::MsgPackCodec;
+pub use codec::{JsonCodec, MessageCodec};
 pub use compat::{
-    CoreEventBusAdapter, AgentsEventAdapter, KernelEventAdapter, ChainEventAdapter,
-    MigrationGuide,
+    AgentsEventAdapter, ChainEventAdapter, CoreEventBusAdapter, KernelEventAdapter, MigrationGuide,
 };
 
 /// Gateway module compatibility
 pub mod gateway {
     pub use super::compat::gateway::*;
 }
-pub use config::{MessageBusConfig, ConfigError};
+use std::sync::Arc;
+
+use async_trait::async_trait;
+pub use config::{ConfigError, MessageBusConfig};
 pub use error::{MessageBusError, Result};
 pub use message::{Message, MessageId, MessageMetadata};
 pub use metrics::MessageBusMetrics;
 pub use router::{RouteRule, Router, TopicMatcher};
-pub use transport::Transport;
+use tokio::sync::mpsc;
 #[cfg(feature = "memory")]
 pub use transport::memory::MemoryTransport;
-
-use async_trait::async_trait;
-use std::sync::Arc;
-use tokio::sync::mpsc;
+pub use transport::Transport;
 
 /// Subscription identifier
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -239,7 +239,11 @@ pub struct DefaultMessageBus<T: Transport> {
 
 impl<T: Transport> DefaultMessageBus<T> {
     /// Create a new message bus
-    pub fn new(transport: T, codec: Box<dyn MessageCodec>, metrics: Option<MessageBusMetrics>) -> Self {
+    pub fn new(
+        transport: T,
+        codec: Box<dyn MessageCodec>,
+        metrics: Option<MessageBusMetrics>,
+    ) -> Self {
         Self {
             transport,
             codec: Arc::from(codec),
@@ -373,8 +377,8 @@ pub mod utils {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::utils::*;
+    use super::*;
 
     #[test]
     fn test_topic_validation() {
@@ -405,7 +409,10 @@ mod tests {
 
         // Mixed wildcards
         assert!(topic_matches("agent/+/task/#", "agent/123/task/start"));
-        assert!(topic_matches("agent/+/task/#", "agent/123/task/start/progress"));
+        assert!(topic_matches(
+            "agent/+/task/#",
+            "agent/123/task/start/progress"
+        ));
     }
 
     #[tokio::test]
@@ -449,27 +456,22 @@ mod tests {
         bus.publish("agent/123/other/start", msg2).await.unwrap();
 
         // Should timeout (no matching subscriber)
-        let result = tokio::time::timeout(
-            std::time::Duration::from_millis(100),
-            stream.recv()
-        ).await;
+        let result =
+            tokio::time::timeout(std::time::Duration::from_millis(100), stream.recv()).await;
         assert!(result.is_err());
     }
 }
 
 /// Re-export common types for convenience
 pub mod prelude {
-    pub use crate::{
-        Message, MessageBus, MessageId, MessageMetadata, SubscriptionId, MessageStream,
-        codec::{JsonCodec, MessageCodec},
-        config::{MessageBusConfig, ConfigError},
-        error::{MessageBusError, Result},
-    };
-    
+    pub use crate::codec::{JsonCodec, MessageCodec};
+    pub use crate::config::{ConfigError, MessageBusConfig};
+    pub use crate::error::{MessageBusError, Result};
+    pub use crate::tracing::TraceContext;
+    pub use crate::transport::grpc::GrpcTransport;
     #[cfg(feature = "memory")]
     pub use crate::transport::memory::MemoryTransport;
-
-    pub use crate::transport::grpc::GrpcTransport;
-    
-    pub use crate::tracing::TraceContext;
+    pub use crate::{
+        Message, MessageBus, MessageId, MessageMetadata, MessageStream, SubscriptionId,
+    };
 }

@@ -2,8 +2,9 @@
 //!
 //! Memory for skills, habits, and action sequences.
 
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+
+use serde::{Deserialize, Serialize};
 
 /// Procedural memory
 #[derive(Debug, Clone, Serialize, Deserialize)]

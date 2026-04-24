@@ -2,10 +2,12 @@
 //!
 //! Manage message platform connections: Telegram, Discord, WeChat, Lark, etc.
 
-use crate::progress::TaskProgress;
+use std::path::PathBuf;
+
 use anyhow::Result;
 use clap::{Parser, Subcommand, ValueEnum};
-use std::path::PathBuf;
+
+use crate::progress::TaskProgress;
 
 #[derive(Parser)]
 pub struct ChannelArgs {
@@ -240,20 +242,28 @@ pub async fn execute(args: ChannelArgs) -> Result<()> {
             progress.finish_success(Some(&format!("{} channels found", channels.len())));
 
             if verbose {
-                println!("{:<20} {:<15} {:<15} {:<20} {:<10}", 
-                    "ID", "Type", "Name", "Status", "Health");
+                println!(
+                    "{:<20} {:<15} {:<15} {:<20} {:<10}",
+                    "ID", "Type", "Name", "Status", "Health"
+                );
                 println!("{}", "-".repeat(90));
                 for ch in channels {
-                    println!("{:<20} {:<15} {:<15} {:<20} {:<10}",
-                        ch.id, ch.r#type, ch.name, ch.status, ch.health);
+                    println!(
+                        "{:<20} {:<15} {:<15} {:<20} {:<10}",
+                        ch.id, ch.r#type, ch.name, ch.status, ch.health
+                    );
                 }
             } else {
-                println!("{:<20} {:<15} {:<15} {:<10}", 
-                    "ID", "Type", "Name", "Status");
+                println!(
+                    "{:<20} {:<15} {:<15} {:<10}",
+                    "ID", "Type", "Name", "Status"
+                );
                 println!("{}", "-".repeat(70));
                 for ch in channels {
-                    println!("{:<20} {:<15} {:<15} {:<10}",
-                        ch.id, ch.r#type, ch.name, ch.status);
+                    println!(
+                        "{:<20} {:<15} {:<15} {:<10}",
+                        ch.id, ch.r#type, ch.name, ch.status
+                    );
                 }
             }
         }
@@ -296,7 +306,7 @@ pub async fn execute(args: ChannelArgs) -> Result<()> {
             let progress = TaskProgress::new("Querying capabilities");
             let caps = client.get_channel_capabilities(&id).await?;
             progress.finish_success(None);
-            
+
             println!("Channel: {} ({})", caps.name, id);
             println!("\nSupported Features:");
             for feature in caps.features {
@@ -307,8 +317,14 @@ pub async fn execute(args: ChannelArgs) -> Result<()> {
                 println!("  • {}", ct);
             }
             println!("\nRate Limits:");
-            println!("  Messages per minute: {}", caps.rate_limit.messages_per_minute);
-            println!("  Max message size: {} bytes", caps.rate_limit.max_message_size);
+            println!(
+                "  Messages per minute: {}",
+                caps.rate_limit.messages_per_minute
+            );
+            println!(
+                "  Max message size: {} bytes",
+                caps.rate_limit.max_message_size
+            );
         }
 
         ChannelCommand::Resolve { channel, name } => {
@@ -321,13 +337,20 @@ pub async fn execute(args: ChannelArgs) -> Result<()> {
             }
         }
 
-        ChannelCommand::Logs { id, follow, lines, level } => {
+        ChannelCommand::Logs {
+            id,
+            follow,
+            lines,
+            level,
+        } => {
             if follow {
                 println!("Following logs for channel '{}' (Ctrl+C to exit)...", id);
                 client.follow_channel_logs(&id, level.as_deref()).await?;
             } else {
                 let progress = TaskProgress::new("Fetching logs");
-                let logs = client.get_channel_logs(&id, lines, level.as_deref()).await?;
+                let logs = client
+                    .get_channel_logs(&id, lines, level.as_deref())
+                    .await?;
                 progress.finish_success(Some(&format!("{} lines", logs.len())));
                 for log in logs {
                     println!("[{}] {}: {}", log.timestamp, log.level, log.message);
@@ -335,11 +358,15 @@ pub async fn execute(args: ChannelArgs) -> Result<()> {
             }
         }
 
-        ChannelCommand::Add { channel_type, non_interactive, file } => {
+        ChannelCommand::Add {
+            channel_type,
+            non_interactive,
+            file,
+        } => {
             let progress = TaskProgress::new("Adding channel");
-            
+
             let channel_type_str = format!("{:?}", channel_type).to_lowercase();
-            
+
             let config = if non_interactive {
                 if let Some(config_path) = file {
                     std::fs::read_to_string(config_path)?
@@ -355,15 +382,25 @@ pub async fn execute(args: ChannelArgs) -> Result<()> {
             progress.finish_success(Some(&channel.id));
             println!("Channel ID: {}", channel.id);
             println!("Status: {}", channel.status);
-            
+
             if !non_interactive {
                 println!("\nNext steps:");
-                println!("  1. Authenticate: beebot channel login --id {}", channel.id);
-                println!("  2. Test connection: beebot channel test --id {}", channel.id);
+                println!(
+                    "  1. Authenticate: beebot channel login --id {}",
+                    channel.id
+                );
+                println!(
+                    "  2. Test connection: beebot channel test --id {}",
+                    channel.id
+                );
             }
         }
 
-        ChannelCommand::Remove { id, delete_data, force } => {
+        ChannelCommand::Remove {
+            id,
+            delete_data,
+            force,
+        } => {
             if !force {
                 print!("Are you sure you want to remove channel '{}'? [y/N] ", id);
                 std::io::Write::flush(&mut std::io::stdout())?;
@@ -374,7 +411,7 @@ pub async fn execute(args: ChannelArgs) -> Result<()> {
                     return Ok(());
                 }
             }
-            
+
             let progress = TaskProgress::new(format!("Removing channel {}", id));
             client.remove_channel(&id, delete_data).await?;
             progress.finish_success(None);
@@ -382,9 +419,11 @@ pub async fn execute(args: ChannelArgs) -> Result<()> {
 
         ChannelCommand::Login { id, method } => {
             let progress = TaskProgress::new(format!("Authenticating channel {}", id));
-            let auth_url = client.login_channel(&id, method.map(|m| format!("{:?}", m))).await?;
+            let auth_url = client
+                .login_channel(&id, method.map(|m| format!("{:?}", m)))
+                .await?;
             progress.finish_success(None);
-            
+
             if let Some(url) = auth_url {
                 println!("Please open the following URL to authenticate:");
                 println!("  {}", url);
@@ -402,18 +441,38 @@ pub async fn execute(args: ChannelArgs) -> Result<()> {
             progress.finish_success(None);
         }
 
-        ChannelCommand::Send { channel, target, message, template, attachment } => {
+        ChannelCommand::Send {
+            channel,
+            target,
+            message,
+            template,
+            attachment,
+        } => {
             let progress = TaskProgress::new("Sending message");
-            let msg = client.send_channel_message(&channel, &target, &message, template.as_deref(), &attachment).await?;
+            let msg = client
+                .send_channel_message(
+                    &channel,
+                    &target,
+                    &message,
+                    template.as_deref(),
+                    &attachment,
+                )
+                .await?;
             progress.finish_success(Some(&msg.id));
             println!("Message sent successfully!");
             println!("Message ID: {}", msg.id);
         }
 
         ChannelCommand::Webhook(cmd) => match cmd {
-            WebhookCommand::Generate { channel, path, secret } => {
+            WebhookCommand::Generate {
+                channel,
+                path,
+                secret,
+            } => {
                 let progress = TaskProgress::new("Generating webhook");
-                let webhook = client.generate_webhook(&channel, path.as_deref(), secret.as_deref()).await?;
+                let webhook = client
+                    .generate_webhook(&channel, path.as_deref(), secret.as_deref())
+                    .await?;
                 progress.finish_success(None);
                 println!("Webhook URL: {}", webhook.url);
                 println!("Webhook ID: {}", webhook.id);
@@ -452,7 +511,7 @@ pub async fn execute(args: ChannelArgs) -> Result<()> {
             let progress = TaskProgress::new("Testing channel connection");
             let result = client.test_channel(&id, &message).await?;
             progress.finish_success(None);
-            
+
             if result.success {
                 println!("✅ Channel test passed!");
                 println!("Response time: {}ms", result.latency_ms);
@@ -476,29 +535,34 @@ fn print_channel_status(status: &ChannelStatus) {
         "unhealthy" => "🔴",
         _ => "⚪",
     };
-    
+
     println!("{} Channel: {} ({})", health_icon, status.name, status.id);
-    println!("   Type: {} | Status: {}", status.channel_type, status.status);
-    println!("   Connected: {} | Last activity: {}", 
-        status.connected, status.last_activity);
-    
+    println!(
+        "   Type: {} | Status: {}",
+        status.channel_type, status.status
+    );
+    println!(
+        "   Connected: {} | Last activity: {}",
+        status.connected, status.last_activity
+    );
+
     if let Some(stats) = &status.stats {
-        println!("   Messages (24h): {} sent, {} received", 
-            stats.messages_sent, stats.messages_received);
+        println!(
+            "   Messages (24h): {} sent, {} received",
+            stats.messages_sent, stats.messages_received
+        );
         println!("   Error rate: {:.2}%", stats.error_rate * 100.0);
     }
 }
 
 async fn run_add_channel_wizard(channel_type: ChannelType) -> Result<String> {
     use dialoguer::Input;
-    
+
     println!("\n📝 Channel Configuration Wizard");
     println!("================================\n");
-    
-    let name: String = Input::new()
-        .with_prompt("Channel name")
-        .interact_text()?;
-    
+
+    let name: String = Input::new().with_prompt("Channel name").interact_text()?;
+
     let config = match channel_type {
         ChannelType::Telegram => {
             let bot_token: String = Input::new()
@@ -511,9 +575,7 @@ async fn run_add_channel_wizard(channel_type: ChannelType) -> Result<String> {
             })
         }
         ChannelType::Discord => {
-            let bot_token: String = Input::new()
-                .with_prompt("Bot Token")
-                .interact_text()?;
+            let bot_token: String = Input::new().with_prompt("Bot Token").interact_text()?;
             let application_id: String = Input::new()
                 .with_prompt("Application ID (optional)")
                 .allow_empty(true)
@@ -529,12 +591,8 @@ async fn run_add_channel_wizard(channel_type: ChannelType) -> Result<String> {
             cfg
         }
         ChannelType::Lark => {
-            let app_id: String = Input::new()
-                .with_prompt("App ID")
-                .interact_text()?;
-            let app_secret: String = Input::new()
-                .with_prompt("App Secret")
-                .interact_text()?;
+            let app_id: String = Input::new().with_prompt("App ID").interact_text()?;
+            let app_secret: String = Input::new().with_prompt("App Secret").interact_text()?;
             serde_json::json!({
                 "name": name,
                 "type": "lark",
@@ -561,7 +619,10 @@ async fn run_add_channel_wizard(channel_type: ChannelType) -> Result<String> {
             cfg
         }
         _ => {
-            println!("Channel type {:?} requires manual configuration.", channel_type);
+            println!(
+                "Channel type {:?} requires manual configuration.",
+                channel_type
+            );
             println!("Please provide the configuration as a JSON string:");
             let config_str: String = Input::new()
                 .with_prompt("Configuration JSON")
@@ -569,14 +630,14 @@ async fn run_add_channel_wizard(channel_type: ChannelType) -> Result<String> {
             serde_json::from_str(&config_str)?
         }
     };
-    
+
     Ok(config.to_string())
 }
 
 // Import API types from client module
 #[allow(unused_imports)]
 use crate::client::{
-    Channel, ChannelCapabilities, ChannelStats, ChannelStatus, ChannelTestResult,
-    LogEntry, Message as ChannelMessage, NewChannel, RateLimit, ResolvedName,
-    Webhook, WebhookTestResult, ChannelClient,
+    Channel, ChannelCapabilities, ChannelClient, ChannelStats, ChannelStatus, ChannelTestResult,
+    LogEntry, Message as ChannelMessage, NewChannel, RateLimit, ResolvedName, Webhook,
+    WebhookTestResult,
 };

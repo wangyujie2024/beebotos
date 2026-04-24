@@ -216,7 +216,10 @@ impl Channel for LarkChannel {
     }
 
     async fn connect(&mut self) -> Result<()> {
-        info!("🚀 连接飞书 (模式: {})...", self.config.base.connection_mode);
+        info!(
+            "🚀 连接飞书 (模式: {})...",
+            self.config.base.connection_mode
+        );
 
         // 验证凭证
         let _token = self.get_access_token().await?;
@@ -349,7 +352,7 @@ mod tests {
         assert_eq!(config.base.connection_mode, ConnectionMode::WebSocket);
         assert!(config.base.auto_reconnect);
         assert_eq!(config.base.max_reconnect_attempts, 10);
-        
+
         // 测试 webhook 连接模式
         std::env::set_var("LARK_CONNECTION_MODE", "webhook");
         let config = LarkConfig::from_env().unwrap();
@@ -357,14 +360,14 @@ mod tests {
     }
 }
 
-
 // ============================================================================
 // Lark Channel Factory
 // ============================================================================
 
 use std::sync::Arc;
-use tokio::sync::RwLock;
+
 use serde_json::Value;
+use tokio::sync::RwLock;
 
 use super::r#trait::ChannelFactory;
 
@@ -400,7 +403,10 @@ impl ChannelFactory for LarkChannelFactory {
         super::PlatformType::Lark
     }
 
-    async fn create(&self, config: &Value) -> crate::error::Result<Arc<RwLock<dyn super::Channel>>> {
+    async fn create(
+        &self,
+        config: &Value,
+    ) -> crate::error::Result<Arc<RwLock<dyn super::Channel>>> {
         use crate::error::AgentError;
 
         info!("🔨 Creating Lark channel...");
@@ -420,8 +426,14 @@ impl ChannelFactory for LarkChannelFactory {
         let channel = LarkChannel::new(LarkConfig {
             app_id,
             app_secret,
-            encrypt_key: config.get("encrypt_key").and_then(|v| v.as_str()).map(|s| s.to_string()),
-            verification_token: config.get("verification_token").and_then(|v| v.as_str()).map(|s| s.to_string()),
+            encrypt_key: config
+                .get("encrypt_key")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string()),
+            verification_token: config
+                .get("verification_token")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string()),
             base: BaseChannelConfig::default(),
         });
 

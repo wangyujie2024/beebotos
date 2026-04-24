@@ -1,9 +1,10 @@
-use crate::i18n::I18nContext;
 use leptos::prelude::*;
 use leptos::view;
 use leptos_meta::*;
 use leptos_router::components::A;
 use serde::{Deserialize, Serialize};
+
+use crate::i18n::I18nContext;
 
 #[component]
 pub fn Home() -> impl IntoView {
@@ -231,8 +232,7 @@ struct DashboardStatsData {
 }
 
 async fn fetch_dashboard_stats(client: crate::api::ApiClient) -> Result<DashboardStatsData, ()> {
-    use crate::api::AgentService;
-    use crate::api::DaoService;
+    use crate::api::{AgentService, DaoService};
 
     let agent_service = AgentService::new(client.clone());
     let dao_service = DaoService::new(client);

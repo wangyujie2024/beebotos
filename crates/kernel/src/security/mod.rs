@@ -25,6 +25,9 @@ pub mod sandbox;
 /// Trusted Execution Environment (TEE) support
 pub mod tee;
 
+use std::collections::HashMap;
+use std::sync::Arc;
+
 pub use acl::{
     AccessCondition, AccessControlList, AclEntry, AclEntryType, MacPolicy, RbacManager, SubjectType,
 };
@@ -32,15 +35,11 @@ pub use audit::{
     AuditBackend, AuditConfig, AuditEncryptionKey, AuditEntry, AuditFilter, AuditLog, AuditStats,
     EncryptedAuditEntry,
 };
+use parking_lot::Mutex;
+use serde::{Deserialize, Serialize};
 
 // Re-export capabilities from the main capabilities module for security use
 pub use crate::capabilities::{CapabilityLevel, CapabilityManager, CapabilitySet, CapabilityToken};
-
-use parking_lot::Mutex;
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::sync::Arc;
-
 use crate::error::{KernelError, Result};
 
 /// Process identifier used in security contexts

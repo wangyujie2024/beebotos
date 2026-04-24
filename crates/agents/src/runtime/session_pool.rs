@@ -46,14 +46,16 @@
 //! - Session health monitoring
 //! - Workload balancing
 
-use crate::error::Result;
-use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
+
+use serde::{Deserialize, Serialize};
 use tokio::sync::{mpsc, Mutex, RwLock};
 use tokio::time::{interval, timeout, Duration, Instant};
-use tracing::{info, warn, debug};
+use tracing::{debug, info, warn};
 use uuid::Uuid;
+
+use crate::error::Result;
 
 /// Default session pool configuration
 pub const DEFAULT_MIN_POOL_SIZE: usize = 2;
@@ -130,9 +132,11 @@ impl SessionCapabilities {
         // Check skills
         if !requirements.required_skills.is_empty() {
             total_weight += 1.0;
-            let required: std::collections::HashSet<_> = requirements.required_skills.iter().collect();
+            let required: std::collections::HashSet<_> =
+                requirements.required_skills.iter().collect();
             let available: std::collections::HashSet<_> = self.skills.iter().collect();
-            let intersection: std::collections::HashSet<_> = required.intersection(&available).collect();
+            let intersection: std::collections::HashSet<_> =
+                required.intersection(&available).collect();
             if intersection.len() == required.len() {
                 score += 1.0;
             } else {
@@ -155,7 +159,8 @@ impl SessionCapabilities {
             total_weight += 1.0;
             let required: std::collections::HashSet<_> = requirements.tags.iter().collect();
             let available: std::collections::HashSet<_> = self.tags.iter().collect();
-            let intersection: std::collections::HashSet<_> = required.intersection(&available).collect();
+            let intersection: std::collections::HashSet<_> =
+                required.intersection(&available).collect();
             score += intersection.len() as f32 / required.len() as f32;
         }
 
@@ -223,7 +228,7 @@ impl PooledSession {
     /// Create new pooled session
     pub fn new(capabilities: SessionCapabilities) -> Self {
         let now = chrono::Utc::now();
-        
+
         Self {
             id: Uuid::new_v4(),
             state: PooledSessionState::Initializing,
@@ -240,7 +245,7 @@ impl PooledSession {
     /// Transition to new state
     pub fn transition_to(&mut self, new_state: PooledSessionState) {
         let now = chrono::Utc::now();
-        self.metrics.current_state_duration_secs = 
+        self.metrics.current_state_duration_secs =
             (now - self.state_changed_at).num_seconds() as u64;
         self.state = new_state;
         self.state_changed_at = now;
@@ -248,7 +253,10 @@ impl PooledSession {
 
     /// Check if session is available for assignment
     pub fn is_available(&self) -> bool {
-        matches!(self.state, PooledSessionState::Active | PooledSessionState::Idle)
+        matches!(
+            self.state,
+            PooledSessionState::Active | PooledSessionState::Idle
+        )
     }
 
     /// Check if session needs hibernation
@@ -256,9 +264,10 @@ impl PooledSession {
         if self.state != PooledSessionState::Idle {
             return false;
         }
-        
-        let elapsed = Instant::now() - 
-            Instant::now() - Duration::from_secs(self.metrics.current_state_duration_secs);
+
+        let elapsed = Instant::now()
+            - Instant::now()
+            - Duration::from_secs(self.metrics.current_state_duration_secs);
         elapsed > idle_timeout
     }
 }
@@ -360,7 +369,7 @@ impl SessionPool {
     /// Create new session pool
     pub fn new(config: SessionPoolConfig) -> Self {
         let (shutdown_tx, shutdown_rx) = mpsc::channel(1);
-        
+
         let pool = Self {
             config,
             sessions: Arc::new(RwLock::new(HashMap::new())),
@@ -430,9 +439,10 @@ impl SessionPool {
     /// Create a new session in the pool
     ///
     /// ARCHITECTURE FIX: Enforces max_pool_size with LRU eviction.
-    /// 
+    ///
     /// QUALITY FIX: Fixed race condition by holding both locks simultaneously
-    /// during LRU eviction to maintain consistency between sessions and available_queue.
+    /// during LRU eviction to maintain consistency between sessions and
+    /// available_queue.
     pub async fn create_session(&self, capabilities: SessionCapabilities) -> Result<Uuid> {
         let session = PooledSession::new(capabilities);
         let id = session.id;
@@ -445,7 +455,7 @@ impl SessionPool {
         // Hold both locks simultaneously to prevent race conditions
         {
             let mut sessions = self.sessions.write().await;
-            
+
             // Check if we're at capacity
             if sessions.len() >= self.config.max_pool_size {
                 if self.config.enable_lru_eviction {
@@ -454,37 +464,49 @@ impl SessionPool {
                         .values()
                         .filter(|s| s.state == PooledSessionState::Idle)
                         .min_by_key(|s| s.metrics.last_activity.unwrap_or(s.created_at));
-                    
+
                     if let Some(candidate) = lru_candidate {
                         let lru_id = candidate.id;
-                        let idle_duration = chrono::Utc::now()
-                            .signed_duration_since(candidate.metrics.last_activity.unwrap_or(candidate.created_at));
-                        
+                        let idle_duration = chrono::Utc::now().signed_duration_since(
+                            candidate
+                                .metrics
+                                .last_activity
+                                .unwrap_or(candidate.created_at),
+                        );
+
                         // Only evict if idle longer than threshold
-                        if idle_duration.num_seconds() > self.config.lru_eviction_threshold_secs as i64 {
-                            info!("Evicting LRU session {} (idle for {}s)", lru_id, idle_duration.num_seconds());
-                            
+                        if idle_duration.num_seconds()
+                            > self.config.lru_eviction_threshold_secs as i64
+                        {
+                            info!(
+                                "Evicting LRU session {} (idle for {}s)",
+                                lru_id,
+                                idle_duration.num_seconds()
+                            );
+
                             // QUALITY FIX: Hold both locks during eviction to maintain consistency
                             let mut queue = self.available_queue.lock().await;
                             sessions.remove(&lru_id);
                             queue.retain(|&sid| sid != lru_id);
                             // Both locks released here
                         } else {
-                            return Err(crate::error::AgentError::ResourceLimit(
-                                format!("Max pool size ({}) reached and no idle sessions available for eviction", 
-                                    self.config.max_pool_size)
-                            ));
+                            return Err(crate::error::AgentError::ResourceLimit(format!(
+                                "Max pool size ({}) reached and no idle sessions available for \
+                                 eviction",
+                                self.config.max_pool_size
+                            )));
                         }
                     } else {
-                        return Err(crate::error::AgentError::ResourceLimit(
-                            format!("Max pool size ({}) reached with no idle sessions available", 
-                                self.config.max_pool_size)
-                        ));
+                        return Err(crate::error::AgentError::ResourceLimit(format!(
+                            "Max pool size ({}) reached with no idle sessions available",
+                            self.config.max_pool_size
+                        )));
                     }
                 } else {
-                    return Err(crate::error::AgentError::ResourceLimit(
-                        format!("Max pool size ({}) reached", self.config.max_pool_size)
-                    ));
+                    return Err(crate::error::AgentError::ResourceLimit(format!(
+                        "Max pool size ({}) reached",
+                        self.config.max_pool_size
+                    )));
                 }
             }
             // QUALITY FIX: Session stays locked, insert while still holding the lock
@@ -492,7 +514,8 @@ impl SessionPool {
         } // sessions lock released here
 
         // QUALITY FIX: Add to available queue separately since we need the write lock
-        // At this point the session is already in sessions, so we just need to update the queue
+        // At this point the session is already in sessions, so we just need to update
+        // the queue
         {
             let mut queue = self.available_queue.lock().await;
             queue.push_back(id);
@@ -562,7 +585,7 @@ impl SessionPool {
     /// Assign a session to a task
     async fn assign_session(&self, session_id: Uuid, task_id: Uuid) -> Result<()> {
         let mut sessions = self.sessions.write().await;
-        
+
         if let Some(session) = sessions.get_mut(&session_id) {
             session.transition_to(PooledSessionState::Busy);
             session.current_task_id = Some(task_id);
@@ -596,7 +619,7 @@ impl SessionPool {
     /// ARCHITECTURE FIX: Updates last_activity for LRU tracking.
     pub async fn release_session(&self, session_id: Uuid, task_id: Uuid) -> Result<()> {
         let mut sessions = self.sessions.write().await;
-        
+
         if let Some(session) = sessions.get_mut(&session_id) {
             session.transition_to(PooledSessionState::Idle);
             session.current_task_id = None;
@@ -624,20 +647,20 @@ impl SessionPool {
     /// Hibernate a session to free resources
     pub async fn hibernate_session(&self, session_id: Uuid) -> Result<()> {
         let mut sessions = self.sessions.write().await;
-        
+
         if let Some(session) = sessions.get_mut(&session_id) {
             if session.state == PooledSessionState::Idle {
                 // Serialize session state
                 session.hibernation_state = Some(serde_json::to_string(session)?);
                 session.transition_to(PooledSessionState::Hibernating);
-                
+
                 // Remove from available queue
                 drop(sessions);
                 {
                     let mut queue = self.available_queue.lock().await;
                     queue.retain(|&id| id != session_id);
                 }
-                
+
                 info!("Hibernated session {}", session_id);
             }
         }
@@ -648,20 +671,20 @@ impl SessionPool {
     /// Wake a hibernating session
     pub async fn wake_session(&self, session_id: Uuid) -> Result<()> {
         let mut sessions = self.sessions.write().await;
-        
+
         if let Some(session) = sessions.get_mut(&session_id) {
             if session.state == PooledSessionState::Hibernating {
                 // Restore session state
                 session.hibernation_state = None;
                 session.transition_to(PooledSessionState::Idle);
-                
+
                 // Add to available queue
                 drop(sessions);
                 {
                     let mut queue = self.available_queue.lock().await;
                     queue.push_back(session_id);
                 }
-                
+
                 info!("Woke session {}", session_id);
             }
         }
@@ -672,13 +695,13 @@ impl SessionPool {
     /// Terminate a session
     pub async fn terminate_session(&self, session_id: Uuid) -> Result<()> {
         let mut sessions = self.sessions.write().await;
-        
+
         if let Some(session) = sessions.get_mut(&session_id) {
             session.transition_to(PooledSessionState::Terminating);
         }
-        
+
         sessions.remove(&session_id);
-        
+
         // Remove from available queue
         {
             let mut queue = self.available_queue.lock().await;
@@ -723,7 +746,8 @@ impl SessionPool {
 
     /// Start maintenance background task
     ///
-    /// ARCHITECTURE FIX: Includes LRU eviction for sessions beyond max_pool_size.
+    /// ARCHITECTURE FIX: Includes LRU eviction for sessions beyond
+    /// max_pool_size.
     fn start_maintenance_task(&self) {
         let sessions = self.sessions.clone();
         let available_queue = self.available_queue.clone();
@@ -737,7 +761,7 @@ impl SessionPool {
 
                 let _idle_timeout = Duration::from_secs(config.idle_timeout_secs);
                 let _hibernate_timeout = Duration::from_secs(config.hibernate_timeout_secs);
-                
+
                 let now = chrono::Utc::now();
 
                 // Check for sessions to hibernate
@@ -748,14 +772,16 @@ impl SessionPool {
                     let sessions_guard = sessions.read().await;
                     for (id, session) in sessions_guard.iter() {
                         let idle_duration = now - session.state_changed_at;
-                        
-                        if session.state == PooledSessionState::Idle 
-                            && idle_duration.num_seconds() > config.idle_timeout_secs as i64 {
+
+                        if session.state == PooledSessionState::Idle
+                            && idle_duration.num_seconds() > config.idle_timeout_secs as i64
+                        {
                             to_hibernate.push(*id);
                         }
-                        
+
                         if session.state == PooledSessionState::Hibernating
-                            && idle_duration.num_seconds() > config.hibernate_timeout_secs as i64 {
+                            && idle_duration.num_seconds() > config.hibernate_timeout_secs as i64
+                        {
                             to_terminate.push(*id);
                         }
                     }
@@ -765,10 +791,11 @@ impl SessionPool {
                 for id in to_hibernate {
                     let mut sessions_guard = sessions.write().await;
                     if let Some(session) = sessions_guard.get_mut(&id) {
-                        session.hibernation_state = Some(serde_json::to_string(session).unwrap_or_default());
+                        session.hibernation_state =
+                            Some(serde_json::to_string(session).unwrap_or_default());
                         session.transition_to(PooledSessionState::Hibernating);
                     }
-                    
+
                     // Remove from available queue
                     let mut queue = available_queue.lock().await;
                     queue.retain(|&session_id| session_id != id);
@@ -780,43 +807,45 @@ impl SessionPool {
                     sessions_guard.remove(&id);
                 }
 
-                // ARCHITECTURE FIX: LRU eviction - remove excess idle sessions beyond max_pool_size
+                // ARCHITECTURE FIX: LRU eviction - remove excess idle sessions beyond
+                // max_pool_size
                 if config.enable_lru_eviction {
                     let sessions_guard = sessions.write().await;
                     let current_count = sessions_guard.len();
-                    
+
                     if current_count > config.max_pool_size {
                         let excess = current_count - config.max_pool_size;
-                        
+
                         // Find LRU idle sessions to evict
                         let mut lru_candidates: Vec<_> = sessions_guard
                             .values()
                             .filter(|s| s.state == PooledSessionState::Idle)
                             .map(|s| (s.id, s.metrics.last_activity.unwrap_or(s.created_at)))
                             .collect();
-                        
+
                         // Sort by last activity (oldest first)
                         lru_candidates.sort_by_key(|&(_, activity)| activity);
-                        
+
                         // Evict excess sessions
                         let to_evict: Vec<_> = lru_candidates
                             .into_iter()
                             .take(excess)
                             .filter(|(_, activity)| {
                                 let idle_duration = now.signed_duration_since(*activity);
-                                idle_duration.num_seconds() > config.lru_eviction_threshold_secs as i64
+                                idle_duration.num_seconds()
+                                    > config.lru_eviction_threshold_secs as i64
                             })
                             .map(|(id, _)| id)
                             .collect();
-                        
+
                         drop(sessions_guard);
-                        
+
                         for id in to_evict {
                             info!("LRU eviction: removing idle session {}", id);
                             let mut sessions_guard = sessions.write().await;
                             sessions_guard.remove(&id);
                             drop(sessions_guard);
-                            
+
                             // Remove from available queue
                             let mut queue = available_queue.lock().await;
                             queue.retain(|&session_id| session_id != id);
@@ -912,8 +941,11 @@ impl SessionPool {
                     if session.state == PooledSessionState::Busy {
                         let busy_duration = now - session.state_changed_at;
                         if busy_duration.num_minutes() > 30 {
-                            warn!("Session {} has been busy for {} minutes, marking unhealthy", 
-                                session.id, busy_duration.num_minutes());
+                            warn!(
+                                "Session {} has been busy for {} minutes, marking unhealthy",
+                                session.id,
+                                busy_duration.num_minutes()
+                            );
                             session.transition_to(PooledSessionState::Unhealthy);
                         }
                     }
@@ -960,7 +992,10 @@ mod tests {
     #[test]
     fn test_pooled_session_state_display() {
         assert_eq!(format!("{}", PooledSessionState::Active), "active");
-        assert_eq!(format!("{}", PooledSessionState::Hibernating), "hibernating");
+        assert_eq!(
+            format!("{}", PooledSessionState::Hibernating),
+            "hibernating"
+        );
     }
 
     #[test]

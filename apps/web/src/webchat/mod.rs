@@ -3,8 +3,9 @@
 //! 提供会话管理、侧边提问、Token用量统计等功能
 //! 兼容 OpenClaw V2026.3.13 Webchat 规格
 
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+
+use serde::{Deserialize, Serialize};
 
 pub mod chat;
 pub mod mobile;
@@ -478,10 +479,7 @@ impl ClipboardManager {
             MessageRole::System => "**System**: ",
         };
 
-        let markdown = format!(
-            "{}\n\n{}\n\n---\n",
-            role_prefix, message.content
-        );
+        let markdown = format!("{}\n\n{}\n\n---\n", role_prefix, message.content);
 
         Self::copy_text(&markdown).await
     }

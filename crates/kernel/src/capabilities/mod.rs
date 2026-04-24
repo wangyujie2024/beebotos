@@ -6,16 +6,15 @@ pub mod levels;
 pub mod registry;
 pub mod tokens;
 
-use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
 pub use levels::CapabilityLevel;
 pub use registry::{CapabilityRegistry, RegistryError};
+use serde::{Deserialize, Serialize};
 pub use tokens::CapabilityToken;
 
 use crate::error::SecurityError;
-use crate::AgentId;
-use crate::Result;
+use crate::{AgentId, Result};
 
 /// Set of capabilities
 #[derive(Debug, Clone, Serialize, Deserialize)]

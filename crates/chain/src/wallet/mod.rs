@@ -3,14 +3,8 @@
 //! HD wallet and secure key management using BIP39/BIP32 standards.
 //! Migrated to use Alloy primitives.
 
-use crate::compat::{Address, B256};
-use crate::constants::{
-    AES_GCM_NONCE_SIZE, AES_GCM_SALT_SIZE, ETHEREUM_DERIVATION_PREFIX, PBKDF2_ITERATIONS,
-};
-use aes_gcm::{
-    aead::{Aead, KeyInit},
-    Aes256Gcm, Nonce,
-};
+use aes_gcm::aead::{Aead, KeyInit};
+use aes_gcm::{Aes256Gcm, Nonce};
 use alloy_signer::{Signature, Signer};
 use alloy_signer_local::PrivateKeySigner;
 use coins_bip32::path::DerivationPath;
@@ -22,6 +16,11 @@ use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 use tracing::{debug, info};
 use zeroize::Zeroize;
+
+use crate::compat::{Address, B256};
+use crate::constants::{
+    AES_GCM_NONCE_SIZE, AES_GCM_SALT_SIZE, ETHEREUM_DERIVATION_PREFIX, PBKDF2_ITERATIONS,
+};
 
 /// Wallet using Alloy signer
 pub struct Wallet {
@@ -58,12 +57,13 @@ impl Drop for HDWallet {
 }
 
 /// BIP39 mnemonic wrapper with secure handling
-/// 
+///
 /// SECURITY FIX: Uses secrecy::SecretString to prevent accidental exposure
 /// and automatic zeroization on drop.
 #[derive(Clone)]
 pub struct Mnemonic {
-    /// SECURITY FIX: SecretString prevents the mnemonic from being logged or displayed
+    /// SECURITY FIX: SecretString prevents the mnemonic from being logged or
+    /// displayed
     phrase: secrecy::SecretString,
 }
 
@@ -101,7 +101,7 @@ impl Mnemonic {
     }
 
     /// Get phrase string
-    /// 
+    ///
     /// SECURITY: Returns &str for temporary access. The SecretString prevents
     /// the phrase from being accidentally logged or displayed.
     pub fn phrase(&self) -> &str {
@@ -404,8 +404,9 @@ impl HDWallet {
 
     /// Export mnemonic as encrypted string using AES-256-GCM
     ///
-    /// Uses PBKDF2 with SHA-256 for key derivation and AES-256-GCM for authenticated encryption.
-    /// This provides strong confidentiality and integrity protection for the mnemonic.
+    /// Uses PBKDF2 with SHA-256 for key derivation and AES-256-GCM for
+    /// authenticated encryption. This provides strong confidentiality and
+    /// integrity protection for the mnemonic.
     pub fn export_encrypted(&self, password: &str) -> Result<EncryptedMnemonic, WalletError> {
         // Generate random salt
         let salt: [u8; AES_GCM_SALT_SIZE] = rand::random();
@@ -447,8 +448,8 @@ impl HDWallet {
 
     /// Decrypt and restore mnemonic using AES-256-GCM
     ///
-    /// Verifies the password and decrypts the mnemonic. Returns an error if the password
-    /// is incorrect or if the ciphertext has been tampered with.
+    /// Verifies the password and decrypts the mnemonic. Returns an error if the
+    /// password is incorrect or if the ciphertext has been tampered with.
     pub fn decrypt_mnemonic(
         encrypted: &EncryptedMnemonic,
         password: &str,
@@ -689,7 +690,8 @@ mod tests {
 
     #[test]
     fn test_wallet_from_mnemonic() {
-        let test_mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+        let test_mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon \
+                             abandon abandon abandon about";
         let wallet = HDWallet::from_mnemonic(test_mnemonic).unwrap();
 
         // Derive first account
@@ -705,7 +707,8 @@ mod tests {
 
     #[test]
     fn test_derivation_path() {
-        let test_mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+        let test_mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon \
+                             abandon abandon abandon about";
         let wallet = HDWallet::from_mnemonic(test_mnemonic).unwrap();
 
         // Derive multiple accounts
@@ -722,7 +725,8 @@ mod tests {
 
     #[test]
     fn test_custom_derivation_path() {
-        let test_mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+        let test_mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon \
+                             abandon abandon abandon about";
         let wallet = HDWallet::from_mnemonic(test_mnemonic).unwrap();
 
         // Custom path
@@ -734,7 +738,8 @@ mod tests {
 
     #[test]
     fn test_mnemonic_encryption() {
-        let mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+        let mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon \
+                        abandon abandon about";
         let wallet = HDWallet::from_mnemonic(mnemonic).unwrap();
 
         // Encrypt

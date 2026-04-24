@@ -57,7 +57,10 @@ impl SkillsHub {
         if self.registry.enable(name).await {
             Ok(())
         } else {
-            Err(crate::error::AgentError::not_found(format!("Skill {}", name)))
+            Err(crate::error::AgentError::not_found(format!(
+                "Skill {}",
+                name
+            )))
         }
     }
 
@@ -65,16 +68,20 @@ impl SkillsHub {
         if self.registry.disable(name).await {
             Ok(())
         } else {
-            Err(crate::error::AgentError::not_found(format!("Skill {}", name)))
+            Err(crate::error::AgentError::not_found(format!(
+                "Skill {}",
+                name
+            )))
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::path::PathBuf;
+
     use super::*;
     use crate::skills::loader::{LoadedSkill, SkillManifest};
-    use std::path::PathBuf;
 
     fn dummy_skill(id: &str) -> LoadedSkill {
         LoadedSkill {
@@ -102,7 +109,8 @@ mod tests {
         let registry = Arc::new(SkillRegistry::new());
         let hub = SkillsHub::new(registry);
 
-        hub.register(dummy_skill("test_skill"), "test", vec![]).await;
+        hub.register(dummy_skill("test_skill"), "test", vec![])
+            .await;
 
         let info = hub.get("test_skill").await.unwrap();
         assert!(info.enabled);

@@ -5,9 +5,10 @@
 
 #![allow(dead_code)]
 
+use std::path::PathBuf;
+
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
 
 /// Key names for secure storage
 pub const KEY_API_KEY: &str = "beebotos_api_key";
@@ -15,7 +16,8 @@ pub const KEY_PRIVATE_KEY: &str = "beebotos_private_key";
 
 /// Secure storage backend
 pub struct SecureStorage {
-    /// Master key for file-based encryption (derived from machine-specific data)
+    /// Master key for file-based encryption (derived from machine-specific
+    /// data)
     master_key: Vec<u8>,
 }
 
@@ -35,16 +37,16 @@ impl SecureStorage {
         // Collect machine-specific data
         let machine_id = Self::get_machine_id()?;
         let username = whoami::username();
-        
+
         // Create a salt from machine-specific data
         let salt = format!("{}-{}", machine_id, username);
-        
+
         // Derive a 256-bit key using HKDF-SHA256
         let hkdf = Hkdf::<Sha256>::new(Some(salt.as_bytes()), machine_id.as_bytes());
         let mut key = [0u8; 32];
         hkdf.expand(b"beebotos-secure-storage-v1", &mut key)
             .map_err(|e| anyhow::anyhow!("Key derivation failed: {:?}", e))?;
-        
+
         Ok(key.to_vec())
     }
 
@@ -61,13 +63,14 @@ impl SecureStorage {
                 return Ok(id.trim().to_string());
             }
         }
-        
+
         #[cfg(target_os = "macos")]
         {
             // Use IOPlatformUUID on macOS
             if let Ok(output) = std::process::Command::new("ioreg")
                 .args(["-rd1", "-c", "IOPlatformExpertDevice"])
-                .output() {
+                .output()
+            {
                 let stdout = String::from_utf8_lossy(&output.stdout);
                 for line in stdout.lines() {
                     if line.contains("IOPlatformUUID") {
@@ -78,14 +81,15 @@ impl SecureStorage {
                 }
             }
         }
-        
+
         #[cfg(target_os = "windows")]
         {
             // Use MachineGuid on Windows
             use std::process::Command;
             if let Ok(output) = Command::new("wmic")
                 .args(["csproduct", "get", "uuid", "/value"])
-                .output() {
+                .output()
+            {
                 let stdout = String::from_utf8_lossy(&output.stdout);
                 for line in stdout.lines() {
                     if line.starts_with("UUID=") {
@@ -94,7 +98,7 @@ impl SecureStorage {
                 }
             }
         }
-        
+
         // Fallback: use home directory path hash
         let home = dirs::home_dir()
             .ok_or_else(|| anyhow::anyhow!("Could not determine home directory"))?;
@@ -132,15 +136,13 @@ impl SecureStorage {
         #[cfg(feature = "keyring")]
         {
             match keyring::Entry::new("beebotos", key) {
-                Ok(entry) => {
-                    match entry.get_password() {
-                        Ok(value) => return Ok(Some(value)),
-                        Err(keyring::Error::NoEntry) => return Ok(None),
-                        Err(e) => {
-                            log::warn!("Failed to retrieve from keyring: {}", e);
-                        }
+                Ok(entry) => match entry.get_password() {
+                    Ok(value) => return Ok(Some(value)),
+                    Err(keyring::Error::NoEntry) => return Ok(None),
+                    Err(e) => {
+                        log::warn!("Failed to retrieve from keyring: {}", e);
                     }
-                }
+                },
                 Err(e) => {
                     log::warn!("Failed to create keyring entry: {}", e);
                 }
@@ -217,10 +219,8 @@ impl SecureStorage {
 
     /// Encrypt data using AES-256-GCM
     fn encrypt(&self, plaintext: &str) -> Result<EncryptedData> {
-        use aes_gcm::{
-            aead::{Aead, KeyInit},
-            Aes256Gcm, Nonce,
-        };
+        use aes_gcm::aead::{Aead, KeyInit};
+        use aes_gcm::{Aes256Gcm, Nonce};
         use rand::RngCore;
 
         let cipher = Aes256Gcm::new_from_slice(&self.master_key)
@@ -245,13 +245,14 @@ impl SecureStorage {
 
     /// Decrypt data using AES-256-GCM
     fn decrypt(&self, encrypted: &EncryptedData) -> Result<String> {
-        use aes_gcm::{
-            aead::{Aead, KeyInit},
-            Aes256Gcm, Nonce,
-        };
+        use aes_gcm::aead::{Aead, KeyInit};
+        use aes_gcm::{Aes256Gcm, Nonce};
 
         if encrypted.version != 1 {
-            return Err(anyhow::anyhow!("Unsupported encryption version: {}", encrypted.version));
+            return Err(anyhow::anyhow!(
+                "Unsupported encryption version: {}",
+                encrypted.version
+            ));
         }
 
         let cipher = Aes256Gcm::new_from_slice(&self.master_key)
@@ -262,9 +263,12 @@ impl SecureStorage {
 
         let ciphertext = b64::decode(&encrypted.ciphertext)?;
 
-        let plaintext = cipher
-            .decrypt(nonce, ciphertext.as_ref())
-            .map_err(|e| anyhow::anyhow!("Decryption failed (wrong machine or tampered data): {:?}", e))?;
+        let plaintext = cipher.decrypt(nonce, ciphertext.as_ref()).map_err(|e| {
+            anyhow::anyhow!(
+                "Decryption failed (wrong machine or tampered data): {:?}",
+                e
+            )
+        })?;
 
         String::from_utf8(plaintext)
             .map_err(|e| anyhow::anyhow!("Invalid UTF-8 in decrypted data: {}", e))
@@ -325,8 +329,7 @@ impl SecureStorage {
             .enumerate()
             .map(|(i, b)| b ^ key_bytes[i % key_bytes.len()])
             .collect();
-        String::from_utf8(decrypted)
-            .map_err(|e| anyhow::anyhow!("Invalid UTF-8: {}", e))
+        String::from_utf8(decrypted).map_err(|e| anyhow::anyhow!("Invalid UTF-8: {}", e))
     }
 }
 
@@ -370,10 +373,10 @@ mod tests {
     fn test_encryption_roundtrip() {
         let storage = SecureStorage::new().unwrap();
         let data = "secret-password-123!@#";
-        
+
         let encrypted = storage.encrypt(data).unwrap();
         let decrypted = storage.decrypt(&encrypted).unwrap();
-        
+
         assert_eq!(data, decrypted);
     }
 
@@ -381,10 +384,10 @@ mod tests {
     fn test_different_data_produces_different_ciphertexts() {
         let storage = SecureStorage::new().unwrap();
         let data = "test-data";
-        
+
         let encrypted1 = storage.encrypt(data).unwrap();
         let encrypted2 = storage.encrypt(data).unwrap();
-        
+
         // Nonce should be different
         assert_ne!(encrypted1.nonce, encrypted2.nonce);
         assert_ne!(encrypted1.ciphertext, encrypted2.ciphertext);
@@ -394,11 +397,11 @@ mod tests {
     fn test_tampered_data_fails() {
         let storage = SecureStorage::new().unwrap();
         let data = "sensitive-data";
-        
+
         let mut encrypted = storage.encrypt(data).unwrap();
         // Tamper with the ciphertext
         encrypted.ciphertext = b64::encode(b"tampered-data-padding-here");
-        
+
         // Decryption should fail
         assert!(storage.decrypt(&encrypted).is_err());
     }

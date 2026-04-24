@@ -2,15 +2,17 @@
 //!
 //! On-chain identity registry using Alloy contracts.
 
+use std::sync::Arc;
+
+use alloy_primitives::{FixedBytes, B256, U256};
+use alloy_provider::Provider as AlloyProvider;
+use tracing::{debug, error, info, instrument};
+
 use crate::compat::Address;
 use crate::config::ChainConfig;
 use crate::contracts::{AgentIdentity, AgentRegistry};
 use crate::identity::IdentityRegistry;
 use crate::{ChainError, Result};
-use alloy_primitives::{FixedBytes, B256, U256};
-use alloy_provider::Provider as AlloyProvider;
-use std::sync::Arc;
-use tracing::{debug, error, info, instrument};
 
 /// Agent ID type (bytes32)
 pub type AgentId = FixedBytes<32>;
@@ -753,7 +755,8 @@ impl<P: AlloyProvider + Clone + Send + Sync> IdentityRegistry for OnChainIdentit
             "Registering identity via IdentityRegistry trait"
         );
 
-        // Generate a default public key (in real application, should pass real public key)
+        // Generate a default public key (in real application, should pass real public
+        // key)
         let public_key =
             B256::from_slice(&address.as_slice()[..32].try_into().unwrap_or([0u8; 32]));
 

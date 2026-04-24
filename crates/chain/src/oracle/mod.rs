@@ -1,8 +1,10 @@
 //! Oracle Module
 
-use crate::compat::{Address, U256};
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+
+use serde::{Deserialize, Serialize};
+
+use crate::compat::{Address, U256};
 
 /// Price data
 #[derive(Debug, Clone, Serialize, Deserialize)]

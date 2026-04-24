@@ -13,8 +13,7 @@ use crate::error::Result;
 /// Implementations are expected to serialize the config to JSON (or other
 /// canonical representation), encrypt it, and return a base64-encoded or
 /// otherwise self-describing ciphertext string.
-pub type ChannelConfigEncryptor =
-    Arc<dyn Fn(&UserChannelConfig) -> Result<String> + Send + Sync>;
+pub type ChannelConfigEncryptor = Arc<dyn Fn(&UserChannelConfig) -> Result<String> + Send + Sync>;
 
 /// Returns a no-op encryptor that simply JSON-serializes the config.
 ///

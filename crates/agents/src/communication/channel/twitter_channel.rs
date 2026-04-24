@@ -56,7 +56,7 @@ impl Default for TwitterChannelConfig {
         let mut base = BaseChannelConfig::default();
         // Twitter defaults to Polling mode
         base.connection_mode = ConnectionMode::Polling;
-        
+
         Self {
             bearer_token: None,
             api_key: None,

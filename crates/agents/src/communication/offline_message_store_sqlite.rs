@@ -24,8 +24,9 @@ impl SqliteOfflineMessageStore {
 #[async_trait]
 impl OfflineMessageStore for SqliteOfflineMessageStore {
     async fn enqueue(&self, agent_id: &str, ctx: &UserMessageContext) -> Result<()> {
-        let payload = serde_json::to_string(ctx)
-            .map_err(|e| AgentError::serialization(format!("Failed to serialize offline message: {}", e)))?;
+        let payload = serde_json::to_string(ctx).map_err(|e| {
+            AgentError::serialization(format!("Failed to serialize offline message: {}", e))
+        })?;
 
         let mut tx = self
             .pool
@@ -58,8 +59,13 @@ impl OfflineMessageStore for SqliteOfflineMessageStore {
             .bind(agent_id)
             .execute(&mut *tx)
             .await
-            .map_err(|e| AgentError::Database(format!("Failed to prune offline messages: {}", e)))?;
-            warn!("Agent {} offline queue overflow, dropped oldest message", agent_id);
+            .map_err(|e| {
+                AgentError::Database(format!("Failed to prune offline messages: {}", e))
+            })?;
+            warn!(
+                "Agent {} offline queue overflow, dropped oldest message",
+                agent_id
+            );
         }
 
         sqlx::query(
@@ -119,7 +125,10 @@ impl OfflineMessageStore for SqliteOfflineMessageStore {
             .rows_affected();
 
         if deleted > 0 {
-            info!("Dequeued {} offline messages for agent {}", deleted, agent_id);
+            info!(
+                "Dequeued {} offline messages for agent {}",
+                deleted, agent_id
+            );
         }
 
         Ok(messages)
@@ -130,7 +139,9 @@ impl OfflineMessageStore for SqliteOfflineMessageStore {
             .bind(agent_id)
             .execute(&self.pool)
             .await
-            .map_err(|e| AgentError::Database(format!("Failed to clear offline messages: {}", e)))?;
+            .map_err(|e| {
+                AgentError::Database(format!("Failed to clear offline messages: {}", e))
+            })?;
         Ok(())
     }
 }
@@ -144,7 +155,9 @@ struct OfflineMessageRow {
 /// In-memory offline message store for testing.
 pub struct MemoryOfflineMessageStore {
     max_per_agent: usize,
-    data: std::sync::Arc<tokio::sync::RwLock<std::collections::HashMap<String, Vec<UserMessageContext>>>>,
+    data: std::sync::Arc<
+        tokio::sync::RwLock<std::collections::HashMap<String, Vec<UserMessageContext>>>,
+    >,
 }
 
 impl MemoryOfflineMessageStore {

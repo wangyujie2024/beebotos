@@ -10,27 +10,25 @@ pub mod transport;
 // 🟢 P0 FIX: ACP 2.0 Protocol Implementation
 pub mod acp20_protocol;
 
-pub use acp20_protocol::{
-    Acp20Protocol, AcpSession, AcpEvent, AcpError,
-    AgentCapabilityProfile, Capability, CapabilityType,
-    SessionType, SessionState, SessionParticipant,
-    TaskAssignment, TaskAssignmentStatus,
-    CollaborationProposal, ProposalType, NegotiationResponse, ResponseType,
-    ResourceConstraints, PerformanceMetrics, ServiceEndpoint,
-    CommunicationPreferences, RetryPolicy, TimeoutSettings,
-    ACP20_VERSION,
-};
-
 use std::sync::Arc;
 
+pub use acp20_protocol::{
+    Acp20Protocol, AcpError, AcpEvent, AcpSession, AgentCapabilityProfile, Capability,
+    CapabilityType, CollaborationProposal, CommunicationPreferences, NegotiationResponse,
+    PerformanceMetrics, ProposalType, ResourceConstraints, ResponseType, RetryPolicy,
+    ServiceEndpoint, SessionParticipant, SessionState, SessionType, TaskAssignment,
+    TaskAssignmentStatus, TimeoutSettings, ACP20_VERSION,
+};
 use message::{A2AMessage, MessageType};
 use protocol::A2AError;
 use tokio::sync::Mutex;
+
 use crate::types::AgentId;
 
 /// A2A Client with enhanced security
 ///
-/// SECURITY FIX: Implements end-to-end encryption and mandatory signature verification
+/// SECURITY FIX: Implements end-to-end encryption and mandatory signature
+/// verification
 pub struct A2AClient {
     discovery: Arc<discovery::DiscoveryService>,
     #[allow(dead_code)]
@@ -76,7 +74,8 @@ impl A2AClient {
         })
     }
 
-    /// Send a message with end-to-end encryption and mandatory signature verification
+    /// Send a message with end-to-end encryption and mandatory signature
+    /// verification
     ///
     /// SECURITY FIX:
     /// - Messages are encrypted using the recipient's public key
@@ -103,16 +102,15 @@ impl A2AClient {
         // 🟠 HIGH FIX: Sign the message with our private key
         let signed = self
             .security
-            .sign_message(
-                &payload_bytes,
-                Utc::now().timestamp() as u64,
-            )
+            .sign_message(&payload_bytes, Utc::now().timestamp() as u64)
             .map_err(|e| A2AError::Security(e.to_string()))?;
 
         // SECURITY FIX: Encrypt the payload for end-to-end encryption
-        let recipient_public_key = agent.public_key.as_ref()
+        let recipient_public_key = agent
+            .public_key
+            .as_ref()
             .ok_or_else(|| A2AError::Security("Recipient has no public key".to_string()))?;
-        
+
         let encrypted_payload = self
             .security
             .encrypt_for_recipient(&payload_bytes, recipient_public_key)
@@ -145,19 +143,25 @@ impl A2AClient {
         if let Some(ref sig) = response.signature {
             let response_payload_bytes = serde_json::to_vec(&response.payload)
                 .map_err(|e| A2AError::Serialization(e.to_string()))?;
-            
-            let response_signer_key = self.discovery
+
+            let response_signer_key = self
+                .discovery
                 .get_agent_public_key(recipient_agent_id)
                 .ok_or_else(|| A2AError::Security("Unknown response signer".to_string()))?;
-            
+
             self.security
                 .verify_signature(&response_payload_bytes, sig, &response_signer_key)
                 .map_err(|e| A2AError::Security(format!("Invalid response signature: {}", e)))?;
         } else {
-            return Err(A2AError::Security("Response missing mandatory signature".to_string()));
+            return Err(A2AError::Security(
+                "Response missing mandatory signature".to_string(),
+            ));
         }
 
-        tracing::info!("Message sent to {}, received verified response", recipient_agent_id);
+        tracing::info!(
+            "Message sent to {}, received verified response",
+            recipient_agent_id
+        );
 
         Ok(response)
     }
@@ -165,29 +169,31 @@ impl A2AClient {
     /// Receive and verify a message
     ///
     /// SECURITY FIX: Verifies signatures and decrypts payload
-    /// 
+    ///
     /// Protocol:
     /// 1. Message is signed, then encrypted (sign-then-encrypt)
     /// 2. We must decrypt first to get the original payload
     /// 3. Then verify the signature on the decrypted payload
     pub async fn receive_message(&self, message: &A2AMessage) -> Result<Vec<u8>, A2AError> {
         // Verify signature is present
-        let signature = message.signature.as_ref()
+        let signature = message
+            .signature
+            .as_ref()
             .ok_or_else(|| A2AError::Security("Message missing mandatory signature".to_string()))?;
 
         // Get sender's public key
         let sender_id = message.from.to_string();
-        let sender_public_key = self.discovery
+        let sender_public_key = self
+            .discovery
             .get_agent_public_key(&sender_id)
             .ok_or_else(|| A2AError::Security(format!("Unknown sender: {}", sender_id)))?;
 
         // SECURITY FIX: Decrypt first (sign-then-encrypt protocol)
         let decrypted_payload = match &message.payload {
-            message::MessagePayload::Encrypted(encrypted_data) => {
-                self.security
-                    .decrypt(encrypted_data)
-                    .map_err(|e| A2AError::Security(format!("Decryption failed: {}", e)))?
-            }
+            message::MessagePayload::Encrypted(encrypted_data) => self
+                .security
+                .decrypt(encrypted_data)
+                .map_err(|e| A2AError::Security(format!("Decryption failed: {}", e)))?,
             message::MessagePayload::Plain(data) => data.clone(),
             _ => serde_json::to_vec(&message.payload)
                 .map_err(|e| A2AError::Serialization(e.to_string()))?,
@@ -236,7 +242,7 @@ mod tests {
     async fn test_message_signature_verification() {
         let agent_id = AgentId::from_string("test-agent");
         let client = A2AClient::new(agent_id).expect("Failed to create client");
-        
+
         // Create a test message
         let message = A2AMessage::new(
             MessageType::Request,
@@ -244,7 +250,7 @@ mod tests {
             Some(AgentId::from_string("recipient")),
             message::MessagePayload::Plain(vec![1, 2, 3]),
         );
-        
+
         // The message should not have a signature initially
         assert!(message.signature.is_none());
     }

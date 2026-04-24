@@ -2,9 +2,10 @@
 //!
 //! 与 Gateway 的 WebChat API 对接
 
+use serde::{Deserialize, Serialize};
+
 use super::client::{ApiClient, ApiError};
 use crate::webchat::{ChatMessage, ChatSession, UsagePanel};
-use serde::{Deserialize, Serialize};
 
 /// 后端消息响应（用于兼容后端 JSON 格式）
 #[derive(Clone, Debug, Deserialize)]
@@ -72,32 +73,55 @@ impl WebchatApiService {
 
     /// 获取会话详情
     pub async fn get_session(&self, id: &str) -> Result<ChatSession, ApiError> {
-        self.client.get(&format!("/webchat/sessions/{}", js_sys::encode_uri_component(id))).await
+        self.client
+            .get(&format!(
+                "/webchat/sessions/{}",
+                js_sys::encode_uri_component(id)
+            ))
+            .await
     }
 
     /// 删除会话
     pub async fn delete_session(&self, id: &str) -> Result<(), ApiError> {
-        self.client.delete(&format!("/webchat/sessions/{}", js_sys::encode_uri_component(id))).await
+        self.client
+            .delete(&format!(
+                "/webchat/sessions/{}",
+                js_sys::encode_uri_component(id)
+            ))
+            .await
     }
 
     /// 固定/取消固定会话
     pub async fn toggle_pin(&self, id: &str) -> Result<ChatSession, ApiError> {
         self.client
-            .post(&format!("/webchat/sessions/{}/pin", js_sys::encode_uri_component(id)), &serde_json::json!({}))
+            .post(
+                &format!("/webchat/sessions/{}/pin", js_sys::encode_uri_component(id)),
+                &serde_json::json!({}),
+            )
             .await
     }
 
     /// 归档会话
     pub async fn archive_session(&self, id: &str) -> Result<serde_json::Value, ApiError> {
         self.client
-            .post(&format!("/webchat/sessions/{}/archive", js_sys::encode_uri_component(id)), &serde_json::json!({}))
+            .post(
+                &format!(
+                    "/webchat/sessions/{}/archive",
+                    js_sys::encode_uri_component(id)
+                ),
+                &serde_json::json!({}),
+            )
             .await
     }
 
     /// 获取会话消息
     pub async fn get_messages(&self, session_id: &str) -> Result<Vec<ChatMessage>, ApiError> {
-        let responses: Vec<BackendMessageResponse> = self.client
-            .get(&format!("/webchat/sessions/{}/messages", js_sys::encode_uri_component(session_id)))
+        let responses: Vec<BackendMessageResponse> = self
+            .client
+            .get(&format!(
+                "/webchat/sessions/{}/messages",
+                js_sys::encode_uri_component(session_id)
+            ))
             .await?;
         Ok(responses.into_iter().map(Into::into).collect())
     }
@@ -133,7 +157,10 @@ impl WebchatApiService {
 
         self.client
             .post(
-                &format!("/webchat/sessions/{}/messages/stream", js_sys::encode_uri_component(session_id)),
+                &format!(
+                    "/webchat/sessions/{}/messages/stream",
+                    js_sys::encode_uri_component(session_id)
+                ),
                 &request,
             )
             .await
@@ -146,14 +173,26 @@ impl WebchatApiService {
         };
 
         self.client
-            .put(&format!("/webchat/sessions/{}/title", js_sys::encode_uri_component(id)), &request)
+            .put(
+                &format!(
+                    "/webchat/sessions/{}/title",
+                    js_sys::encode_uri_component(id)
+                ),
+                &request,
+            )
             .await
     }
 
     /// 清空会话消息
     pub async fn clear_messages(&self, id: &str) -> Result<(), ApiError> {
         self.client
-            .post(&format!("/webchat/sessions/{}/clear", js_sys::encode_uri_component(id)), &serde_json::json!({}))
+            .post(
+                &format!(
+                    "/webchat/sessions/{}/clear",
+                    js_sys::encode_uri_component(id)
+                ),
+                &serde_json::json!({}),
+            )
             .await
     }
 
@@ -180,7 +219,10 @@ impl WebchatApiService {
     pub async fn export_session(&self, id: &str) -> Result<String, ApiError> {
         let response: ExportResponse = self
             .client
-            .get(&format!("/webchat/sessions/{}/export", js_sys::encode_uri_component(id)))
+            .get(&format!(
+                "/webchat/sessions/{}/export",
+                js_sys::encode_uri_component(id)
+            ))
             .await?;
 
         Ok(response.data)

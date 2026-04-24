@@ -3,12 +3,13 @@
 //! Provides database persistence for agent state records,
 //! enabling recovery after restarts and audit trails.
 
-use sqlx::{SqlitePool, Row};
 use std::collections::HashMap;
+
+use sqlx::{Row, SqlitePool};
 use tracing::{error, info, warn};
 
-use crate::state_manager::{AgentState, AgentStateRecord, AgentStats};
 use crate::error::AgentError;
+use crate::state_manager::{AgentState, AgentStateRecord, AgentStats};
 
 /// State persistence manager
 pub struct StatePersistence {
@@ -101,7 +102,7 @@ impl StatePersistence {
                 total_execution_time_ms = excluded.total_execution_time_ms,
                 metadata = excluded.metadata,
                 updated_at = datetime('now')
-            "#
+            "#,
         )
         .bind(&record.agent_id)
         .bind(&state_str)
@@ -127,7 +128,10 @@ impl StatePersistence {
     }
 
     /// Load agent state record from database
-    pub async fn load_record(&self, agent_id: &str) -> Result<Option<AgentStateRecord>, AgentError> {
+    pub async fn load_record(
+        &self,
+        agent_id: &str,
+    ) -> Result<Option<AgentStateRecord>, AgentError> {
         let db = match &self.db {
             Some(db) => db,
             None => return Ok(None),
@@ -141,7 +145,7 @@ impl StatePersistence {
                 successful_tasks, failed_tasks, total_execution_time_ms, metadata
             FROM agent_states
             WHERE agent_id = ?1
-            "#
+            "#,
         )
         .bind(agent_id)
         .fetch_optional(db)
@@ -176,7 +180,7 @@ impl StatePersistence {
             FROM agent_states
             WHERE state NOT IN ('Stopped', 'Error')
             ORDER BY registered_at DESC
-            "#
+            "#,
         )
         .fetch_all(db)
         .await
@@ -217,37 +221,63 @@ impl StatePersistence {
 
     /// Convert database row to AgentStateRecord
     fn row_to_record(row: sqlx::sqlite::SqliteRow) -> Result<AgentStateRecord, AgentError> {
-        let state_str: String = row.try_get("state")
+        let state_str: String = row
+            .try_get("state")
             .map_err(|e| AgentError::Database(e.to_string()))?;
         let state = parse_agent_state(&state_str)?;
 
-        let prev_state_str: Option<String> = row.try_get("previous_state")
+        let prev_state_str: Option<String> = row
+            .try_get("previous_state")
             .map_err(|e| AgentError::Database(e.to_string()))?;
         let previous_state = prev_state_str
             .map(|s: String| parse_agent_state(s.as_str()))
             .transpose()?;
 
-        let metadata_json: String = row.try_get("metadata")
+        let metadata_json: String = row
+            .try_get("metadata")
             .map_err(|e| AgentError::Database(e.to_string()))?;
         let metadata: HashMap<String, String> = serde_json::from_str(&metadata_json)
             .map_err(|e| AgentError::Serialization(e.to_string()))?;
 
         let record = AgentStateRecord {
-            agent_id: row.try_get("agent_id").map_err(|e| AgentError::Database(e.to_string()))?,
+            agent_id: row
+                .try_get("agent_id")
+                .map_err(|e| AgentError::Database(e.to_string()))?,
             state,
             previous_state,
-            registered_at: row.try_get("registered_at").map_err(|e| AgentError::Database(e.to_string()))?,
-            state_changed_at: row.try_get("state_changed_at").map_err(|e| AgentError::Database(e.to_string()))?,
-            current_task_id: row.try_get("current_task_id").map_err(|e| AgentError::Database(e.to_string()))?,
-            kernel_task_id: row.try_get::<Option<i64>, _>("kernel_task_id")
+            registered_at: row
+                .try_get("registered_at")
+                .map_err(|e| AgentError::Database(e.to_string()))?,
+            state_changed_at: row
+                .try_get("state_changed_at")
+                .map_err(|e| AgentError::Database(e.to_string()))?,
+            current_task_id: row
+                .try_get("current_task_id")
+                .map_err(|e| AgentError::Database(e.to_string()))?,
+            kernel_task_id: row
+                .try_get::<Option<i64>, _>("kernel_task_id")
                 .map_err(|e| AgentError::Database(e.to_string()))?
                 .map(|id| id as u64),
-            last_error: row.try_get("last_error").map_err(|e| AgentError::Database(e.to_string()))?,
+            last_error: row
+                .try_get("last_error")
+                .map_err(|e| AgentError::Database(e.to_string()))?,
             stats: AgentStats {
-                total_tasks: row.try_get::<i64, _>("total_tasks").map_err(|e| AgentError::Database(e.to_string()))? as u64,
-                successful_tasks: row.try_get::<i64, _>("successful_tasks").map_err(|e| AgentError::Database(e.to_string()))? as u64,
-                failed_tasks: row.try_get::<i64, _>("failed_tasks").map_err(|e| AgentError::Database(e.to_string()))? as u64,
-                total_execution_time_ms: row.try_get::<i64, _>("total_execution_time_ms").map_err(|e| AgentError::Database(e.to_string()))? as u64,
+                total_tasks: row
+                    .try_get::<i64, _>("total_tasks")
+                    .map_err(|e| AgentError::Database(e.to_string()))?
+                    as u64,
+                successful_tasks: row
+                    .try_get::<i64, _>("successful_tasks")
+                    .map_err(|e| AgentError::Database(e.to_string()))?
+                    as u64,
+                failed_tasks: row
+                    .try_get::<i64, _>("failed_tasks")
+                    .map_err(|e| AgentError::Database(e.to_string()))?
+                    as u64,
+                total_execution_time_ms: row
+                    .try_get::<i64, _>("total_execution_time_ms")
+                    .map_err(|e| AgentError::Database(e.to_string()))?
+                    as u64,
                 last_task_at: None,
             },
             metadata,
@@ -288,7 +318,7 @@ impl StatePersistence {
 
             CREATE INDEX IF NOT EXISTS idx_agent_states_state ON agent_states(state);
             CREATE INDEX IF NOT EXISTS idx_agent_states_updated ON agent_states(updated_at);
-            "#
+            "#,
         )
         .execute(db)
         .await
@@ -307,7 +337,7 @@ impl StatePersistence {
 
             CREATE INDEX IF NOT EXISTS idx_state_history_agent ON agent_state_history(agent_id);
             CREATE INDEX IF NOT EXISTS idx_state_history_created ON agent_state_history(created_at);
-            "#
+            "#,
         )
         .execute(db)
         .await
@@ -331,7 +361,7 @@ impl StatePersistence {
             );
 
             CREATE INDEX IF NOT EXISTS idx_agent_configs_agent_id ON agent_configs(agent_id);
-            "#
+            "#,
         )
         .execute(db)
         .await
@@ -372,7 +402,7 @@ impl StatePersistence {
                 memory_config = excluded.memory_config,
                 personality_config = excluded.personality_config,
                 updated_at = datetime('now')
-            "#
+            "#,
         )
         .bind(&config.agent_id)
         .bind(&config.name)
@@ -391,8 +421,9 @@ impl StatePersistence {
             AgentError::Database(e.to_string())
         })?;
 
-        // 🔧 FIX: Also ensure the agent exists in the `agents` table to satisfy FK constraints
-        // (e.g. agent_channel_bindings.agent_id REFERENCES agents(id))
+        // 🔧 FIX: Also ensure the agent exists in the `agents` table to satisfy FK
+        // constraints (e.g. agent_channel_bindings.agent_id REFERENCES
+        // agents(id))
         let model_provider = config.model_config.provider.clone();
         let model_name = config.model_config.model.clone();
         sqlx::query(
@@ -409,7 +440,7 @@ impl StatePersistence {
                 model_provider = excluded.model_provider,
                 model_name = excluded.model_name,
                 updated_at = excluded.updated_at
-            "#
+            "#,
         )
         .bind(&config.agent_id)
         .bind(&config.name)
@@ -426,12 +457,16 @@ impl StatePersistence {
             AgentError::Database(e.to_string())
         })?;
 
-        info!("Agent config and agents table record saved for {}", config.agent_id);
+        info!(
+            "Agent config and agents table record saved for {}",
+            config.agent_id
+        );
         Ok(())
     }
 
-    /// 🔧 FIX: Fast-sync only the agents table (used during recovery to satisfy FK constraints
-    /// without the overhead of full save_config which updates agent_configs too).
+    /// 🔧 FIX: Fast-sync only the agents table (used during recovery to satisfy
+    /// FK constraints without the overhead of full save_config which
+    /// updates agent_configs too).
     pub async fn sync_agents_table(&self, config: &PersistedAgentConfig) -> Result<(), AgentError> {
         let db = match &self.db {
             Some(db) => db,
@@ -471,7 +506,10 @@ impl StatePersistence {
     }
 
     /// 🔧 FIX: Load full agent configuration
-    pub async fn load_config(&self, agent_id: &str) -> Result<Option<PersistedAgentConfig>, AgentError> {
+    pub async fn load_config(
+        &self,
+        agent_id: &str,
+    ) -> Result<Option<PersistedAgentConfig>, AgentError> {
         let db = match &self.db {
             Some(db) => db,
             None => return Ok(None),
@@ -484,7 +522,7 @@ impl StatePersistence {
                 model_config, memory_config, personality_config, created_at, updated_at
             FROM agent_configs
             WHERE agent_id = ?1
-            "#
+            "#,
         )
         .bind(agent_id)
         .fetch_optional(db)
@@ -505,37 +543,54 @@ impl StatePersistence {
 
     /// 🔧 FIX: Convert database row to PersistedAgentConfig
     fn row_to_config(row: sqlx::sqlite::SqliteRow) -> Result<PersistedAgentConfig, AgentError> {
-        let capabilities_json: String = row.try_get("capabilities")
+        let capabilities_json: String = row
+            .try_get("capabilities")
             .map_err(|e| AgentError::Database(e.to_string()))?;
         let capabilities: Vec<String> = serde_json::from_str(&capabilities_json)
             .map_err(|e| AgentError::Serialization(e.to_string()))?;
 
-        let model_config_json: String = row.try_get("model_config")
+        let model_config_json: String = row
+            .try_get("model_config")
             .map_err(|e| AgentError::Database(e.to_string()))?;
         let model_config: crate::ModelConfig = serde_json::from_str(&model_config_json)
             .map_err(|e| AgentError::Serialization(e.to_string()))?;
 
-        let memory_config_json: String = row.try_get("memory_config")
+        let memory_config_json: String = row
+            .try_get("memory_config")
             .map_err(|e| AgentError::Database(e.to_string()))?;
         let memory_config: crate::MemoryConfig = serde_json::from_str(&memory_config_json)
             .map_err(|e| AgentError::Serialization(e.to_string()))?;
 
-        let personality_config_json: String = row.try_get("personality_config")
+        let personality_config_json: String = row
+            .try_get("personality_config")
             .map_err(|e| AgentError::Database(e.to_string()))?;
-        let personality_config: crate::PersonalityConfig = serde_json::from_str(&personality_config_json)
-            .map_err(|e| AgentError::Serialization(e.to_string()))?;
+        let personality_config: crate::PersonalityConfig =
+            serde_json::from_str(&personality_config_json)
+                .map_err(|e| AgentError::Serialization(e.to_string()))?;
 
         Ok(PersistedAgentConfig {
-            agent_id: row.try_get("agent_id").map_err(|e| AgentError::Database(e.to_string()))?,
-            name: row.try_get("name").map_err(|e| AgentError::Database(e.to_string()))?,
-            description: row.try_get("description").map_err(|e| AgentError::Database(e.to_string()))?,
-            version: row.try_get("version").map_err(|e| AgentError::Database(e.to_string()))?,
+            agent_id: row
+                .try_get("agent_id")
+                .map_err(|e| AgentError::Database(e.to_string()))?,
+            name: row
+                .try_get("name")
+                .map_err(|e| AgentError::Database(e.to_string()))?,
+            description: row
+                .try_get("description")
+                .map_err(|e| AgentError::Database(e.to_string()))?,
+            version: row
+                .try_get("version")
+                .map_err(|e| AgentError::Database(e.to_string()))?,
             capabilities,
             model_config,
             memory_config,
             personality_config,
-            created_at: row.try_get("created_at").map_err(|e| AgentError::Database(e.to_string()))?,
-            updated_at: row.try_get("updated_at").map_err(|e| AgentError::Database(e.to_string()))?,
+            created_at: row
+                .try_get("created_at")
+                .map_err(|e| AgentError::Database(e.to_string()))?,
+            updated_at: row
+                .try_get("updated_at")
+                .map_err(|e| AgentError::Database(e.to_string()))?,
         })
     }
 }
@@ -552,11 +607,15 @@ fn parse_agent_state(s: &str) -> Result<AgentState, AgentError> {
         "Registered" => Ok(AgentState::Registered),
         "Initializing" => Ok(AgentState::Initializing),
         "Idle" => Ok(AgentState::Idle),
-        s if s.starts_with("Working") => Ok(AgentState::Working { task_id: String::new() }),
+        s if s.starts_with("Working") => Ok(AgentState::Working {
+            task_id: String::new(),
+        }),
         "Paused" => Ok(AgentState::Paused),
         "ShuttingDown" => Ok(AgentState::ShuttingDown),
         "Stopped" => Ok(AgentState::Stopped),
-        s if s.starts_with("Error") => Ok(AgentState::Error { message: s.to_string() }),
+        s if s.starts_with("Error") => Ok(AgentState::Error {
+            message: s.to_string(),
+        }),
         _ => Err(AgentError::InvalidConfig(format!("Unknown state: {}", s))),
     }
 }

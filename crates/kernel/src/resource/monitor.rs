@@ -1,9 +1,11 @@
 //! Resource monitoring
 
-use super::{ResourceLimits, ResourceStatus, ResourceUsage};
-use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::sync::Arc;
+
+use parking_lot::Mutex;
+
+use super::{ResourceLimits, ResourceStatus, ResourceUsage};
 
 /// Resource monitor for tracking usage
 #[derive(Debug, Clone)]

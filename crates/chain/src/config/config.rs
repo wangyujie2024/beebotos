@@ -2,15 +2,16 @@
 //!
 //! Chain configuration with validation using the validator crate.
 
+use serde::{Deserialize, Serialize};
+use tracing::{error, info, instrument, warn};
+use validator::{Validate, ValidationError};
+
 use crate::compat::Address;
 use crate::constants::{
     DEFAULT_GAS_LIMIT, ETH_ADDRESS_LENGTH, FAST_CONFIRMATION_BLOCKS, MAX_GAS_LIMIT, MIN_GAS_LIMIT,
     NO_CONFIRMATION_BLOCKS,
 };
 use crate::{ChainError, Result};
-use serde::{Deserialize, Serialize};
-use tracing::{error, info, instrument, warn};
-use validator::{Validate, ValidationError};
 
 /// Custom validation for Ethereum addresses
 fn validate_ethereum_address(address: &str) -> std::result::Result<(), ValidationError> {

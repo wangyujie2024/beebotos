@@ -2,8 +2,9 @@
 //!
 //! Focus and saliency computation.
 
-use crate::utils::compare_f32;
 use serde::{Deserialize, Serialize};
+
+use crate::utils::compare_f32;
 
 /// Attention focus
 #[derive(Debug, Clone, Serialize, Deserialize)]

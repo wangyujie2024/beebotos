@@ -3,7 +3,8 @@
 //! Provides declarative macros to reduce boilerplate when defining
 //! chain-specific Block, Transaction, and Event types.
 
-/// Macro to generate `From<Block>` implementation for chain-specific block types
+/// Macro to generate `From<Block>` implementation for chain-specific block
+/// types
 #[macro_export]
 macro_rules! define_block_from {
     (
@@ -30,7 +31,8 @@ macro_rules! define_block_from {
     };
 }
 
-/// Macro to generate `From<Transaction>` implementation for chain-specific transaction types
+/// Macro to generate `From<Transaction>` implementation for chain-specific
+/// transaction types
 #[macro_export]
 macro_rules! define_transaction_from {
     (

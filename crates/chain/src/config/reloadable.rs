@@ -1,13 +1,16 @@
 //! Reloadable Configuration Module
 //!
-//! Provides hot-reloading of configuration from files and environment variables.
+//! Provides hot-reloading of configuration from files and environment
+//! variables.
 
-use super::ChainConfig;
-use crate::{ChainError, Result};
 use std::sync::Arc;
+
 use tokio::sync::{mpsc, RwLock};
 use tracing::info;
 use validator::Validate;
+
+use super::ChainConfig;
+use crate::{ChainError, Result};
 
 /// Configuration reload manager
 pub struct ConfigReloader {

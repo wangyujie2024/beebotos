@@ -1,6 +1,7 @@
 //! Base Module
 //!
-//! Base is a Layer 2 scaling solution for Ethereum built by Coinbase using Optimism's OP Stack.
+//! Base is a Layer 2 scaling solution for Ethereum built by Coinbase using
+//! Optimism's OP Stack.
 //! - Chain ID: 8453 (Mainnet), 84532 (Sepolia Testnet)
 //! - Block Time: ~2 seconds
 //! - Consensus: Optimistic Rollup

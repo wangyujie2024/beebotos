@@ -7,13 +7,14 @@
 //! - Health-based load balancing
 //! - Circuit breaker pattern
 
-use async_trait::async_trait;
-use rand::seq::SliceRandom;
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+
+use async_trait::async_trait;
+use rand::seq::SliceRandom;
+use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 use tracing::{info, warn};
 
@@ -397,14 +398,16 @@ impl ServiceRouter {
 
     /// Route request to service instance
     ///
-    /// 🟡 MEDIUM PERFORMANCE FIX: Optimized route matching with sorted prefix lookup
-    /// Uses a sorted Vec for O(log n) prefix matching instead of O(n) linear scan
+    /// 🟡 MEDIUM PERFORMANCE FIX: Optimized route matching with sorted prefix
+    /// lookup Uses a sorted Vec for O(log n) prefix matching instead of
+    /// O(n) linear scan
     pub async fn route(&self, path: &str) -> Result<ServiceInstance> {
         let routes = self.routes.read().await;
 
         // 🟡 MEDIUM PERFORMANCE FIX: Optimized longest prefix match
         // Sort routes by prefix length (descending) for more efficient matching
-        // In production, consider using `matchit` crate for true O(log n) radix tree matching
+        // In production, consider using `matchit` crate for true O(log n) radix tree
+        // matching
         let mut sorted_routes: Vec<_> = routes.iter().collect();
         // Sort by prefix length descending to try longer (more specific) routes first
         sorted_routes.sort_by(|a, b| b.0.len().cmp(&a.0.len()));

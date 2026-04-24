@@ -30,15 +30,17 @@
 //! ## Example Usage
 //!
 //! ```rust,no_run
-//! use beebotos_kernel::network::{P2PNode, NetworkConfig, DiscoveryService, DiscoveryMethod};
-//! use beebotos_kernel::network::{ConnectionPoolManager, ConnectionPoolConfig};
+//! use beebotos_kernel::network::{
+//!     ConnectionPoolConfig, ConnectionPoolManager, DiscoveryMethod, DiscoveryService,
+//!     NetworkConfig, P2PNode,
+//! };
 //!
 //! async fn setup_network() {
 //!     // Create and start P2P node
 //!     let config = NetworkConfig::default();
 //!     let node = P2PNode::new(config);
 //!     let addr = node.start().await.unwrap();
-//!     
+//!
 //!     // Create discovery service
 //!     let discovery = DiscoveryService::new(node.local_id(), DiscoveryMethod::DHT);
 //!     discovery.start().await.unwrap();
@@ -51,27 +53,24 @@ pub mod p2p;
 pub mod transport;
 
 // Re-export main types
+use std::collections::HashMap;
+use std::sync::Arc;
+
 pub use connection::{
     measure_latency, ConnectionConfig, ConnectionManager, ConnectionPool, ConnectionPoolConfig,
     ConnectionPoolManager, ConnectionState, ConnectionStats, LoadBalancingStrategy, PoolStats,
     PooledConnection,
 };
-
 pub use discovery::{
     BootstrapConfig, DhtConfig, DiscoveryEvent, DiscoveryMethod, DiscoveryService, Distance,
     KBucket, MdnsDiscovery, NodeId, PeerEntry, RoutingTable, RoutingTableStats,
 };
-
 pub use p2p::{
     DiscoveredPeer, DiscoveryRequest, DiscoveryResponse, KeepaliveMessage, KeepaliveResponse,
     P2PNode, PeerId, ProtocolHandler, ProtocolHandshake, PROTOCOL_NAME, PROTOCOL_VERSION,
 };
-
-pub use transport::{Transport, TransportConfig, TransportProtocol};
-
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::sync::Arc;
+pub use transport::{Transport, TransportConfig, TransportProtocol};
 
 /// Network configuration for peer-to-peer communication
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -81,7 +81,8 @@ impl MessageBusMetrics {
     /// Record message delivery
     pub fn record_delivery(&self, topic: &str, bytes: usize) {
         self.messages_delivered.fetch_add(1, Ordering::Relaxed);
-        self.bytes_delivered.fetch_add(bytes as u64, Ordering::Relaxed);
+        self.bytes_delivered
+            .fetch_add(bytes as u64, Ordering::Relaxed);
 
         let mut metrics = self.topic_metrics.write();
         let topic_metric = metrics.entry(topic.to_string()).or_default();
@@ -92,7 +93,8 @@ impl MessageBusMetrics {
 
     /// Record bytes published
     pub fn record_bytes_published(&self, bytes: usize) {
-        self.bytes_published.fetch_add(bytes as u64, Ordering::Relaxed);
+        self.bytes_published
+            .fetch_add(bytes as u64, Ordering::Relaxed);
     }
 
     /// Record subscribe operation
@@ -252,11 +254,8 @@ impl MetricsSnapshot {
     /// Format as human-readable string
     pub fn format(&self) -> String {
         format!(
-            "Messages: {} published, {} delivered ({:.1}% rate) | \
-             Latency: {}μs avg | \
-             Subscribers: {} | \
-             Requests: {} ({} timeouts) | \
-             Bytes: {} published, {} delivered",
+            "Messages: {} published, {} delivered ({:.1}% rate) | Latency: {}μs avg | \
+             Subscribers: {} | Requests: {} ({} timeouts) | Bytes: {} published, {} delivered",
             self.messages_published,
             self.messages_delivered,
             self.delivery_rate() * 100.0,

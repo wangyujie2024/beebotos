@@ -1,11 +1,14 @@
 //! Kernel Memory Allocator
 //!
-//! Provides memory allocation with jemalloc support and fallback to std allocator.
+//! Provides memory allocation with jemalloc support and fallback to std
+//! allocator.
 
-use crate::error::Result;
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::sync::atomic::{AtomicUsize, Ordering};
+
 use tracing::{debug, error, warn};
+
+use crate::error::Result;
 
 /// Global memory statistics with overflow-safe atomic operations
 ///
@@ -375,13 +378,15 @@ pub struct MemoryPool {
 // SAFETY: MemoryPool can be Send + Sync because:
 // 1. All pointer operations are internally synchronized via &mut self
 // 2. The pointers in `available` always point to memory owned by `preallocated`
-// 3. `preallocated` is a Vec<Vec<u8>>, so the actual memory is heap-allocated and stable
-// 4. The pool never gives out references, only raw pointers, and callers must use unsafe
-//    to dereference them, ensuring they follow Rust's aliasing rules
-// 5. All methods that access the pool require &mut self, preventing concurrent access
+// 3. `preallocated` is a Vec<Vec<u8>>, so the actual memory is heap-allocated
+//    and stable
+// 4. The pool never gives out references, only raw pointers, and callers must
+//    use unsafe to dereference them, ensuring they follow Rust's aliasing rules
+// 5. All methods that access the pool require &mut self, preventing concurrent
+//    access
 //
-// Note: If MemoryPool is ever changed to allow interior mutability (e.g., Mutex),
-// this safety guarantee must be re-evaluated
+// Note: If MemoryPool is ever changed to allow interior mutability (e.g.,
+// Mutex), this safety guarantee must be re-evaluated
 unsafe impl Send for MemoryPool {}
 unsafe impl Sync for MemoryPool {}
 

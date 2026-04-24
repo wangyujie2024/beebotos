@@ -1,12 +1,13 @@
-use crate::api::{AgentInfo, AgentStatus, CreateAgentRequest};
-use crate::components::{ErrorContext, Modal, Pagination, PaginationState, SkeletonGrid};
-use crate::state::use_app_state;
-use crate::utils::{FormValidator, StringValidators};
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 use leptos::view;
 use leptos_meta::*;
 use leptos_router::components::A;
+
+use crate::api::{AgentInfo, AgentStatus, CreateAgentRequest};
+use crate::components::{ErrorContext, Modal, Pagination, PaginationState, SkeletonGrid};
+use crate::state::use_app_state;
+use crate::utils::{FormValidator, StringValidators};
 
 const PAGE_SIZE: usize = 9;
 
@@ -139,8 +140,6 @@ pub fn AgentsPage() -> impl IntoView {
         </div>
     }
 }
-
-
 
 #[component]
 fn AgentsList(

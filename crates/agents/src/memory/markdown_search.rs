@@ -33,20 +33,24 @@
 //! - File change detection and re-indexing
 //! - Batch indexing for initial import
 
-use crate::error::Result;
-use crate::memory::{
-    embedding::{EmbeddingConfig, EmbeddingProvider, EmbeddingProviderFactory},
-    hybrid_search_sqlite::{HybridSearchSqlite, SearchDatabaseStats, SqliteMemoryEntry, SqliteSearchResult},
-    markdown_storage::{MarkdownMemoryEntry, MarkdownStorage, MarkdownStorageConfig, MemoryFileType},
-    search::{MemorySearch, SearchConfig, SearchResult, SearchStats},
-};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+
 use tokio::sync::RwLock;
 use tracing::{debug, info};
 #[allow(unused_imports)]
 use uuid::Uuid;
+
+use crate::error::Result;
+use crate::memory::embedding::{EmbeddingConfig, EmbeddingProvider, EmbeddingProviderFactory};
+use crate::memory::hybrid_search_sqlite::{
+    HybridSearchSqlite, SearchDatabaseStats, SqliteMemoryEntry, SqliteSearchResult,
+};
+use crate::memory::markdown_storage::{
+    MarkdownMemoryEntry, MarkdownStorage, MarkdownStorageConfig, MemoryFileType,
+};
+use crate::memory::search::{MemorySearch, SearchConfig, SearchResult, SearchStats};
 
 /// Unified memory system configuration
 #[derive(Debug, Clone)]
@@ -118,10 +122,7 @@ impl UnifiedMemorySystem {
     }
 
     /// Internal constructor
-    async fn new_internal(
-        config: UnifiedMemoryConfig,
-        do_initial_indexing: bool,
-    ) -> Result<Self> {
+    async fn new_internal(config: UnifiedMemoryConfig, do_initial_indexing: bool) -> Result<Self> {
         // Initialize storage
         let storage = MarkdownStorage::new(config.storage_config.clone())?;
         storage.initialize_workspace().await?;
@@ -239,8 +240,7 @@ impl UnifiedMemorySystem {
 
             // Index each entry
             for (entry, embedding) in chunk.iter().zip(embeddings.iter()) {
-                let content_hash =
-                    Self::hash_content(&format!("{}{}", entry.title, entry.content));
+                let content_hash = Self::hash_content(&format!("{}{}", entry.title, entry.content));
 
                 // Check if already indexed
                 {
@@ -293,10 +293,7 @@ impl UnifiedMemorySystem {
         // Convert to MemorySearchResult
         let mut results = Vec::with_capacity(sqlite_results.len());
         for sqlite_result in sqlite_results {
-            if let Some(memory_result) = self
-                .convert_sqlite_result(&sqlite_result, query)
-                .await?
-            {
+            if let Some(memory_result) = self.convert_sqlite_result(&sqlite_result, query).await? {
                 results.push(memory_result);
             }
         }
@@ -361,8 +358,8 @@ impl UnifiedMemorySystem {
         // Clear existing index
         {
             let _search = self.search.read().await;
-            // Note: In a real implementation, we might want a method to clear the index
-            // For now, we'll just re-index everything
+            // Note: In a real implementation, we might want a method to clear
+            // the index For now, we'll just re-index everything
         }
 
         let mut indexed = self.indexed_hashes.write().await;
@@ -374,13 +371,19 @@ impl UnifiedMemorySystem {
 
         // Core memory
         if let Ok(entries) = self.storage.read_entries(MemoryFileType::Core, None).await {
-            info!("📖 Loaded {} entries from core memory (MEMORY.md)", entries.len());
+            info!(
+                "📖 Loaded {} entries from core memory (MEMORY.md)",
+                entries.len()
+            );
             all_entries.extend(entries);
         }
 
         // User profile
         if let Ok(entries) = self.storage.read_entries(MemoryFileType::User, None).await {
-            info!("👤 Loaded {} entries from user profile (USER.md)", entries.len());
+            info!(
+                "👤 Loaded {} entries from user profile (USER.md)",
+                entries.len()
+            );
             all_entries.extend(entries);
         }
 
@@ -389,14 +392,20 @@ impl UnifiedMemorySystem {
         let mut daily_count = 0;
         for i in 0..30 {
             let date = today - chrono::Duration::days(i);
-            if let Ok(entries) = self.storage.read_entries(MemoryFileType::Daily, Some(date)).await
+            if let Ok(entries) = self
+                .storage
+                .read_entries(MemoryFileType::Daily, Some(date))
+                .await
             {
                 daily_count += entries.len();
                 all_entries.extend(entries);
             }
         }
         if daily_count > 0 {
-            info!("📅 Loaded {} entries from daily logs (last 30 days)", daily_count);
+            info!(
+                "📅 Loaded {} entries from daily logs (last 30 days)",
+                daily_count
+            );
         }
 
         // Other memory types
@@ -412,13 +421,21 @@ impl UnifiedMemorySystem {
                     MemoryFileType::Heartbeat => "HEARTBEAT.md",
                     _ => "unknown",
                 };
-                info!("📖 Loaded {} entries from {} ({})", entries.len(), name, file_type.filename(None));
+                info!(
+                    "📖 Loaded {} entries from {} ({})",
+                    entries.len(),
+                    name,
+                    file_type.filename(None)
+                );
                 all_entries.extend(entries);
             }
         }
 
         let total_entries = all_entries.len();
-        info!("🔍 Found {} total entries to index across all memory files", total_entries);
+        info!(
+            "🔍 Found {} total entries to index across all memory files",
+            total_entries
+        );
 
         // Batch index all entries
         self.index_entries_batch(&all_entries, progress_callback)
@@ -454,7 +471,10 @@ impl UnifiedMemorySystem {
             drop(search);
             self.rebuild_index(progress_callback).await?;
         } else {
-            info!("Search index already contains {} entries", stats.total_entries);
+            info!(
+                "Search index already contains {} entries",
+                stats.total_entries
+            );
         }
 
         Ok(())
@@ -540,12 +560,7 @@ impl UnifiedMemorySystem {
             "soul" => "SOUL.md",
             "agents" => "AGENTS.md",
             "heartbeat" => "HEARTBEAT.md",
-            "daily" => {
-                return Some(format!(
-                    "memory/{}.md",
-                    entry.timestamp.format("%Y-%m-%d")
-                ))
-            }
+            "daily" => return Some(format!("memory/{}.md", entry.timestamp.format("%Y-%m-%d"))),
             _ => "MEMORY.md",
         };
 
@@ -718,9 +733,10 @@ impl MemoryFileWatcher {
 
 #[cfg(test)]
 mod tests {
+    use tempfile::TempDir;
+
     use super::*;
     use crate::memory::embedding::EmbeddingConfig;
-    use tempfile::TempDir;
 
     async fn create_test_system() -> (UnifiedMemorySystem, TempDir) {
         let temp_dir = TempDir::new().unwrap();
@@ -733,7 +749,7 @@ mod tests {
             },
             search_db_path: workspace.join("search.db"),
             embedding_config: EmbeddingConfig::mock(64), // Use mock for tests
-            auto_index: true, // Enable auto-index for tests
+            auto_index: true,                            // Enable auto-index for tests
             index_batch_size: 5,
         };
 
@@ -779,8 +795,8 @@ mod tests {
             .await
             .unwrap();
 
-        let user_entry = MarkdownMemoryEntry::new("User Profile", "User name is John")
-            .with_category("profile");
+        let user_entry =
+            MarkdownMemoryEntry::new("User Profile", "User name is John").with_category("profile");
         system
             .store(MemoryFileType::User, &user_entry, None)
             .await
@@ -802,10 +818,7 @@ mod tests {
 
         let entries: Vec<_> = (0..10)
             .map(|i| {
-                MarkdownMemoryEntry::new(
-                    format!("Entry {}", i),
-                    format!("Content for entry {}", i),
-                )
+                MarkdownMemoryEntry::new(format!("Entry {}", i), format!("Content for entry {}", i))
             })
             .collect();
 
@@ -813,12 +826,14 @@ mod tests {
         use std::sync::atomic::{AtomicUsize, Ordering};
         let progress_calls = Arc::new(AtomicUsize::new(0));
         let callback_calls = progress_calls.clone();
-        let callback: IndexingProgressCallback =
-            Box::new(move |_processed, _total| {
-                callback_calls.fetch_add(1, Ordering::SeqCst);
-            });
+        let callback: IndexingProgressCallback = Box::new(move |_processed, _total| {
+            callback_calls.fetch_add(1, Ordering::SeqCst);
+        });
 
-        system.index_entries_batch(&entries, Some(callback)).await.unwrap();
+        system
+            .index_entries_batch(&entries, Some(callback))
+            .await
+            .unwrap();
         // Verify callback was called
         assert!(progress_calls.load(Ordering::SeqCst) > 0);
 
@@ -842,9 +857,14 @@ mod tests {
 
         // Rebuild index
         let stats = system.rebuild_index(None).await.unwrap();
-        // Note: rebuild_index indexes all entries from storage, including default templates
-        // We just verify that it successfully indexes entries and returns valid stats
-        assert!(stats.total_entries >= 5, "Expected at least 5 entries, got {}", stats.total_entries);
+        // Note: rebuild_index indexes all entries from storage, including default
+        // templates We just verify that it successfully indexes entries and
+        // returns valid stats
+        assert!(
+            stats.total_entries >= 5,
+            "Expected at least 5 entries, got {}",
+            stats.total_entries
+        );
         assert!(stats.duration_secs > 0.0);
     }
 }

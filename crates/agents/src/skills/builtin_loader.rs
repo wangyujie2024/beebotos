@@ -87,19 +87,35 @@ fn build_tags(content: &str) -> Vec<String> {
     if lower.contains("data") || lower.contains("数据") {
         tags.push("data".to_string());
     }
-    if lower.contains("travel") || lower.contains("tour") || lower.contains("旅游") || lower.contains("旅行") {
+    if lower.contains("travel")
+        || lower.contains("tour")
+        || lower.contains("旅游")
+        || lower.contains("旅行")
+    {
         tags.push("travel".to_string());
     }
     if lower.contains("translate") || lower.contains("翻译") || lower.contains("语言") {
         tags.push("translation".to_string());
     }
-    if lower.contains("cook") || lower.contains("recipe") || lower.contains("食谱") || lower.contains("做菜") {
+    if lower.contains("cook")
+        || lower.contains("recipe")
+        || lower.contains("食谱")
+        || lower.contains("做菜")
+    {
         tags.push("cooking".to_string());
     }
-    if lower.contains("fitness") || lower.contains("workout") || lower.contains("健身") || lower.contains("运动") {
+    if lower.contains("fitness")
+        || lower.contains("workout")
+        || lower.contains("健身")
+        || lower.contains("运动")
+    {
         tags.push("fitness".to_string());
     }
-    if lower.contains("movie") || lower.contains("film") || lower.contains("电影") || lower.contains("剧集") {
+    if lower.contains("movie")
+        || lower.contains("film")
+        || lower.contains("电影")
+        || lower.contains("剧集")
+    {
         tags.push("entertainment".to_string());
     }
     if lower.contains("news") || lower.contains("新闻") || lower.contains("资讯") {
@@ -108,13 +124,19 @@ fn build_tags(content: &str) -> Vec<String> {
     if lower.contains("weather") || lower.contains("天气") || lower.contains("气温") {
         tags.push("weather".to_string());
     }
-    if lower.contains("calculat") || lower.contains("math") || lower.contains("计算") || lower.contains("房贷") || lower.contains("投资") {
+    if lower.contains("calculat")
+        || lower.contains("math")
+        || lower.contains("计算")
+        || lower.contains("房贷")
+        || lower.contains("投资")
+    {
         tags.push("calculator".to_string());
     }
     tags
 }
 
-/// Scan `skills/` directory and register all `.md` skills into the given registry.
+/// Scan `skills/` directory and register all `.md` skills into the given
+/// registry.
 pub async fn load_builtin_skills(registry: &Arc<SkillRegistry>) {
     let skills_dir = PathBuf::from("skills");
     if !skills_dir.exists() || !skills_dir.is_dir() {
@@ -170,21 +192,19 @@ pub async fn load_builtin_skills(registry: &Arc<SkillRegistry>) {
             // 🆕 FIX: Parse deep markdown sections
             let sections = parse_markdown_sections(&content);
 
-            // Description: first paragraph after any heading, fallback to Description section
-            let description = sections
-                .get("description")
-                .cloned()
-                .unwrap_or_else(|| {
-                    content
-                        .lines()
-                        .skip(1)
-                        .skip_while(|l| l.trim().is_empty() || l.trim().starts_with('#'))
-                        .take_while(|l| !l.trim().starts_with('#') && !l.trim().starts_with("```"))
-                        .collect::<Vec<_>>()
-                        .join(" ")
-                        .trim()
-                        .to_string()
-                });
+            // Description: first paragraph after any heading, fallback to Description
+            // section
+            let description = sections.get("description").cloned().unwrap_or_else(|| {
+                content
+                    .lines()
+                    .skip(1)
+                    .skip_while(|l| l.trim().is_empty() || l.trim().starts_with('#'))
+                    .take_while(|l| !l.trim().starts_with('#') && !l.trim().starts_with("```"))
+                    .collect::<Vec<_>>()
+                    .join(" ")
+                    .trim()
+                    .to_string()
+            });
 
             let description = if description.is_empty() {
                 format!("Built-in skill: {}", skill_name)
@@ -240,6 +260,9 @@ pub async fn load_builtin_skills(registry: &Arc<SkillRegistry>) {
     }
 
     if registered > 0 {
-        tracing::info!("✅ Registered {} built-in skills from skills/ directory", registered);
+        tracing::info!(
+            "✅ Registered {} built-in skills from skills/ directory",
+            registered
+        );
     }
 }

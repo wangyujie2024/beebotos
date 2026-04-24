@@ -12,8 +12,8 @@
 //! - `components`: UI 组件
 //! - `pages`: 页面组件
 
-use wasm_bindgen::prelude::*;
 use leptos::prelude::*;
+use wasm_bindgen::prelude::*;
 
 /// Application entry point for WASM
 #[wasm_bindgen(start)]
@@ -50,13 +50,14 @@ pub mod state;
 pub mod utils;
 pub mod webchat;
 
-use components::{AuthGuard, ContentSecurityPolicy, GlobalErrorHandler, Sidebar};
+use components::{AccessDenied, AuthGuard, ContentSecurityPolicy, GlobalErrorHandler, Sidebar};
 use i18n::{init_i18n, I18nContext};
 use leptos_router::hooks::use_location;
 use pages::{
-    AgentDetail, AgentsPage, ChannelsPage, DaoPage, Home, LlmConfigPage, LlmProvidersPage, LoginPage, NotFound, RegisterPage, SettingsPage, SetupPage, SkillInstancesPage, SkillsPage, TreasuryPage, TreasuryTransactionsPage,
+    AgentDetail, AgentsPage, ChannelsPage, DaoPage, Home, LlmConfigPage, LlmProvidersPage,
+    LoginPage, NotFound, RegisterPage, SettingsPage, SetupPage, SkillInstancesPage, SkillsPage,
+    TreasuryPage, TreasuryTransactionsPage,
 };
-use components::AccessDenied;
 use state::provide_app_state;
 use utils::provide_theme;
 

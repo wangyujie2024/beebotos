@@ -2,9 +2,10 @@
 //!
 //! Priority-based scheduling algorithm.
 
-use super::{Task, TaskId, TaskState};
 use std::collections::BinaryHeap;
 use std::time::Duration;
+
+use super::{Task, TaskId, TaskState};
 
 /// Priority scheduler trait
 pub trait PrioritySchedulerTrait {

@@ -1,6 +1,7 @@
-use crate::i18n::I18nContext;
 use leptos::prelude::*;
 use leptos_router::hooks::use_location;
+
+use crate::i18n::I18nContext;
 
 #[component]
 pub fn TopBar() -> impl IntoView {

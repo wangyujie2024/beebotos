@@ -7,10 +7,11 @@
 //! - Double-free prevention
 //! - Address sanitization helpers
 
-use parking_lot::{Mutex, RwLock};
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+
+use parking_lot::{Mutex, RwLock};
 use tracing::{error, info, trace, warn};
 
 /// Memory block metadata for tracking

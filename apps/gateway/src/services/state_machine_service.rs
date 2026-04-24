@@ -11,6 +11,7 @@ use std::collections::HashMap;
 #[allow(unused_imports)]
 use std::sync::Arc;
 use std::time::Duration;
+
 use tokio::sync::RwLock;
 use tracing::{info, instrument, warn};
 
@@ -43,7 +44,10 @@ impl StateMachineService {
 
     /// Register an agent with the state machine
     #[instrument(skip(self), fields(agent_id = %agent_id))]
-    pub async fn register_agent(&self, agent_id: impl Into<String> + std::fmt::Display) -> Result<(), AppError> {
+    pub async fn register_agent(
+        &self,
+        agent_id: impl Into<String> + std::fmt::Display,
+    ) -> Result<(), AppError> {
         let agent_id = agent_id.into();
 
         // Register in local manager
@@ -78,9 +82,9 @@ impl StateMachineService {
         // Get current state
         let current_state = {
             let manager = self.local_manager.read().await;
-            manager.get_state(agent_id).ok_or_else(|| {
-                AppError::not_found("Agent state machine", agent_id)
-            })?
+            manager
+                .get_state(agent_id)
+                .ok_or_else(|| AppError::not_found("Agent state machine", agent_id))?
         };
 
         // Validate transition
@@ -143,11 +147,7 @@ impl StateMachineService {
     }
 
     /// Check if can transition to a state
-    pub async fn can_transition_to(
-        &self,
-        agent_id: &str,
-        target: AgentLifecycleState,
-    ) -> bool {
+    pub async fn can_transition_to(&self, agent_id: &str, target: AgentLifecycleState) -> bool {
         let manager = self.local_manager.read().await;
         if let Some(ctx) = manager.get_context(agent_id) {
             ctx.can_transition_to(target)
@@ -168,14 +168,22 @@ impl StateMachineService {
 
     /// Start an agent (Pending -> Initializing)
     pub async fn start_agent(&self, agent_id: &str) -> Result<(), AppError> {
-        self.transition_to(agent_id, AgentLifecycleState::Initializing, "User initiated start")
-            .await
+        self.transition_to(
+            agent_id,
+            AgentLifecycleState::Initializing,
+            "User initiated start",
+        )
+        .await
     }
 
     /// Mark initialization complete (Initializing -> Idle)
     pub async fn initialization_complete(&self, agent_id: &str) -> Result<(), AppError> {
-        self.transition_to(agent_id, AgentLifecycleState::Idle, "Initialization complete")
-            .await
+        self.transition_to(
+            agent_id,
+            AgentLifecycleState::Idle,
+            "Initialization complete",
+        )
+        .await
     }
 
     /// Start task execution (Idle -> Working)
@@ -195,7 +203,8 @@ impl StateMachineService {
         } else {
             "Task failed"
         };
-        self.transition_to(agent_id, AgentLifecycleState::Idle, reason).await
+        self.transition_to(agent_id, AgentLifecycleState::Idle, reason)
+            .await
     }
 
     /// Pause agent (Idle/Working -> Paused)
@@ -220,8 +229,12 @@ impl StateMachineService {
             }
         }
 
-        self.transition_to(agent_id, AgentLifecycleState::ShuttingDown, "Shutdown initiated")
-            .await
+        self.transition_to(
+            agent_id,
+            AgentLifecycleState::ShuttingDown,
+            "Shutdown initiated",
+        )
+        .await
     }
 
     /// Mark agent as stopped
@@ -237,23 +250,32 @@ impl StateMachineService {
         error_message: impl Into<String>,
     ) -> Result<(), AppError> {
         let message = error_message.into();
-        self.transition_to(agent_id, AgentLifecycleState::Error, format!("Error: {}", message))
-            .await
+        self.transition_to(
+            agent_id,
+            AgentLifecycleState::Error,
+            format!("Error: {}", message),
+        )
+        .await
     }
 
     /// Retry from error (Error -> Initializing)
     pub async fn retry_agent(&self, agent_id: &str) -> Result<(), AppError> {
-        let ctx = self.get_context(agent_id).await.ok_or_else(|| {
-            AppError::not_found("Agent state", agent_id)
-        })?;
+        let ctx = self
+            .get_context(agent_id)
+            .await
+            .ok_or_else(|| AppError::not_found("Agent state", agent_id))?;
 
         // Check retry count
         if ctx.should_stop_retrying(3) {
             return Err(StateMachineError::MaxRetriesExceeded.into());
         }
 
-        self.transition_to(agent_id, AgentLifecycleState::Initializing, "Retrying after error")
-            .await
+        self.transition_to(
+            agent_id,
+            AgentLifecycleState::Initializing,
+            "Retrying after error",
+        )
+        .await
     }
 
     /// Unregister agent
@@ -387,7 +409,7 @@ pub struct StateMachineStatistics {
 }
 
 /// Map state transition to agents crate StateTransition
-/// 
+///
 /// This function maps based on current state and target state combination
 fn map_to_agents_transition(
     current: AgentLifecycleState,
@@ -403,7 +425,7 @@ fn map_to_agents_transition(
         (AgentLifecycleState::Pending, AgentLifecycleState::Error) => StateTransition::Error {
             message: reason.to_string(),
         },
-        
+
         // Initializing -> Idle
         (AgentLifecycleState::Initializing, AgentLifecycleState::Idle) => {
             StateTransition::InitializationComplete
@@ -412,7 +434,7 @@ fn map_to_agents_transition(
         (AgentLifecycleState::Initializing, AgentLifecycleState::Error) => StateTransition::Error {
             message: reason.to_string(),
         },
-        
+
         // Idle -> Working
         (AgentLifecycleState::Idle, AgentLifecycleState::Working) => StateTransition::BeginTask {
             task_id: reason.to_string(),
@@ -425,16 +447,18 @@ fn map_to_agents_transition(
         (AgentLifecycleState::Idle, AgentLifecycleState::Error) => StateTransition::Error {
             message: reason.to_string(),
         },
-        
+
         // Working -> Idle
-        (AgentLifecycleState::Working, AgentLifecycleState::Idle) => StateTransition::CompleteTask { success: true },
+        (AgentLifecycleState::Working, AgentLifecycleState::Idle) => {
+            StateTransition::CompleteTask { success: true }
+        }
         // Working -> Paused
         (AgentLifecycleState::Working, AgentLifecycleState::Paused) => StateTransition::Pause,
         // Working -> Error
         (AgentLifecycleState::Working, AgentLifecycleState::Error) => StateTransition::Error {
             message: reason.to_string(),
         },
-        
+
         // Paused -> Idle (Resume)
         (AgentLifecycleState::Paused, AgentLifecycleState::Idle) => StateTransition::Resume,
         // Paused -> Working
@@ -442,20 +466,24 @@ fn map_to_agents_transition(
             task_id: reason.to_string(),
         },
         // Paused -> ShuttingDown
-        (AgentLifecycleState::Paused, AgentLifecycleState::ShuttingDown) => StateTransition::Shutdown,
-        
+        (AgentLifecycleState::Paused, AgentLifecycleState::ShuttingDown) => {
+            StateTransition::Shutdown
+        }
+
         // ShuttingDown -> Stopped
-        (AgentLifecycleState::ShuttingDown, AgentLifecycleState::Stopped) => StateTransition::Stopped,
+        (AgentLifecycleState::ShuttingDown, AgentLifecycleState::Stopped) => {
+            StateTransition::Stopped
+        }
         // ShuttingDown -> Error
         (AgentLifecycleState::ShuttingDown, AgentLifecycleState::Error) => StateTransition::Error {
             message: reason.to_string(),
         },
-        
+
         // Error -> Stopped
         (AgentLifecycleState::Error, AgentLifecycleState::Stopped) => StateTransition::Shutdown,
         // Error -> Initializing (retry)
         (AgentLifecycleState::Error, AgentLifecycleState::Initializing) => StateTransition::Start,
-        
+
         // Fallback for any other transitions (should not happen with valid transitions)
         _ => StateTransition::Error {
             message: format!("Unexpected transition: {:?} -> {:?}", current, target),

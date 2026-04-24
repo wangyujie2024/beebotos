@@ -2,47 +2,100 @@
 //!
 //! 实现与 Gateway 的实时 WebSocket 通信
 
-use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
+
+use serde::{Deserialize, Serialize};
 
 /// WebSocket 消息类型
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum WebSocketMessage {
     // 认证
-    Auth { token: String },
-    AuthResponse { success: bool, #[serde(default)] error: Option<String> },
+    Auth {
+        token: String,
+    },
+    AuthResponse {
+        success: bool,
+        #[serde(default)]
+        error: Option<String>,
+    },
 
     // 心跳
     Ping,
     Pong,
 
     // 订阅
-    Subscribe { channel: String },
-    Unsubscribe { channel: String },
-    SubscribeResponse { channel: String, success: bool },
+    Subscribe {
+        channel: String,
+    },
+    Unsubscribe {
+        channel: String,
+    },
+    SubscribeResponse {
+        channel: String,
+        success: bool,
+    },
 
     // 聊天消息
-    ChatMessage { session_id: String, message: super::super::webchat::ChatMessage },
-    ChatStream { session_id: String, chunk: String, done: bool },
-    ChatTyping { session_id: String, is_typing: bool },
+    ChatMessage {
+        session_id: String,
+        message: super::super::webchat::ChatMessage,
+    },
+    ChatStream {
+        session_id: String,
+        chunk: String,
+        done: bool,
+    },
+    ChatTyping {
+        session_id: String,
+        is_typing: bool,
+    },
 
     // 浏览器事件
-    BrowserEvent { instance_id: String, event: super::super::browser::BrowserEvent },
-    BrowserScreenshot { instance_id: String, data: String },
-    BrowserStatus { instance_id: String, status: super::super::browser::ConnectionStatus },
+    BrowserEvent {
+        instance_id: String,
+        event: super::super::browser::BrowserEvent,
+    },
+    BrowserScreenshot {
+        instance_id: String,
+        data: String,
+    },
+    BrowserStatus {
+        instance_id: String,
+        status: super::super::browser::ConnectionStatus,
+    },
 
     // Agent 事件
-    AgentStatus { agent_id: String, status: String },
-    AgentLog { agent_id: String, level: String, message: String },
-    AgentOutput { agent_id: String, output: String },
+    AgentStatus {
+        agent_id: String,
+        status: String,
+    },
+    AgentLog {
+        agent_id: String,
+        level: String,
+        message: String,
+    },
+    AgentOutput {
+        agent_id: String,
+        output: String,
+    },
 
     // 系统通知
-    Notification { title: String, message: String, level: NotificationLevel },
-    SystemStatus { status: String, message: String },
+    Notification {
+        title: String,
+        message: String,
+        level: NotificationLevel,
+    },
+    SystemStatus {
+        status: String,
+        message: String,
+    },
 
     // 错误
-    Error { code: String, message: String },
+    Error {
+        code: String,
+        message: String,
+    },
 }
 
 /// 通知级别
@@ -178,7 +231,9 @@ pub struct WebSocketManager {
 
 impl WebSocketManager {
     pub fn new() -> Self {
-        Self { clients: Vec::new() }
+        Self {
+            clients: Vec::new(),
+        }
     }
 
     pub fn add_client(&mut self, client: WebSocketClient) {

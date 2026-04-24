@@ -29,13 +29,12 @@ pub mod types;
 
 use std::sync::Arc;
 
-// Re-export new SystemEventBus compatible types
-pub use types::{AgentLifecycleEvent, AgentStateEvent, AgentTaskEvent, TaskEventType};
-
 use beebotos_core::event::{Event, EventBus as CoreEventBus};
 // 重新导出 core 的事件类型
 pub use beebotos_core::event::{Event as CoreEvent, TxStatus};
 use tokio::sync::mpsc;
+// Re-export new SystemEventBus compatible types
+pub use types::{AgentLifecycleEvent, AgentStateEvent, AgentTaskEvent, TaskEventType};
 
 /// Agent 事件总线
 ///

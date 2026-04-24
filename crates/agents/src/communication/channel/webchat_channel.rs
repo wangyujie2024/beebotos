@@ -16,8 +16,8 @@ use super::{
     BaseChannelConfig, Channel, ChannelConfig, ChannelEvent, ChannelInfo, ConnectionMode,
     MemberInfo,
 };
-use crate::communication::{Message, PlatformType};
 use crate::communication::channel::r#trait::ContentType;
+use crate::communication::{Message, PlatformType};
 use crate::error::{AgentError, Result};
 
 /// WebChat channel configuration
@@ -88,7 +88,10 @@ impl WebChatChannel {
     }
 
     /// Set the WebSocket manager used to push replies to the browser
-    pub async fn set_ws_manager(&self, ws_manager: Arc<beebotos_gateway_lib::websocket::WebSocketManager>) {
+    pub async fn set_ws_manager(
+        &self,
+        ws_manager: Arc<beebotos_gateway_lib::websocket::WebSocketManager>,
+    ) {
         *self.ws_manager.write().await = Some(ws_manager);
         info!("WebChatChannel: WebSocket manager attached");
     }
@@ -150,7 +153,10 @@ impl Channel for WebChatChannel {
                 .broadcast_to_channel("webchat", payload)
                 .await
                 .map_err(|e| AgentError::platform(format!("WebSocket broadcast failed: {}", e)))?;
-            debug!("WebChatChannel: reply broadcasted to channel {}", channel_id);
+            debug!(
+                "WebChatChannel: reply broadcasted to channel {}",
+                channel_id
+            );
             Ok(())
         } else {
             warn!("WebChatChannel: WebSocket manager not set, cannot send reply");
@@ -160,7 +166,10 @@ impl Channel for WebChatChannel {
         }
     }
 
-    async fn start_listener(&self, _event_bus: tokio::sync::mpsc::Sender<ChannelEvent>) -> Result<()> {
+    async fn start_listener(
+        &self,
+        _event_bus: tokio::sync::mpsc::Sender<ChannelEvent>,
+    ) -> Result<()> {
         // WebChat receives messages via HTTP handler, no persistent listener needed
         info!("WebChatChannel: start_listener (no-op, messages injected via HTTP)");
         Ok(())

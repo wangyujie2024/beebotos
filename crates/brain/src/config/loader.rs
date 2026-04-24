@@ -2,8 +2,9 @@
 //!
 //! Handles loading configuration from various sources.
 
-use super::{ConfigBuilder, ConfigError};
 use std::path::Path;
+
+use super::{ConfigBuilder, ConfigError};
 
 /// Source of configuration
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

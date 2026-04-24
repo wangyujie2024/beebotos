@@ -1,8 +1,9 @@
 //! Memory Backup
 
+use std::path::Path;
+
 use super::MemoryEntry;
 use crate::error::Result;
-use std::path::Path;
 
 /// Memory backup manager
 pub struct MemoryBackup {
@@ -19,11 +20,11 @@ impl MemoryBackup {
     pub async fn backup(&self, entries: &[MemoryEntry]) -> Result<()> {
         let json = serde_json::to_string_pretty(entries)
             .map_err(|e| crate::error::AgentError::serialization(e.to_string()))?;
-        
+
         tokio::fs::write(&self.backup_path, json)
             .await
             .map_err(|e| crate::error::AgentError::io(e.to_string()))?;
-        
+
         Ok(())
     }
 
@@ -31,14 +32,14 @@ impl MemoryBackup {
         if !self.backup_path.exists() {
             return Ok(Vec::new());
         }
-        
+
         let json = tokio::fs::read_to_string(&self.backup_path)
             .await
             .map_err(|e| crate::error::AgentError::io(e.to_string()))?;
-        
+
         let entries: Vec<MemoryEntry> = serde_json::from_str(&json)
             .map_err(|e| crate::error::AgentError::serialization(e.to_string()))?;
-        
+
         Ok(entries)
     }
 }

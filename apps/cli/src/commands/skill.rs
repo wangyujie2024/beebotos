@@ -1,6 +1,7 @@
-use crate::progress::TaskProgress;
 use anyhow::Result;
 use clap::{Parser, Subcommand};
+
+use crate::progress::TaskProgress;
 
 #[derive(Parser)]
 pub struct SkillArgs {

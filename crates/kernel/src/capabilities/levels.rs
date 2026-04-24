@@ -1,7 +1,8 @@
 //! Capability Levels - 11-tier security model
 
-use serde::{Deserialize, Serialize};
 use std::fmt;
+
+use serde::{Deserialize, Serialize};
 
 /// Capability levels from L0 (lowest) to L10 (highest)
 #[derive(

@@ -16,12 +16,14 @@
 //! # }
 //! ```
 
+use std::collections::HashMap;
+
+use serde::{Deserialize, Serialize};
+use tracing::{error, info, instrument};
+
 use crate::compat::Address;
 use crate::config::ChainConfig;
 use crate::{ChainError, Result};
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use tracing::{error, info, instrument};
 
 /// Network configuration for deployment
 #[derive(Debug, Clone, Serialize, Deserialize)]

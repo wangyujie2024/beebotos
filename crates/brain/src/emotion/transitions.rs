@@ -4,8 +4,9 @@
 
 #![allow(dead_code)]
 
-use super::state::EmotionState;
 use std::time::Duration;
+
+use super::state::EmotionState;
 
 /// Transition configuration
 #[derive(Debug, Clone)]

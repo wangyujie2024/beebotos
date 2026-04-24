@@ -50,34 +50,32 @@ mod services;
 mod state_machine;
 mod telemetry;
 
-use beebotos_agents::{
-    ChannelRegistry, DingTalkChannelFactory, DiscordChannelFactory, GatewayAgentRuntime,
-    LarkChannelFactory, PersonalWeChatFactory, SlackChannelFactory, TelegramChannelFactory,
-    WebChatFactory,
-};
 use beebotos_agents::communication::channel::WeChatFactory;
 use beebotos_agents::communication::channel_instance_manager::ChannelInstanceManager;
-use beebotos_agents::communication::message_router_v2::{AgentMessageDispatcher, InboundMessageRouter};
+use beebotos_agents::communication::message_router_v2::{
+    AgentMessageDispatcher, InboundMessageRouter,
+};
 use beebotos_agents::communication::offline_message_store_sqlite::SqliteOfflineMessageStore;
 use beebotos_agents::services::{
     plaintext_encryptor, AgentChannelService, SqliteAgentChannelBindingStore,
     SqliteUserChannelStore, UserChannelService,
 };
-use tracing::{error, info, warn};
-
-// 🟢 P1 FIX: Import gateway-lib traits and types
-use gateway::{
-    RuntimeConfig as AgentRuntimeConfig, SandboxLevel,
-    StateStore, StateStoreConfig,
+use beebotos_agents::{
+    ChannelRegistry, DingTalkChannelFactory, DiscordChannelFactory, GatewayAgentRuntime,
+    LarkChannelFactory, PersonalWeChatFactory, SlackChannelFactory, TelegramChannelFactory,
+    WebChatFactory,
 };
+// 🟢 P1 FIX: Import gateway-lib traits and types
+use gateway::{RuntimeConfig as AgentRuntimeConfig, SandboxLevel, StateStore, StateStoreConfig};
+use tracing::{error, info, warn};
 
 use crate::config::{AppConfig, BeeBotOSConfig};
 use crate::handlers::http::agents;
-use crate::services::agent_runtime_manager::AgentRuntimeManager;
-use crate::services::message_processor::MessageProcessor;
 use crate::services::agent_resolver::AgentResolver;
+use crate::services::agent_runtime_manager::AgentRuntimeManager;
 // Channel Manager integration
 use crate::services::agent_service::AgentService;
+use crate::services::message_processor::MessageProcessor;
 
 /// Agent runtime info managed by this gateway
 ///
@@ -98,8 +96,8 @@ pub struct AgentRuntimeInfo {
 /// Agent lifecycle is managed by AgentService which internally uses
 /// beebotos-kernel.
 ///
-/// 🔒 P0 FIX: Unified state management - using StateStore (CQRS) as single source
-/// of truth, removed duplicate in-memory HashMap.
+/// 🔒 P0 FIX: Unified state management - using StateStore (CQRS) as single
+/// source of truth, removed duplicate in-memory HashMap.
 ///
 /// 🟢 P1 FIX: Using AgentRuntime trait for decoupled agent management.
 pub struct AppState {
@@ -143,7 +141,8 @@ pub struct AppState {
     /// Channel registry for messaging platforms
     pub channel_registry: Option<Arc<ChannelRegistry>>,
     /// Channel event bus sender for starting listeners outside initialization
-    pub channel_event_bus: Option<mpsc::Sender<beebotos_agents::communication::channel::ChannelEvent>>,
+    pub channel_event_bus:
+        Option<mpsc::Sender<beebotos_agents::communication::channel::ChannelEvent>>,
     /// New multi-instance channel manager
     pub channel_instance_manager: Option<Arc<ChannelInstanceManager>>,
     /// Message dispatcher for inbound webhook events
@@ -158,7 +157,8 @@ pub struct AppState {
     pub llm_service: Arc<crate::services::llm_service::LlmService>,
     /// Skill registry for skill management
     pub skill_registry: Option<Arc<beebotos_agents::skills::SkillRegistry>>,
-    /// Skill executor for WASM skill execution (cached to avoid recreating WasmEngine)
+    /// Skill executor for WASM skill execution (cached to avoid recreating
+    /// WasmEngine)
     pub skill_executor: Option<Arc<beebotos_agents::skills::SkillExecutor>>,
     /// Skill instance manager for instance-based execution model
     pub skill_instance_manager: Option<Arc<beebotos_agents::skills::InstanceManager>>,
@@ -202,14 +202,16 @@ impl AppState {
         let state_store = Arc::new(
             StateStore::new(db.clone(), state_store_config)
                 .await
-                .map_err(|e| anyhow::anyhow!("Failed to initialize StateStore: {}", e))?
+                .map_err(|e| anyhow::anyhow!("Failed to initialize StateStore: {}", e))?,
         );
         info!("✅ StateStore (CQRS) initialized");
 
         // Initialize Memory System
         let memory_system = {
             use std::path::PathBuf;
-            use beebotos_agents::memory::{UnifiedMemorySystem, UnifiedMemoryConfig, markdown_storage::MarkdownStorageConfig};
+
+            use beebotos_agents::memory::markdown_storage::MarkdownStorageConfig;
+            use beebotos_agents::memory::{UnifiedMemoryConfig, UnifiedMemorySystem};
             let memory_config = UnifiedMemoryConfig {
                 storage_config: MarkdownStorageConfig {
                     workspace_dir: PathBuf::from("data/workspace"),
@@ -256,7 +258,7 @@ impl AppState {
         // Initialize encryption service
         let encryption_service = Arc::new(
             crate::services::encryption_service::EncryptionService::from_env()
-                .map_err(|e| anyhow::anyhow!("Failed to initialize encryption service: {}", e))?
+                .map_err(|e| anyhow::anyhow!("Failed to initialize encryption service: {}", e))?,
         );
         info!("✅ Encryption service initialized");
 
@@ -264,7 +266,9 @@ impl AppState {
         let llm_service = match crate::services::llm_service::LlmService::new(
             Arc::new(db.clone()),
             encryption_service.clone(),
-        ).await {
+        )
+        .await
+        {
             Ok(service) => {
                 info!("✅ LLM Service initialized with beebotos_agents::llm");
                 Arc::new(service)
@@ -282,20 +286,27 @@ impl AppState {
             sandbox_level: SandboxLevel::Kernel,
             database_url: config.database.url.clone(),
         };
-        let llm_interface: Arc<dyn beebotos_agents::communication::LLMCallInterface> =
-            Arc::new(crate::services::agent_runtime_manager::GatewayLLMInterface::new(llm_service.clone()));
+        let llm_interface: Arc<dyn beebotos_agents::communication::LLMCallInterface> = Arc::new(
+            crate::services::agent_runtime_manager::GatewayLLMInterface::new(llm_service.clone()),
+        );
 
-        // 🟢 P0 FIX: Initialize SkillRegistry **before** AgentRuntime so it can be injected
+        // 🟢 P0 FIX: Initialize SkillRegistry **before** AgentRuntime so it can be
+        // injected
         let skill_registry = Arc::new(beebotos_agents::skills::SkillRegistry::new());
         info!("✅ SkillRegistry initialized");
         restore_skills_from_disk(&skill_registry).await;
         register_builtin_skills(&skill_registry).await;
 
         let agent_runtime: Arc<dyn gateway::AgentRuntime> = Arc::new(
-            GatewayAgentRuntime::new(Some(kernel.clone()), Some(llm_interface), agent_runtime_config, Some(db.clone()))
-                .await
-                .map_err(|e| anyhow::anyhow!("Failed to initialize AgentRuntime: {}", e))?
-                .with_skill_registry(skill_registry.clone())
+            GatewayAgentRuntime::new(
+                Some(kernel.clone()),
+                Some(llm_interface),
+                agent_runtime_config,
+                Some(db.clone()),
+            )
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to initialize AgentRuntime: {}", e))?
+            .with_skill_registry(skill_registry.clone()),
         );
         info!("✅ AgentRuntime (trait-based) initialized with SkillRegistry");
 
@@ -309,7 +320,7 @@ impl AppState {
                 Some(skill_registry.clone()),
             )
             .await
-            .map_err(|e| anyhow::anyhow!("Failed to initialize AgentRuntimeManager: {}", e))?
+            .map_err(|e| anyhow::anyhow!("Failed to initialize AgentRuntimeManager: {}", e))?,
         );
 
         // Legacy: AgentService now owns the kernel integration
@@ -391,7 +402,8 @@ impl AppState {
         // 🟢 P1 FIX: Initialize Identity service
         let identity_service = if config.blockchain.enabled {
             if let Some(ref wallet) = wallet_service {
-                let identity_config = crate::services::IdentityServiceConfig::from(&config.blockchain);
+                let identity_config =
+                    crate::services::IdentityServiceConfig::from(&config.blockchain);
                 match crate::services::IdentityService::new(identity_config, wallet.clone()).await {
                     Ok(service) => {
                         info!("✅ IdentityService initialized");
@@ -447,11 +459,12 @@ impl AppState {
 
         // Initialize channel binding store (LEGACY — deprecated)
         // P2 OPTIMIZE: This is the old single-binding system. New code should use
-        // UserChannelService + AgentChannelService. Run migrate-bindings API to migrate.
+        // UserChannelService + AgentChannelService. Run migrate-bindings API to
+        // migrate.
         let channel_binding_store = Arc::new(
             gateway::ChannelBindingStore::new(db.clone())
                 .await
-                .map_err(|e| anyhow::anyhow!("Failed to initialize ChannelBindingStore: {}", e))?
+                .map_err(|e| anyhow::anyhow!("Failed to initialize ChannelBindingStore: {}", e))?,
         );
         info!("✅ ChannelBindingStore initialized (LEGACY — migrate to new system when ready)");
 
@@ -513,7 +526,7 @@ async fn main() -> anyhow::Result<()> {
     // Detect and apply color theme from command line arguments
     // This must happen before any colored output
     let args: Vec<String> = std::env::args().collect();
-    
+
     // Check for --theme or --no-color arguments
     if let Some(theme) = color_theme::ColorTheme::from_args(&args) {
         theme.apply();
@@ -526,7 +539,8 @@ async fn main() -> anyhow::Result<()> {
         theme.apply();
     }
 
-    // Load configuration directly (no interactive wizard; all config managed via web admin)
+    // Load configuration directly (no interactive wizard; all config managed via
+    // web admin)
     let app_config = BeeBotOSConfig::load()
         .map_err(|e| anyhow::anyhow!("Failed to load configuration: {}", e))?;
     app_config.validate()?;
@@ -534,13 +548,21 @@ async fn main() -> anyhow::Result<()> {
     // Set WeChat environment variables from config for webhook handlers
     if let Some(wechat_config) = &app_config.channels.wechat {
         if wechat_config.enabled {
-            if let Some(corp_id) = wechat_config.settings.get("corp_id").and_then(|v| v.as_str()) {
+            if let Some(corp_id) = wechat_config
+                .settings
+                .get("corp_id")
+                .and_then(|v| v.as_str())
+            {
                 std::env::set_var("WECHAT_CORP_ID", corp_id);
             }
             if let Some(token) = wechat_config.settings.get("token").and_then(|v| v.as_str()) {
                 std::env::set_var("WECHAT_TOKEN", token);
             }
-            if let Some(aes_key) = wechat_config.settings.get("encoding_aes_key").and_then(|v| v.as_str()) {
+            if let Some(aes_key) = wechat_config
+                .settings
+                .get("encoding_aes_key")
+                .and_then(|v| v.as_str())
+            {
                 std::env::set_var("WECHAT_ENCODING_AES_KEY", aes_key);
             }
             info!("✅ WeChat environment variables set from config");
@@ -614,9 +636,10 @@ async fn main() -> anyhow::Result<()> {
     if let (Some(ref registry), Some(ref ws)) = (&channel_registry, &ws_manager) {
         if let Some(webchat_channel) = registry.get_channel("webchat").await {
             let guard = webchat_channel.read().await;
-            if let Some(wc) = guard.as_any().downcast_ref::<
-                beebotos_agents::communication::channel::WebChatChannel
-            >() {
+            if let Some(wc) = guard
+                .as_any()
+                .downcast_ref::<beebotos_agents::communication::channel::WebChatChannel>()
+            {
                 wc.set_ws_manager(ws.clone()).await;
                 info!("✅ WebSocket manager attached to WebChat channel");
             }
@@ -662,8 +685,7 @@ async fn main() -> anyhow::Result<()> {
             instance_manager.clone(),
             encryptor,
         ));
-        let agent_channel_service =
-            Arc::new(AgentChannelService::new(agent_channel_store));
+        let agent_channel_service = Arc::new(AgentChannelService::new(agent_channel_store));
 
         app_state.channel_instance_manager = Some(instance_manager);
         app_state.agent_message_dispatcher = Some(dispatcher.clone());
@@ -677,9 +699,7 @@ async fn main() -> anyhow::Result<()> {
                 app_state.state_store.clone(),
                 app_state.agent_runtime.clone(),
             )
-            .with_channel_binding_store(
-                app_state.channel_binding_store.as_ref().unwrap().clone(),
-            )
+            .with_channel_binding_store(app_state.channel_binding_store.as_ref().unwrap().clone())
             .with_agent_channel_service(agent_channel_service)
             .with_user_channel_service(user_channel_service.clone());
             app_state.agent_resolver = Some(Arc::new(new_resolver));
@@ -807,7 +827,8 @@ async fn main() -> anyhow::Result<()> {
             app_state.agent_runtime.clone(),
             default_agent_id,
             &app_config,
-        ).await;
+        )
+        .await;
     }
 
     // Create gateway state for middleware
@@ -896,18 +917,23 @@ async fn try_init_channel(
         "wechat" => {
             tracing::info!("📋 wechat config: {:?}", config.channels.wechat.is_some());
             config.channels.wechat.clone()
-        },
+        }
         "personal_wechat" => {
-            tracing::info!("📋 personal_wechat config: {:?}", config.channels.personal_wechat.is_some());
+            tracing::info!(
+                "📋 personal_wechat config: {:?}",
+                config.channels.personal_wechat.is_some()
+            );
             config.channels.personal_wechat.clone()
-        },
+        }
         "webchat" => {
             tracing::info!("📋 webchat config: {:?}", config.channels.webchat.is_some());
-            config.channels.webchat.clone().or_else(|| Some(crate::config::ChannelConfig {
-                enabled: true,
-                settings: std::collections::HashMap::new(),
-            }))
-        },
+            config.channels.webchat.clone().or_else(|| {
+                Some(crate::config::ChannelConfig {
+                    enabled: true,
+                    settings: std::collections::HashMap::new(),
+                })
+            })
+        }
         _ => None,
     };
 
@@ -924,12 +950,12 @@ async fn try_init_channel(
     let settings = serde_json::to_value(&cfg.settings)?;
     tracing::info!("🔧 {} settings: {:?}", platform, settings);
 
-    match registry
-        .create_channel(platform, &settings)
-        .await
-    {
+    match registry.create_channel(platform, &settings).await {
         Ok(channel) => {
-            info!("✅ {} channel '{}' created successfully", platform, channel_id);
+            info!(
+                "✅ {} channel '{}' created successfully",
+                platform, channel_id
+            );
 
             // Connect and start listener
             {
@@ -947,7 +973,10 @@ async fn try_init_channel(
                             if let Err(e) = guard.start_listener(event_bus).await {
                                 warn!("❌ Failed to start {} listener: {}", platform_name, e);
                             } else {
-                                info!("✅ {} channel '{}' listener started", platform_name, channel_id_name);
+                                info!(
+                                    "✅ {} channel '{}' listener started",
+                                    platform_name, channel_id_name
+                                );
                             }
                         });
                     }
@@ -985,15 +1014,11 @@ async fn init_channel_registry(
     registry
         .register(Box::new(SlackChannelFactory::new()))
         .await;
-    registry
-        .register(Box::new(WeChatFactory::new()))
-        .await;
+    registry.register(Box::new(WeChatFactory::new())).await;
     registry
         .register(Box::new(PersonalWeChatFactory::new()))
         .await;
-    registry
-        .register(Box::new(WebChatFactory::new()))
-        .await;
+    registry.register(Box::new(WebChatFactory::new())).await;
     info!(
         "✅ Registered {} channel factories",
         registry.factory_count().await
@@ -1003,7 +1028,15 @@ async fn init_channel_registry(
     let mut has_channels = false;
 
     for (platform, channel_id) in CHANNELS {
-        match try_init_channel(&registry, config, platform, channel_id, Some(event_tx.clone())).await {
+        match try_init_channel(
+            &registry,
+            config,
+            platform,
+            channel_id,
+            Some(event_tx.clone()),
+        )
+        .await
+        {
             Ok(true) => has_channels = true,
             Ok(false) => {}
             Err(e) => warn!("❌ Channel initialization error: {}", e),
@@ -1062,28 +1095,32 @@ async fn restore_skills_from_disk(registry: &Arc<beebotos_agents::skills::SkillR
     }
 }
 
-/// Scan project skills/ directory and register markdown-defined skills as lightweight builtins.
-/// Delegates to the shared loader in beebotos-agents to keep behaviour in sync.
+/// Scan project skills/ directory and register markdown-defined skills as
+/// lightweight builtins. Delegates to the shared loader in beebotos-agents to
+/// keep behaviour in sync.
 async fn register_builtin_skills(registry: &Arc<beebotos_agents::skills::SkillRegistry>) {
     beebotos_agents::skills::builtin_loader::load_builtin_skills(registry).await;
 }
 
 /// Initialize database connection pool with retry logic
-/// 
+///
 /// REL-002: Implements connection retry with exponential backoff
 async fn init_database(config: &AppConfig) -> anyhow::Result<SqlitePool> {
     const MAX_RETRIES: u32 = 5;
     const INITIAL_RETRY_DELAY_MS: u64 = 1000;
     const MAX_RETRY_DELAY_MS: u64 = 30000;
-    
+
     let mut last_error = None;
     let mut retry_delay = INITIAL_RETRY_DELAY_MS;
-    
+
     for attempt in 0..MAX_RETRIES {
         match try_connect_database(config).await {
             Ok(pool) => {
                 if attempt > 0 {
-                    info!("✅ Database connection established after {} attempt(s)", attempt + 1);
+                    info!(
+                        "✅ Database connection established after {} attempt(s)",
+                        attempt + 1
+                    );
                 }
                 return Ok(pool);
             }
@@ -1103,7 +1140,7 @@ async fn init_database(config: &AppConfig) -> anyhow::Result<SqlitePool> {
             }
         }
     }
-    
+
     Err(anyhow::anyhow!(
         "Failed to connect to database after {} attempts: {:?}",
         MAX_RETRIES,
@@ -1120,7 +1157,11 @@ async fn try_connect_database(config: &AppConfig) -> anyhow::Result<SqlitePool> 
         let path = if let Some(p) = db_url.strip_prefix("sqlite://") {
             // On Windows, absolute paths may have a leading slash before the drive letter
             // e.g., sqlite:///C:/path -> /C:/path. Strip it so Path can parse correctly.
-            if cfg!(target_os = "windows") && p.len() > 2 && p.starts_with('/') && p.as_bytes()[2] == b':' {
+            if cfg!(target_os = "windows")
+                && p.len() > 2
+                && p.starts_with('/')
+                && p.as_bytes()[2] == b':'
+            {
                 &p[1..]
             } else {
                 p
@@ -1128,15 +1169,15 @@ async fn try_connect_database(config: &AppConfig) -> anyhow::Result<SqlitePool> 
         } else {
             db_url.strip_prefix("sqlite:").unwrap_or(db_url)
         };
-        
+
         if let Some(dir) = std::path::Path::new(path).parent() {
             std::fs::create_dir_all(dir)?;
         }
     }
 
     // SQLx 默认 create_if_missing=false，对于文件型 SQLite 需要显式启用创建
-    let connect_options = sqlx::sqlite::SqliteConnectOptions::from_str(db_url)?
-        .create_if_missing(true);
+    let connect_options =
+        sqlx::sqlite::SqliteConnectOptions::from_str(db_url)?.create_if_missing(true);
 
     let pool = SqlitePoolOptions::new()
         .max_connections(config.database.max_connections)
@@ -1195,8 +1236,14 @@ fn create_router(app_state: Arc<AppState>, gateway_state: Arc<GatewayState>) -> 
         .route("/metrics", get(telemetry::metrics_handler))
         // Auth routes (public)
         .route("/api/v1/auth/login", post(handlers::http::auth::login))
-        .route("/api/v1/auth/register", post(handlers::http::auth::register))
-        .route("/api/v1/auth/refresh", post(handlers::http::auth::refresh_token))
+        .route(
+            "/api/v1/auth/register",
+            post(handlers::http::auth::register),
+        )
+        .route(
+            "/api/v1/auth/refresh",
+            post(handlers::http::auth::refresh_token),
+        )
         // WebSocket status endpoint (public for health checks)
         .route("/ws/status", get(handlers::websocket::ws_status_handler))
         // Webhook routes
@@ -1207,18 +1254,22 @@ fn create_router(app_state: Arc<AppState>, gateway_state: Arc<GatewayState>) -> 
         // WeChat webhook - needs special handling for URL verification (GET with echostr)
         .route(
             "/webhook/wechat",
-            get(handlers::http::webhooks::wechat_get_handler)
-                .post({
-                    let state = app_state.clone();
-                    move |Query(params): Query<std::collections::HashMap<String, String>>, body: String| async move {
-                        let msg_sig = params.get("msg_signature").map(|s| s.as_str()).unwrap_or("");
-                        let ts = params.get("timestamp").map(|s| s.as_str()).unwrap_or("");
-                        let nonce = params.get("nonce").map(|s| s.as_str()).unwrap_or("");
-                        handlers::http::webhooks::wechat_post_handler_impl(
-                            state, msg_sig, ts, nonce, &body
-                        ).await
-                    }
-                }),
+            get(handlers::http::webhooks::wechat_get_handler).post({
+                let state = app_state.clone();
+                move |Query(params): Query<std::collections::HashMap<String, String>>,
+                      body: String| async move {
+                    let msg_sig = params
+                        .get("msg_signature")
+                        .map(|s| s.as_str())
+                        .unwrap_or("");
+                    let ts = params.get("timestamp").map(|s| s.as_str()).unwrap_or("");
+                    let nonce = params.get("nonce").map(|s| s.as_str()).unwrap_or("");
+                    handlers::http::webhooks::wechat_post_handler_impl(
+                        state, msg_sig, ts, nonce, &body,
+                    )
+                    .await
+                }
+            }),
         )
         .route(
             "/webhook/:platform",
@@ -1233,155 +1284,509 @@ fn create_router(app_state: Arc<AppState>, gateway_state: Arc<GatewayState>) -> 
         .route("/api/v1/agents/:id", get(agents::get_agent))
         .route("/api/v1/agents/:id", put(agents::update_agent))
         .route("/api/v1/agents/:id", delete(agents::delete_agent))
-        .route("/api/v1/agents/:id/logs", get(handlers::http::agent_logs::get_agent_logs))
+        .route(
+            "/api/v1/agents/:id/logs",
+            get(handlers::http::agent_logs::get_agent_logs),
+        )
         // Browser Automation API
-        .route("/api/v1/browser/status", get(handlers::http::browser::get_status))
-        .route("/api/v1/browser/profiles", get(handlers::http::browser::list_profiles))
-        .route("/api/v1/browser/profiles", post(handlers::http::browser::create_profile))
-        .route("/api/v1/browser/profiles/:id", delete(handlers::http::browser::delete_profile))
-        .route("/api/v1/browser/connect", post(handlers::http::browser::connect))
-        .route("/api/v1/browser/disconnect", post(handlers::http::browser::disconnect))
-        .route("/api/v1/browser/navigate", post(handlers::http::browser::navigate))
-        .route("/api/v1/browser/evaluate", post(handlers::http::browser::evaluate))
-        .route("/api/v1/browser/screenshot", post(handlers::http::browser::screenshot))
-        .route("/api/v1/browser/batch", post(handlers::http::browser::execute_batch))
-        .route("/api/v1/browser/sandboxes", get(handlers::http::browser::list_sandboxes))
-        .route("/api/v1/browser/sandboxes", post(handlers::http::browser::create_sandbox))
-        .route("/api/v1/browser/sandboxes/:id", delete(handlers::http::browser::delete_sandbox))
-        .route("/api/v1/browser/sandboxes/:id/stats", get(handlers::http::browser::get_sandbox_stats))
+        .route(
+            "/api/v1/browser/status",
+            get(handlers::http::browser::get_status),
+        )
+        .route(
+            "/api/v1/browser/profiles",
+            get(handlers::http::browser::list_profiles),
+        )
+        .route(
+            "/api/v1/browser/profiles",
+            post(handlers::http::browser::create_profile),
+        )
+        .route(
+            "/api/v1/browser/profiles/:id",
+            delete(handlers::http::browser::delete_profile),
+        )
+        .route(
+            "/api/v1/browser/connect",
+            post(handlers::http::browser::connect),
+        )
+        .route(
+            "/api/v1/browser/disconnect",
+            post(handlers::http::browser::disconnect),
+        )
+        .route(
+            "/api/v1/browser/navigate",
+            post(handlers::http::browser::navigate),
+        )
+        .route(
+            "/api/v1/browser/evaluate",
+            post(handlers::http::browser::evaluate),
+        )
+        .route(
+            "/api/v1/browser/screenshot",
+            post(handlers::http::browser::screenshot),
+        )
+        .route(
+            "/api/v1/browser/batch",
+            post(handlers::http::browser::execute_batch),
+        )
+        .route(
+            "/api/v1/browser/sandboxes",
+            get(handlers::http::browser::list_sandboxes),
+        )
+        .route(
+            "/api/v1/browser/sandboxes",
+            post(handlers::http::browser::create_sandbox),
+        )
+        .route(
+            "/api/v1/browser/sandboxes/:id",
+            delete(handlers::http::browser::delete_sandbox),
+        )
+        .route(
+            "/api/v1/browser/sandboxes/:id/stats",
+            get(handlers::http::browser::get_sandbox_stats),
+        )
         // Admin Config API
-        .route("/api/v1/admin/config", get(handlers::http::admin_config::get_config))
-        .route("/api/v1/admin/config/reload", post(handlers::http::admin_config::reload_config))
+        .route(
+            "/api/v1/admin/config",
+            get(handlers::http::admin_config::get_config),
+        )
+        .route(
+            "/api/v1/admin/config/reload",
+            post(handlers::http::admin_config::reload_config),
+        )
         .route("/api/v1/agents/:id/start", post(agents::start_agent))
         .route("/api/v1/agents/:id/stop", post(agents::stop_agent))
         .route("/api/v1/agents/:id/tasks", post(agents::execute_agent_task))
         // Agent API (V2 - AgentRuntime trait + StateStore CQRS)
-        .route("/api/v2/agents", get(handlers::http::agents_v2::list_agents_v2))
-        .route("/api/v2/agents", post(handlers::http::agents_v2::create_agent_v2))
-        .route("/api/v2/agents/:id", get(handlers::http::agents_v2::get_agent_v2))
-        .route("/api/v2/agents/:id", delete(handlers::http::agents_v2::delete_agent_v2))
-        .route("/api/v2/agents/:id/start", post(handlers::http::agents_v2::start_agent_v2))
-        .route("/api/v2/agents/:id/stop", post(handlers::http::agents_v2::stop_agent_v2))
-        .route("/api/v2/agents/:id/status", get(handlers::http::agents_v2::get_agent_status_v2))
-        .route("/api/v2/agents/:id/tasks", post(handlers::http::agents_v2::execute_task_v2))
-        .route("/api/v2/agents/:id/channels", post(handlers::http::agents_v2::bind_agent_channel))
-        .route("/api/v2/agents/:id/channels", get(handlers::http::agents_v2::list_agent_channels))
-        .route("/api/v2/agents/:id/channels/:channel_id", delete(handlers::http::agents_v2::unbind_agent_channel))
+        .route(
+            "/api/v2/agents",
+            get(handlers::http::agents_v2::list_agents_v2),
+        )
+        .route(
+            "/api/v2/agents",
+            post(handlers::http::agents_v2::create_agent_v2),
+        )
+        .route(
+            "/api/v2/agents/:id",
+            get(handlers::http::agents_v2::get_agent_v2),
+        )
+        .route(
+            "/api/v2/agents/:id",
+            delete(handlers::http::agents_v2::delete_agent_v2),
+        )
+        .route(
+            "/api/v2/agents/:id/start",
+            post(handlers::http::agents_v2::start_agent_v2),
+        )
+        .route(
+            "/api/v2/agents/:id/stop",
+            post(handlers::http::agents_v2::stop_agent_v2),
+        )
+        .route(
+            "/api/v2/agents/:id/status",
+            get(handlers::http::agents_v2::get_agent_status_v2),
+        )
+        .route(
+            "/api/v2/agents/:id/tasks",
+            post(handlers::http::agents_v2::execute_task_v2),
+        )
+        .route(
+            "/api/v2/agents/:id/channels",
+            post(handlers::http::agents_v2::bind_agent_channel),
+        )
+        .route(
+            "/api/v2/agents/:id/channels",
+            get(handlers::http::agents_v2::list_agent_channels),
+        )
+        .route(
+            "/api/v2/agents/:id/channels/:channel_id",
+            delete(handlers::http::agents_v2::unbind_agent_channel),
+        )
         // P2 FIX: Pure new-system Agent-Channel binding APIs
-        .route("/api/v2/agents/:id/agent-channel-bindings", post(handlers::http::agents_v2::bind_agent_channel_v2))
-        .route("/api/v2/agents/:id/agent-channel-bindings", get(handlers::http::agents_v2::list_agent_channel_bindings_v2))
-        .route("/api/v2/agents/:id/agent-channel-bindings/unbind", post(handlers::http::agents_v2::unbind_agent_channel_v2))
+        .route(
+            "/api/v2/agents/:id/agent-channel-bindings",
+            post(handlers::http::agents_v2::bind_agent_channel_v2),
+        )
+        .route(
+            "/api/v2/agents/:id/agent-channel-bindings",
+            get(handlers::http::agents_v2::list_agent_channel_bindings_v2),
+        )
+        .route(
+            "/api/v2/agents/:id/agent-channel-bindings/unbind",
+            post(handlers::http::agents_v2::unbind_agent_channel_v2),
+        )
         // Capability API
         .route("/api/v1/capabilities", get(agents::list_capability_types))
-        .route("/api/v1/capabilities/validate", post(agents::validate_capabilities))
+        .route(
+            "/api/v1/capabilities/validate",
+            post(agents::validate_capabilities),
+        )
         // Chain API (V1 - Legacy ChainService)
-        .route("/api/v1/chain/status", get(handlers::http::chain::get_chain_status))
-        .route("/api/v1/chain/agents/:id/identity", post(handlers::http::chain::register_agent_identity))
-        .route("/api/v1/chain/agents/:id/identity", get(handlers::http::chain::get_agent_identity))
-        .route("/api/v1/chain/agents/:id/has-identity", get(handlers::http::chain::has_agent_identity))
-        .route("/api/v1/chain/dao/summary", get(handlers::http::chain::get_dao_summary))
-        .route("/api/v1/chain/dao/proposals", get(handlers::http::chain::list_proposals))
-        .route("/api/v1/chain/dao/proposals", post(handlers::http::chain::create_dao_proposal))
-        .route("/api/v1/chain/dao/proposals/:id", get(handlers::http::chain::get_proposal))
-        .route("/api/v1/chain/dao/proposals/:id/vote", post(handlers::http::chain::cast_vote))
+        .route(
+            "/api/v1/chain/status",
+            get(handlers::http::chain::get_chain_status),
+        )
+        .route(
+            "/api/v1/chain/agents/:id/identity",
+            post(handlers::http::chain::register_agent_identity),
+        )
+        .route(
+            "/api/v1/chain/agents/:id/identity",
+            get(handlers::http::chain::get_agent_identity),
+        )
+        .route(
+            "/api/v1/chain/agents/:id/has-identity",
+            get(handlers::http::chain::has_agent_identity),
+        )
+        .route(
+            "/api/v1/chain/dao/summary",
+            get(handlers::http::chain::get_dao_summary),
+        )
+        .route(
+            "/api/v1/chain/dao/proposals",
+            get(handlers::http::chain::list_proposals),
+        )
+        .route(
+            "/api/v1/chain/dao/proposals",
+            post(handlers::http::chain::create_dao_proposal),
+        )
+        .route(
+            "/api/v1/chain/dao/proposals/:id",
+            get(handlers::http::chain::get_proposal),
+        )
+        .route(
+            "/api/v1/chain/dao/proposals/:id/vote",
+            post(handlers::http::chain::cast_vote),
+        )
         // Chain API (V2 - Split Services: WalletService, DaoService, IdentityService)
         // Wallet endpoints
-        .route("/api/v2/chain/wallet", get(handlers::http::chain_v2::get_wallet_info))
-        .route("/api/v2/chain/wallet/transfer", post(handlers::http::chain_v2::transfer))
+        .route(
+            "/api/v2/chain/wallet",
+            get(handlers::http::chain_v2::get_wallet_info),
+        )
+        .route(
+            "/api/v2/chain/wallet/transfer",
+            post(handlers::http::chain_v2::transfer),
+        )
         // Treasury API
-        .route("/api/v1/treasury", get(handlers::http::treasury::get_treasury))
-        .route("/api/v1/treasury/transfer", post(handlers::http::treasury::transfer))
+        .route(
+            "/api/v1/treasury",
+            get(handlers::http::treasury::get_treasury),
+        )
+        .route(
+            "/api/v1/treasury/transfer",
+            post(handlers::http::treasury::transfer),
+        )
         // Identity endpoints
-        .route("/api/v2/chain/agents/:id/identity", post(handlers::http::chain_v2::register_agent_identity))
-        .route("/api/v2/chain/agents/:id/identity", get(handlers::http::chain_v2::get_agent_identity))
-        .route("/api/v2/chain/agents/:id/has-identity", get(handlers::http::chain_v2::has_agent_identity))
+        .route(
+            "/api/v2/chain/agents/:id/identity",
+            post(handlers::http::chain_v2::register_agent_identity),
+        )
+        .route(
+            "/api/v2/chain/agents/:id/identity",
+            get(handlers::http::chain_v2::get_agent_identity),
+        )
+        .route(
+            "/api/v2/chain/agents/:id/has-identity",
+            get(handlers::http::chain_v2::has_agent_identity),
+        )
         // DAO endpoints
-        .route("/api/v2/chain/dao/proposals", get(handlers::http::chain_v2::list_proposals))
-        .route("/api/v2/chain/dao/proposals", post(handlers::http::chain_v2::create_dao_proposal))
-        .route("/api/v2/chain/dao/proposals/:id", get(handlers::http::chain_v2::get_proposal))
-        .route("/api/v2/chain/dao/proposals/:id/vote", post(handlers::http::chain_v2::cast_vote))
+        .route(
+            "/api/v2/chain/dao/proposals",
+            get(handlers::http::chain_v2::list_proposals),
+        )
+        .route(
+            "/api/v2/chain/dao/proposals",
+            post(handlers::http::chain_v2::create_dao_proposal),
+        )
+        .route(
+            "/api/v2/chain/dao/proposals/:id",
+            get(handlers::http::chain_v2::get_proposal),
+        )
+        .route(
+            "/api/v2/chain/dao/proposals/:id/vote",
+            post(handlers::http::chain_v2::cast_vote),
+        )
         // State Machine API
-        .route("/api/v1/states", get(handlers::http::state_machine::list_states))
-        .route("/api/v1/states/stats", get(handlers::http::state_machine::get_state_machine_stats))
-        .route("/api/v1/states/timeouts", get(handlers::http::state_machine::check_timeouts))
-        .route("/api/v1/agents/:id/state", get(handlers::http::state_machine::get_agent_state))
-        .route("/api/v1/agents/:id/state/context", get(handlers::http::state_machine::get_agent_state_context))
-        .route("/api/v1/agents/:id/state/transitions", get(handlers::http::state_machine::get_valid_transitions))
-        .route("/api/v1/agents/:id/state/transition", post(handlers::http::state_machine::transition_state))
-        .route("/api/v1/agents/:id/pause", post(handlers::http::state_machine::pause_agent))
-        .route("/api/v1/agents/:id/resume", post(handlers::http::state_machine::resume_agent))
-        .route("/api/v1/agents/:id/retry", post(handlers::http::state_machine::retry_agent))
+        .route(
+            "/api/v1/states",
+            get(handlers::http::state_machine::list_states),
+        )
+        .route(
+            "/api/v1/states/stats",
+            get(handlers::http::state_machine::get_state_machine_stats),
+        )
+        .route(
+            "/api/v1/states/timeouts",
+            get(handlers::http::state_machine::check_timeouts),
+        )
+        .route(
+            "/api/v1/agents/:id/state",
+            get(handlers::http::state_machine::get_agent_state),
+        )
+        .route(
+            "/api/v1/agents/:id/state/context",
+            get(handlers::http::state_machine::get_agent_state_context),
+        )
+        .route(
+            "/api/v1/agents/:id/state/transitions",
+            get(handlers::http::state_machine::get_valid_transitions),
+        )
+        .route(
+            "/api/v1/agents/:id/state/transition",
+            post(handlers::http::state_machine::transition_state),
+        )
+        .route(
+            "/api/v1/agents/:id/pause",
+            post(handlers::http::state_machine::pause_agent),
+        )
+        .route(
+            "/api/v1/agents/:id/resume",
+            post(handlers::http::state_machine::resume_agent),
+        )
+        .route(
+            "/api/v1/agents/:id/retry",
+            post(handlers::http::state_machine::retry_agent),
+        )
         // Task Monitor API
-        .route("/api/v1/tasks/stats", get(handlers::http::task_monitor::get_task_monitor_stats))
-        .route("/api/v1/tasks/monitored", get(handlers::http::task_monitor::list_monitored_agents))
-        .route("/api/v1/tasks/agents/:id", get(handlers::http::task_monitor::get_agent_task_status))
-        .route("/api/v1/tasks/agents/:id/cancel", post(handlers::http::task_monitor::cancel_task_monitoring))
-        .route("/api/v1/tasks/fault-detection", get(handlers::http::task_monitor::get_fault_detection_status))
+        .route(
+            "/api/v1/tasks/stats",
+            get(handlers::http::task_monitor::get_task_monitor_stats),
+        )
+        .route(
+            "/api/v1/tasks/monitored",
+            get(handlers::http::task_monitor::list_monitored_agents),
+        )
+        .route(
+            "/api/v1/tasks/agents/:id",
+            get(handlers::http::task_monitor::get_agent_task_status),
+        )
+        .route(
+            "/api/v1/tasks/agents/:id/cancel",
+            post(handlers::http::task_monitor::cancel_task_monitoring),
+        )
+        .route(
+            "/api/v1/tasks/fault-detection",
+            get(handlers::http::task_monitor::get_fault_detection_status),
+        )
         // LLM Metrics API
-        .route("/api/v1/llm/metrics", get(handlers::http::llm_metrics::get_llm_metrics))
-        .route("/api/v1/llm/config", get(handlers::http::llm_config::get_llm_global_config))
-        .route("/api/v1/llm/health", get(handlers::http::llm_metrics::get_llm_health))
+        .route(
+            "/api/v1/llm/metrics",
+            get(handlers::http::llm_metrics::get_llm_metrics),
+        )
+        .route(
+            "/api/v1/llm/config",
+            get(handlers::http::llm_config::get_llm_global_config),
+        )
+        .route(
+            "/api/v1/llm/health",
+            get(handlers::http::llm_metrics::get_llm_health),
+        )
         // LLM Provider Admin API
-        .route("/api/v1/admin/llm/providers", get(handlers::http::llm_admin::list_providers))
-        .route("/api/v1/admin/llm/providers", post(handlers::http::llm_admin::create_provider))
-        .route("/api/v1/admin/llm/providers/:id", put(handlers::http::llm_admin::update_provider))
-        .route("/api/v1/admin/llm/providers/:id", delete(handlers::http::llm_admin::delete_provider))
-        .route("/api/v1/admin/llm/providers/:id/models", post(handlers::http::llm_admin::add_model))
-        .route("/api/v1/admin/llm/providers/:id/models/:model_id", delete(handlers::http::llm_admin::delete_model))
-        .route("/api/v1/admin/llm/providers/:id/default", put(handlers::http::llm_admin::set_default_provider))
-        .route("/api/v1/admin/llm/providers/:id/models/:model_id/default", put(handlers::http::llm_admin::set_default_model))
+        .route(
+            "/api/v1/admin/llm/providers",
+            get(handlers::http::llm_admin::list_providers),
+        )
+        .route(
+            "/api/v1/admin/llm/providers",
+            post(handlers::http::llm_admin::create_provider),
+        )
+        .route(
+            "/api/v1/admin/llm/providers/:id",
+            put(handlers::http::llm_admin::update_provider),
+        )
+        .route(
+            "/api/v1/admin/llm/providers/:id",
+            delete(handlers::http::llm_admin::delete_provider),
+        )
+        .route(
+            "/api/v1/admin/llm/providers/:id/models",
+            post(handlers::http::llm_admin::add_model),
+        )
+        .route(
+            "/api/v1/admin/llm/providers/:id/models/:model_id",
+            delete(handlers::http::llm_admin::delete_model),
+        )
+        .route(
+            "/api/v1/admin/llm/providers/:id/default",
+            put(handlers::http::llm_admin::set_default_provider),
+        )
+        .route(
+            "/api/v1/admin/llm/providers/:id/models/:model_id/default",
+            put(handlers::http::llm_admin::set_default_model),
+        )
         // Skills API
         .route("/api/v1/skills", get(handlers::http::skills::list_skills))
-        .route("/api/v1/skills/install", post(handlers::http::skills::install_skill))
+        .route(
+            "/api/v1/skills/install",
+            post(handlers::http::skills::install_skill),
+        )
         .route("/api/v1/skills/:id", get(handlers::http::skills::get_skill))
-        .route("/api/v1/skills/:id/uninstall", delete(handlers::http::skills::uninstall_skill))
-        .route("/api/v1/skills/:id/execute", post(handlers::http::skills::execute_skill))
-        .route("/api/v1/skills/hub/health", get(handlers::http::skills::hub_health))
+        .route(
+            "/api/v1/skills/:id/uninstall",
+            delete(handlers::http::skills::uninstall_skill),
+        )
+        .route(
+            "/api/v1/skills/:id/execute",
+            post(handlers::http::skills::execute_skill),
+        )
+        .route(
+            "/api/v1/skills/hub/health",
+            get(handlers::http::skills::hub_health),
+        )
         // Instance-based skill execution
-        .route("/api/v1/instances", post(handlers::http::skills::create_instance))
-        .route("/api/v1/instances", get(handlers::http::skills::list_instances))
-        .route("/api/v1/instances/:id", get(handlers::http::skills::get_instance))
-        .route("/api/v1/instances/:id", put(handlers::http::skills::update_instance))
-        .route("/api/v1/instances/:id", delete(handlers::http::skills::delete_instance))
-        .route("/api/v1/instances/:id/execute", post(handlers::http::skills::execute_instance))
+        .route(
+            "/api/v1/instances",
+            post(handlers::http::skills::create_instance),
+        )
+        .route(
+            "/api/v1/instances",
+            get(handlers::http::skills::list_instances),
+        )
+        .route(
+            "/api/v1/instances/:id",
+            get(handlers::http::skills::get_instance),
+        )
+        .route(
+            "/api/v1/instances/:id",
+            put(handlers::http::skills::update_instance),
+        )
+        .route(
+            "/api/v1/instances/:id",
+            delete(handlers::http::skills::delete_instance),
+        )
+        .route(
+            "/api/v1/instances/:id/execute",
+            post(handlers::http::skills::execute_instance),
+        )
         // Auth routes (protected)
         .route("/api/v1/auth/logout", post(handlers::http::auth::logout))
         .route("/api/v1/auth/me", get(handlers::http::auth::me))
         // User Settings
-        .route("/api/v1/user/settings", get(handlers::http::user_settings::get_user_settings))
-        .route("/api/v1/user/settings", put(handlers::http::user_settings::update_user_settings))
+        .route(
+            "/api/v1/user/settings",
+            get(handlers::http::user_settings::get_user_settings),
+        )
+        .route(
+            "/api/v1/user/settings",
+            put(handlers::http::user_settings::update_user_settings),
+        )
         // Webchat routes
-        .route("/api/v1/webchat/sessions", get(handlers::http::webchat::list_sessions))
-        .route("/api/v1/webchat/sessions", post(handlers::http::webchat::create_session))
-        .route("/api/v1/webchat/sessions/:id", delete(handlers::http::webchat::delete_session))
-        .route("/api/v1/webchat/sessions/:id/messages", get(handlers::http::webchat::get_messages))
-        .route("/api/v1/webchat/sessions/:id/title", put(handlers::http::webchat::update_title))
-        .route("/api/v1/webchat/sessions/:id/pin", post(handlers::http::webchat::toggle_pin))
-        .route("/api/v1/webchat/sessions/:id/archive", post(handlers::http::webchat::archive_session))
-        .route("/api/v1/webchat/sessions/:id/clear", post(handlers::http::webchat::clear_messages))
-        .route("/api/v1/webchat/sessions/:id/export", get(handlers::http::webchat::export_session))
-        .route("/api/v1/webchat/sessions/import", post(handlers::http::webchat::import_session))
-        .route("/api/v1/webchat/sessions/:id/messages/stream", post(handlers::http::webchat::send_message_streaming))
-        .route("/api/v1/webchat/usage", get(handlers::http::webchat::get_usage))
-        .route("/api/v1/webchat/side-questions", post(handlers::http::webchat::create_side_question))
+        .route(
+            "/api/v1/webchat/sessions",
+            get(handlers::http::webchat::list_sessions),
+        )
+        .route(
+            "/api/v1/webchat/sessions",
+            post(handlers::http::webchat::create_session),
+        )
+        .route(
+            "/api/v1/webchat/sessions/:id",
+            delete(handlers::http::webchat::delete_session),
+        )
+        .route(
+            "/api/v1/webchat/sessions/:id/messages",
+            get(handlers::http::webchat::get_messages),
+        )
+        .route(
+            "/api/v1/webchat/sessions/:id/title",
+            put(handlers::http::webchat::update_title),
+        )
+        .route(
+            "/api/v1/webchat/sessions/:id/pin",
+            post(handlers::http::webchat::toggle_pin),
+        )
+        .route(
+            "/api/v1/webchat/sessions/:id/archive",
+            post(handlers::http::webchat::archive_session),
+        )
+        .route(
+            "/api/v1/webchat/sessions/:id/clear",
+            post(handlers::http::webchat::clear_messages),
+        )
+        .route(
+            "/api/v1/webchat/sessions/:id/export",
+            get(handlers::http::webchat::export_session),
+        )
+        .route(
+            "/api/v1/webchat/sessions/import",
+            post(handlers::http::webchat::import_session),
+        )
+        .route(
+            "/api/v1/webchat/sessions/:id/messages/stream",
+            post(handlers::http::webchat::send_message_streaming),
+        )
+        .route(
+            "/api/v1/webchat/usage",
+            get(handlers::http::webchat::get_usage),
+        )
+        .route(
+            "/api/v1/webchat/side-questions",
+            post(handlers::http::webchat::create_side_question),
+        )
         // Channel routes
-        .route("/api/v1/channels", get(handlers::http::channels::list_channels))
-        .route("/api/v1/channels/:id", get(handlers::http::channels::get_channel))
-        .route("/api/v1/channels/:id", put(handlers::http::channels::update_channel))
-        .route("/api/v1/channels/:id/enable", post(handlers::http::channels::set_channel_enabled))
-        .route("/api/v1/channels/:id/test", post(handlers::http::channels::test_channel_connection))
-        .route("/api/v1/channels/wechat/qr", post(handlers::http::channels::get_wechat_qr))
-        .route("/api/v1/channels/wechat/qr/check", post(handlers::http::channels::check_wechat_qr))
-        .route("/api/v1/channels/webchat/messages", post(handlers::http::channels::send_webchat_message))
+        .route(
+            "/api/v1/channels",
+            get(handlers::http::channels::list_channels),
+        )
+        .route(
+            "/api/v1/channels/:id",
+            get(handlers::http::channels::get_channel),
+        )
+        .route(
+            "/api/v1/channels/:id",
+            put(handlers::http::channels::update_channel),
+        )
+        .route(
+            "/api/v1/channels/:id/enable",
+            post(handlers::http::channels::set_channel_enabled),
+        )
+        .route(
+            "/api/v1/channels/:id/test",
+            post(handlers::http::channels::test_channel_connection),
+        )
+        .route(
+            "/api/v1/channels/wechat/qr",
+            post(handlers::http::channels::get_wechat_qr),
+        )
+        .route(
+            "/api/v1/channels/wechat/qr/check",
+            post(handlers::http::channels::check_wechat_qr),
+        )
+        .route(
+            "/api/v1/channels/webchat/messages",
+            post(handlers::http::channels::send_webchat_message),
+        )
         // P2 FIX: User Channel management APIs
-        .route("/api/v2/user-channels", post(handlers::http::user_channels::create_user_channel))
-        .route("/api/v2/user-channels", get(handlers::http::user_channels::list_user_channels))
-        .route("/api/v2/user-channels/:id", get(handlers::http::user_channels::get_user_channel))
-        .route("/api/v2/user-channels/:id", delete(handlers::http::user_channels::delete_user_channel))
-        .route("/api/v2/user-channels/:id/connect", post(handlers::http::user_channels::connect_user_channel))
-        .route("/api/v2/user-channels/:id/disconnect", post(handlers::http::user_channels::disconnect_user_channel))
+        .route(
+            "/api/v2/user-channels",
+            post(handlers::http::user_channels::create_user_channel),
+        )
+        .route(
+            "/api/v2/user-channels",
+            get(handlers::http::user_channels::list_user_channels),
+        )
+        .route(
+            "/api/v2/user-channels/:id",
+            get(handlers::http::user_channels::get_user_channel),
+        )
+        .route(
+            "/api/v2/user-channels/:id",
+            delete(handlers::http::user_channels::delete_user_channel),
+        )
+        .route(
+            "/api/v2/user-channels/:id/connect",
+            post(handlers::http::user_channels::connect_user_channel),
+        )
+        .route(
+            "/api/v2/user-channels/:id/disconnect",
+            post(handlers::http::user_channels::disconnect_user_channel),
+        )
         // P2 FIX: Admin migration API
-        .route("/api/v1/admin/migrate-bindings", post(handlers::http::agents_v2::migrate_legacy_bindings))
+        .route(
+            "/api/v1/admin/migrate-bindings",
+            post(handlers::http::agents_v2::migrate_legacy_bindings),
+        )
         // WebSocket broadcast (admin only)
         .route(
             "/api/v1/ws/broadcast",
@@ -1416,14 +1821,14 @@ fn create_router(app_state: Arc<AppState>, gateway_state: Arc<GatewayState>) -> 
 }
 
 /// System status handler
-/// 
+///
 /// OBS-003: Enhanced health check with all components
 async fn system_status_handler(
     State(state): State<Arc<AppState>>,
 ) -> Result<axum::Json<serde_json::Value>, GatewayError> {
     // Use full health check for detailed status
     let health = health::check_system_full(&state).await;
-    
+
     // Get agent count from unified state manager (single source of truth)
     let agent_count = state.state_manager.list_agents().await.len();
 
@@ -1521,10 +1926,16 @@ async fn ensure_default_agent(
 
     let llm_config = gateway::agent_runtime::LlmConfig {
         provider: default_provider.clone(),
-        model: model_config.as_ref().and_then(|m| m.model.clone()).unwrap_or_else(|| "gpt-4".to_string()),
+        model: model_config
+            .as_ref()
+            .and_then(|m| m.model.clone())
+            .unwrap_or_else(|| "gpt-4".to_string()),
         api_key: model_config.as_ref().and_then(|m| m.api_key.clone()),
         temperature: model_config.as_ref().map(|m| m.temperature).unwrap_or(0.7),
-        max_tokens: model_config.as_ref().and_then(|m| m.context_window).unwrap_or(4096) as u32,
+        max_tokens: model_config
+            .as_ref()
+            .and_then(|m| m.context_window)
+            .unwrap_or(4096) as u32,
     };
 
     let agent_config = gateway::agent_runtime::AgentConfigBuilder::new(agent_id, "Default Agent")
@@ -1578,8 +1989,9 @@ async fn shutdown_signal() {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::collections::HashMap;
+
+    use super::*;
 
     /// Create a test configuration for unit tests
     fn create_test_config() -> BeeBotOSConfig {
@@ -1608,7 +2020,9 @@ mod tests {
                 run_migrations: true,
             },
             jwt: config::JwtConfig {
-                secret: secrecy::SecretString::new("a-very-long-secret-key-at-least-32-chars".to_string()),
+                secret: secrecy::SecretString::new(
+                    "a-very-long-secret-key-at-least-32-chars".to_string(),
+                ),
                 expiry_hours: 24,
                 refresh_expiry_hours: 168,
                 issuer: "beebotos".to_string(),
@@ -1623,14 +2037,17 @@ mod tests {
                 system_prompt: "You are a helpful assistant.".to_string(),
                 providers: {
                     let mut map = HashMap::new();
-                    map.insert("kimi".to_string(), config::ModelProviderConfig {
-                        api_key: Some("test-key".to_string()),
-                        base_url: Some("https://api.moonshot.cn".to_string()),
-                        model: Some("moonshot-v1-8k".to_string()),
-                        temperature: 0.7,
-                        deployment: None,
-                        context_window: Some(8192),
-                    });
+                    map.insert(
+                        "kimi".to_string(),
+                        config::ModelProviderConfig {
+                            api_key: Some("test-key".to_string()),
+                            base_url: Some("https://api.moonshot.cn".to_string()),
+                            model: Some("moonshot-v1-8k".to_string()),
+                            temperature: 0.7,
+                            deployment: None,
+                            context_window: Some(8192),
+                        },
+                    );
                     map
                 },
             },
@@ -1707,6 +2124,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_router_creation() {
+        // Set encryption master key for test
+        std::env::set_var(
+            "BEE__SECURITY__MASTER_KEY",
+            "test-master-key-for-testing-only-1234567890123456",
+        );
+
         let config = create_test_config();
         let gateway_config = config.to_gateway_config().unwrap();
 
@@ -1714,6 +2137,34 @@ mod tests {
             .connect("sqlite::memory:")
             .await
             .unwrap();
+
+        // Run migrations so LlmService can seed providers
+        sqlx::migrate!("../../migrations_sqlite")
+            .run(&db)
+            .await
+            .unwrap();
+
+        // Seed preset providers directly (LlmService::new does this too, but we need
+        // providers in the DB before we can insert models)
+        services::llm_provider_db::seed_providers(&db)
+            .await
+            .unwrap();
+
+        // Insert a test model for ollama so LlmService can initialize
+        // Ollama doesn't need an API key, so it's the easiest provider for testing
+        sqlx::query(
+            "UPDATE llm_providers SET is_default_provider = true WHERE provider_id = 'ollama'",
+        )
+        .execute(&db)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO llm_models (provider_id, name, is_default_model) VALUES ((SELECT id FROM \
+             llm_providers WHERE provider_id = 'ollama'), 'llama2', true)",
+        )
+        .execute(&db)
+        .await
+        .unwrap();
 
         let rate_limiter = Arc::new(RateLimitManager::new(Arc::new(
             gateway::rate_limit::token_bucket::TokenBucketRateLimiter::new(100.0, 200),
@@ -1751,20 +2202,15 @@ mod tests {
 
     #[tokio::test]
     async fn test_clawhub_client_creation_without_api_key() {
-        let client = clients::ClawHubClient::with_config(
-            "https://open.hub.dev".to_string(),
-            None,
-        );
+        let client = clients::ClawHubClient::with_config("https://open.hub.dev".to_string(), None);
         assert!(client.is_ok());
     }
 
     #[tokio::test]
     async fn test_clawhub_get_skill_network_error() {
-        let client = clients::ClawHubClient::with_config(
-            "http://127.0.0.1:59999/v1".to_string(),
-            None,
-        )
-        .expect("创建客户端失败");
+        let client =
+            clients::ClawHubClient::with_config("http://127.0.0.1:59999/v1".to_string(), None)
+                .expect("创建客户端失败");
 
         let result = client.get_skill("nonexistent").await;
         assert!(result.is_err());
@@ -1772,11 +2218,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_clawhub_download_skill_network_error() {
-        let client = clients::ClawHubClient::with_config(
-            "http://127.0.0.1:59999/v1".to_string(),
-            None,
-        )
-        .expect("创建客户端失败");
+        let client =
+            clients::ClawHubClient::with_config("http://127.0.0.1:59999/v1".to_string(), None)
+                .expect("创建客户端失败");
 
         let result = client.download_skill("test-skill", None).await;
         assert!(result.is_err());

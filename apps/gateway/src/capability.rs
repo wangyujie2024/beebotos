@@ -242,19 +242,25 @@ impl AgentCapability {
                 Some(AgentCapability::NetworkHttp { hosts, methods })
             }
             "tcp" => {
-                let ports = parts.get(1)?
+                let ports = parts
+                    .get(1)?
                     .split(',')
                     .filter_map(|p| p.parse::<u16>().ok())
                     .collect();
                 let hosts = if let Some(h) = parts.get(2) {
-                    if *h == "*" { vec![] } else { h.split(',').map(|s| s.to_string()).collect() }
+                    if *h == "*" {
+                        vec![]
+                    } else {
+                        h.split(',').map(|s| s.to_string()).collect()
+                    }
                 } else {
                     vec![]
                 };
                 Some(AgentCapability::NetworkTcp { ports, hosts })
             }
             "db" => {
-                let operations = parts.get(1)?
+                let operations = parts
+                    .get(1)?
                     .split(',')
                     .filter_map(|o| match o.to_lowercase().as_str() {
                         "select" => Some(DbOperation::Select),
@@ -264,47 +270,52 @@ impl AgentCapability {
                         _ => None,
                     })
                     .collect();
-                let tables = parts.get(2)?
-                    .split(',')
-                    .map(|s| s.to_string())
-                    .collect();
+                let tables = parts.get(2)?.split(',').map(|s| s.to_string()).collect();
                 Some(AgentCapability::Database { tables, operations })
             }
             "api" => {
                 let rate_limit_per_minute = parts.get(1)?.parse::<u32>().unwrap_or(60);
-                let endpoints = parts.get(2)?
-                    .split(',')
-                    .map(|s| s.to_string())
-                    .collect();
-                Some(AgentCapability::ExternalApi { endpoints, rate_limit_per_minute })
+                let endpoints = parts.get(2)?.split(',').map(|s| s.to_string()).collect();
+                Some(AgentCapability::ExternalApi {
+                    endpoints,
+                    rate_limit_per_minute,
+                })
             }
             "llm" => {
                 let max_tokens_per_request = parts.get(1)?.parse::<u32>().unwrap_or(4096);
-                let providers = parts.get(2)?
-                    .split(',')
-                    .map(|s| s.to_string())
-                    .collect();
-                Some(AgentCapability::Llm { providers, max_tokens_per_request })
+                let providers = parts.get(2)?.split(',').map(|s| s.to_string()).collect();
+                Some(AgentCapability::Llm {
+                    providers,
+                    max_tokens_per_request,
+                })
             }
             "skill" => {
                 let allow_install = parts.get(1)?.parse::<bool>().unwrap_or(false);
-                let skill_ids = parts.get(2)?
-                    .split(',')
-                    .map(|s| s.to_string())
-                    .collect();
-                Some(AgentCapability::Skill { skill_ids, allow_install })
+                let skill_ids = parts.get(2)?.split(',').map(|s| s.to_string()).collect();
+                Some(AgentCapability::Skill {
+                    skill_ids,
+                    allow_install,
+                })
             }
             "wallet" => {
                 let max_transaction_value = if let Some(m) = parts.get(1) {
-                    if *m == "unlimited" { None } else { Some(m.to_string()) }
+                    if *m == "unlimited" {
+                        None
+                    } else {
+                        Some(m.to_string())
+                    }
                 } else {
                     None
                 };
-                let chain_ids = parts.get(2)?
+                let chain_ids = parts
+                    .get(2)?
                     .split(',')
                     .filter_map(|c| c.parse::<u64>().ok())
                     .collect();
-                Some(AgentCapability::Wallet { chain_ids, max_transaction_value })
+                Some(AgentCapability::Wallet {
+                    chain_ids,
+                    max_transaction_value,
+                })
             }
             "spawn" => {
                 let max_concurrent = parts.get(1)?.parse::<u32>().unwrap_or(1);
@@ -316,7 +327,10 @@ impl AgentCapability {
                 } else {
                     vec![]
                 };
-                Some(AgentCapability::Spawn { max_concurrent, allowed_capabilities })
+                Some(AgentCapability::Spawn {
+                    max_concurrent,
+                    allowed_capabilities,
+                })
             }
             _ => None, // Unknown type
         }
@@ -331,12 +345,12 @@ impl AgentCapability {
 
         // Determine the capability level based on the capability type
         let level = self.suggested_capability_level();
-        
+
         let mut kernel_caps = CapabilitySet::standard().with_level(level);
-        
+
         // Add specific permission strings for application-level capabilities
         kernel_caps.permissions.insert(self.to_compact_string());
-        
+
         kernel_caps
     }
 
