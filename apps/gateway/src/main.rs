@@ -157,11 +157,6 @@ pub struct AppState {
     pub llm_service: Arc<crate::services::llm_service::LlmService>,
     /// Skill registry for skill management
     pub skill_registry: Option<Arc<beebotos_agents::skills::SkillRegistry>>,
-    /// Skill executor for WASM skill execution (cached to avoid recreating
-    /// WasmEngine)
-    pub skill_executor: Option<Arc<beebotos_agents::skills::SkillExecutor>>,
-    /// Skill instance manager for instance-based execution model
-    pub skill_instance_manager: Option<Arc<beebotos_agents::skills::InstanceManager>>,
     /// Message processor for channel events
     pub message_processor: Option<Arc<MessageProcessor>>,
     /// Agent resolver for mapping channels/users to agents
@@ -297,17 +292,27 @@ impl AppState {
         restore_skills_from_disk(&skill_registry).await;
         register_builtin_skills(&skill_registry).await;
 
-        let agent_runtime: Arc<dyn gateway::AgentRuntime> = Arc::new(
-            GatewayAgentRuntime::new(
-                Some(kernel.clone()),
-                Some(llm_interface),
-                agent_runtime_config,
-                Some(db.clone()),
-            )
-            .await
-            .map_err(|e| anyhow::anyhow!("Failed to initialize AgentRuntime: {}", e))?
-            .with_skill_registry(skill_registry.clone()),
-        );
+        // 🆕 TOOL-CALLING FIX: Get LLM provider for tool-calling support
+        let llm_provider = llm_service.get_provider().await;
+
+        let agent_runtime_inner = GatewayAgentRuntime::new(
+            Some(kernel.clone()),
+            Some(llm_interface),
+            agent_runtime_config,
+            Some(db.clone()),
+        )
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to initialize AgentRuntime: {}", e))?
+        .with_skill_registry(skill_registry.clone())
+        .with_llm_provider(llm_provider);
+
+        // 🆕 FIX: Recover agents AFTER llm_provider is set, so recovered agents
+        // get llm_client and tools properly configured.
+        if let Err(e) = agent_runtime_inner.recover_agents().await {
+            warn!("Failed to recover agents from persistent state: {}", e);
+        }
+
+        let agent_runtime: Arc<dyn gateway::AgentRuntime> = Arc::new(agent_runtime_inner);
         info!("✅ AgentRuntime (trait-based) initialized with SkillRegistry");
 
         // Legacy: Agent runtime manager bridges gateway with beebotos_agents
@@ -442,21 +447,6 @@ impl AppState {
         };
 
         // Initialize SkillExecutor
-        let skill_executor = match beebotos_agents::skills::SkillExecutor::new() {
-            Ok(executor) => {
-                info!("✅ SkillExecutor initialized");
-                Some(Arc::new(executor))
-            }
-            Err(e) => {
-                warn!("⚠️ Failed to initialize SkillExecutor: {}", e);
-                None
-            }
-        };
-
-        // Initialize SkillInstanceManager
-        let skill_instance_manager = Arc::new(beebotos_agents::skills::InstanceManager::new());
-        info!("✅ SkillInstanceManager initialized");
-
         // Initialize channel binding store (LEGACY — deprecated)
         // P2 OPTIMIZE: This is the old single-binding system. New code should use
         // UserChannelService + AgentChannelService. Run migrate-bindings API to
@@ -504,8 +494,6 @@ impl AppState {
             kernel,
             llm_service,
             skill_registry: Some(skill_registry),
-            skill_executor,
-            skill_instance_manager: Some(skill_instance_manager),
             message_processor: None,
             agent_resolver: Some(agent_resolver),
             channel_binding_store: Some(channel_binding_store),
@@ -858,8 +846,6 @@ async fn main() -> anyhow::Result<()> {
     ));
     let grpc_service = grpc::skills::SkillsGrpcService::new(
         app_state.skill_registry.clone(),
-        app_state.skill_instance_manager.clone(),
-        app_state.skill_executor.clone(),
         handlers::http::skills::get_skills_base_dir(),
     )
     .with_rating_store(app_state.db.clone());
@@ -1627,37 +1613,8 @@ fn create_router(app_state: Arc<AppState>, gateway_state: Arc<GatewayState>) -> 
             delete(handlers::http::skills::uninstall_skill),
         )
         .route(
-            "/api/v1/skills/:id/execute",
-            post(handlers::http::skills::execute_skill),
-        )
-        .route(
             "/api/v1/skills/hub/health",
             get(handlers::http::skills::hub_health),
-        )
-        // Instance-based skill execution
-        .route(
-            "/api/v1/instances",
-            post(handlers::http::skills::create_instance),
-        )
-        .route(
-            "/api/v1/instances",
-            get(handlers::http::skills::list_instances),
-        )
-        .route(
-            "/api/v1/instances/:id",
-            get(handlers::http::skills::get_instance),
-        )
-        .route(
-            "/api/v1/instances/:id",
-            put(handlers::http::skills::update_instance),
-        )
-        .route(
-            "/api/v1/instances/:id",
-            delete(handlers::http::skills::delete_instance),
-        )
-        .route(
-            "/api/v1/instances/:id/execute",
-            post(handlers::http::skills::execute_instance),
         )
         // Auth routes (protected)
         .route("/api/v1/auth/logout", post(handlers::http::auth::logout))

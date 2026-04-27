@@ -8,7 +8,7 @@
 
 use reqwest::header::{self, HeaderMap, HeaderValue};
 use serde_json::json;
-use tracing::{trace, warn};
+use tracing::{info, trace, warn};
 
 use crate::llm::types::{LLMError, LLMRequest, LLMResult};
 use crate::llm::RetryPolicy;
@@ -81,6 +81,8 @@ impl LLMHttpClient {
 
         loop {
             trace!("Sending request to {} (attempt {})", url, attempt + 1);
+            info!("[LLM-TRACE] HTTP POST {} attempt {}", url, attempt + 1);
+            let send_start = std::time::Instant::now();
 
             let response = self
                 .http_client
@@ -90,14 +92,18 @@ impl LLMHttpClient {
                 .send()
                 .await
                 .map_err(|e| {
+                    let elapsed = send_start.elapsed();
                     if e.is_timeout() {
+                        warn!("[LLM-TRACE] HTTP request timed out after {:?}", elapsed);
                         LLMError::Timeout
                     } else {
+                        warn!("[LLM-TRACE] HTTP request failed after {:?}: {}", elapsed, e);
                         LLMError::Network(e.to_string())
                     }
                 })?;
 
             let status = response.status();
+            info!("[LLM-TRACE] HTTP response status {} after {:?}", status, send_start.elapsed());
 
             if status.is_success() {
                 return Ok(response);
@@ -309,12 +315,23 @@ impl OpenAIRequestBuilder {
                     obj["name"] = json!(name);
                 }
 
+                let has_tool_calls = m.tool_calls.is_some();
                 if let Some(tool_calls) = m.tool_calls {
                     obj["tool_calls"] = json!(tool_calls);
                 }
 
                 if let Some(tool_call_id) = m.tool_call_id {
                     obj["tool_call_id"] = json!(tool_call_id);
+                }
+
+                // 🆕 FIX: Kimi/DeepSeek require reasoning_content on assistant messages
+                // with tool_calls. If missing, add empty string to prevent API errors.
+                if m.role == crate::llm::types::Role::Assistant && has_tool_calls {
+                    if let Some(reasoning_content) = m.reasoning_content {
+                        obj["reasoning_content"] = json!(reasoning_content);
+                    } else {
+                        obj["reasoning_content"] = json!("");
+                    }
                 }
 
                 obj
@@ -372,6 +389,21 @@ impl OpenAIRequestBuilder {
 
         for (key, value) in request.config.extra {
             body[key] = value;
+        }
+
+        // 🆕 DEBUG: Log request body when tools are present
+        if body.get("tools").is_some() {
+            let body_str = body.to_string();
+            // Safe UTF-8 truncation: find last char boundary before 2000 bytes
+            let preview = if body_str.len() > 2000 {
+                match body_str.char_indices().take_while(|(i, _)| *i <= 2000).last() {
+                    Some((idx, _)) => &body_str[..idx],
+                    None => &body_str,
+                }
+            } else {
+                &body_str
+            };
+            info!("[LLM-TRACE] Full request body: {} bytes, JSON: {}", body_str.len(), preview);
         }
 
         body

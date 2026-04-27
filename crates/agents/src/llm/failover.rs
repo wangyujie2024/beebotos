@@ -159,10 +159,14 @@ impl FailoverProvider {
 
             // Try with timeout
             let attempt_timeout = Duration::from_secs(self.config.attempt_timeout_secs);
+            info!("[LLM-TRACE] Trying provider {} with timeout {}s", provider_name, self.config.attempt_timeout_secs);
+            let provider_start = std::time::Instant::now();
             let result = timeout(attempt_timeout, provider.complete(request.clone())).await;
+            let provider_elapsed = provider_start.elapsed();
 
             match result {
                 Ok(Ok(response)) => {
+                    info!("[LLM-TRACE] Provider {} succeeded in {:?}", provider_name, provider_elapsed);
                     // Success - mark provider healthy
                     self.update_provider_health(index, true).await;
                     info!("Request succeeded with provider {}", provider_name);
@@ -170,12 +174,12 @@ impl FailoverProvider {
                 }
                 Ok(Err(e)) => {
                     // Provider error - mark failure and continue to next
-                    warn!("Provider {} failed: {}", provider_name, e);
+                    warn!("[LLM-TRACE] Provider {} failed after {:?}: {}", provider_name, provider_elapsed, e);
                     self.update_provider_health(index, false).await;
                 }
                 Err(_) => {
                     // Timeout - mark failure and continue
-                    warn!("Provider {} timed out", provider_name);
+                    warn!("[LLM-TRACE] Provider {} timed out after {:?} (limit: {}s)", provider_name, provider_elapsed, self.config.attempt_timeout_secs);
                     self.update_provider_health(index, false).await;
                 }
             }

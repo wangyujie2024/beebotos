@@ -49,6 +49,8 @@ pub struct GatewayAgentRuntime {
     replanner: Option<Arc<dyn crate::planning::RePlanner>>,
     /// LLM interface for agent execution
     llm_interface: Option<Arc<dyn crate::communication::LLMCallInterface>>,
+    /// 🆕 TOOL-CALLING FIX: LLM provider for building LLMClient with tool support
+    llm_provider: Option<Arc<dyn crate::llm::LLMProvider>>,
     /// 🟢 P2 FIX: Skill registry for WASM skill execution
     skill_registry: Option<Arc<crate::skills::SkillRegistry>>,
 }
@@ -139,15 +141,13 @@ impl GatewayAgentRuntime {
             plan_executor: Some(plan_executor.clone()),
             replanner: Some(replanner.clone()),
             llm_interface: llm_interface.clone(),
+            // 🆕 TOOL-CALLING FIX: LLM provider initialized as None, set via with_llm_provider
+            llm_provider: None,
             skill_registry: Some(skill_registry.clone()),
         };
 
-        // 🔒 P0 FIX: Recover agents from persistent state
-        if let Err(e) = runtime.recover_agents().await {
-            warn!("Failed to recover agents from persistent state: {}", e);
-            // Continue startup even if recovery fails - system should still be
-            // functional
-        }
+        // 🆕 FIX: Agent recovery moved to after with_llm_provider is set,
+        // so recovered agents get llm_client and tools properly configured.
 
         Ok(runtime)
     }
@@ -169,12 +169,18 @@ impl GatewayAgentRuntime {
         self
     }
 
+    /// 🆕 TOOL-CALLING FIX: Set LLM provider for building LLMClient with tool support
+    pub fn with_llm_provider(mut self, provider: Arc<dyn crate::llm::LLMProvider>) -> Self {
+        self.llm_provider = Some(provider);
+        self
+    }
+
     /// 🔒 P0 FIX: Recover agents from persistent state
     ///
     /// On gateway restart, this method restores all agents that were in a
     /// non-terminal state (not Stopped or Error) and respawns them in the
     /// kernel.
-    async fn recover_agents(&self) -> Result<()> {
+    pub async fn recover_agents(&self) -> Result<()> {
         info!("Starting agent recovery from persistent state...");
 
         // Load state from database if persistence is enabled
@@ -328,6 +334,11 @@ impl GatewayAgentRuntime {
         }
         if let Some(ref llm) = self.llm_interface {
             builder = builder.with_llm_interface(llm.clone());
+        }
+
+        // 🆕 TOOL-CALLING FIX: Pass LLM provider for tool-calling support
+        if let Some(ref provider) = self.llm_provider {
+            builder = builder.with_llm_provider(provider.clone());
         }
 
         let (task_id, task_sender) = builder
@@ -550,6 +561,8 @@ impl GatewayAgentRuntime {
             plan_executor: Some(plan_executor),
             replanner: Some(replanner),
             llm_interface,
+            // 🆕 TOOL-CALLING FIX: LLM provider initialized as None
+            llm_provider: None,
             skill_registry: Some(skill_registry),
         }
     }
@@ -756,6 +769,11 @@ impl AgentRuntime for GatewayAgentRuntime {
             }
             if let Some(ref llm) = self.llm_interface {
                 builder = builder.with_llm_interface(llm.clone());
+            }
+
+            // 🆕 TOOL-CALLING FIX: Pass LLM provider for tool-calling support
+            if let Some(ref provider) = self.llm_provider {
+                builder = builder.with_llm_provider(provider.clone());
             }
 
             // 🟢 P2 FIX: Attach skill registry to agent

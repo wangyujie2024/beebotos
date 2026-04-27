@@ -465,6 +465,8 @@ pub struct KernelAgentBuilder {
     with_planning_engine: Option<Arc<crate::planning::PlanningEngine>>,
     with_plan_executor: Option<Arc<crate::planning::PlanExecutor>>,
     with_replanner: Option<Arc<dyn crate::planning::RePlanner>>,
+    /// 🆕 TOOL-CALLING FIX: LLM provider for building LLMClient with tool support
+    with_llm_provider: Option<Arc<dyn crate::llm::LLMProvider>>,
 }
 
 impl KernelAgentBuilder {
@@ -483,6 +485,8 @@ impl KernelAgentBuilder {
             with_planning_engine: None,
             with_plan_executor: None,
             with_replanner: None,
+            // 🆕 TOOL-CALLING FIX: Initialize LLM provider as None
+            with_llm_provider: None,
         }
     }
 
@@ -555,6 +559,12 @@ impl KernelAgentBuilder {
         self
     }
 
+    /// 🆕 TOOL-CALLING FIX: Set LLM provider for building LLMClient with tool support
+    pub fn with_llm_provider(mut self, provider: Arc<dyn crate::llm::LLMProvider>) -> Self {
+        self.with_llm_provider = Some(provider);
+        self
+    }
+
     /// Build and spawn the agent in kernel sandbox
     pub async fn spawn(self) -> Result<(TaskId, mpsc::UnboundedSender<KernelTaskRequest>)> {
         let kernel = self.kernel.ok_or_else(|| {
@@ -574,12 +584,24 @@ impl KernelAgentBuilder {
             agent = agent.with_wallet(wallet);
         }
 
+        // Clone skill registry before moving for tool registration
+        let skill_registry_for_tools = self.with_skill_registry.clone();
+
         if let Some(registry) = self.with_skill_registry {
             agent = agent.with_skill_registry(registry);
         }
 
         if let Some(interface) = self.with_llm_interface {
             agent = agent.with_llm_interface(interface);
+        }
+
+        // 🆕 TOOL-CALLING FIX: Build LLMClient and register tools
+        if let Some(provider) = self.with_llm_provider {
+            let llm_client = Arc::new(crate::llm::LLMClient::new(provider));
+            agent = agent.with_llm_client(llm_client.clone());
+            if let Err(e) = agent.register_tools(skill_registry_for_tools).await {
+                warn!("Failed to register tools for agent {}: {}", agent_config.id, e);
+            }
         }
 
         // 🟢 P1 FIX: Attach memory system for long-term memory retrieval

@@ -38,7 +38,7 @@ impl Default for OpenAIConfig {
             api_key: String::new(),
             organization: None,
             default_model: openai_models::GPT_4O.to_string(),
-            timeout: std::time::Duration::from_secs(60),
+            timeout: std::time::Duration::from_secs(120),
             retry_policy: RetryPolicy::default(),
         }
     }
@@ -65,7 +65,7 @@ impl OpenAIConfig {
             api_key,
             organization,
             default_model,
-            timeout: std::time::Duration::from_secs(60),
+            timeout: std::time::Duration::from_secs(120),
             retry_policy: RetryPolicy::default(),
         })
     }
@@ -172,18 +172,28 @@ impl LLMProvider for OpenAIProvider {
     }
 
     async fn complete(&self, request: LLMRequest) -> LLMResult<LLMResponse> {
-        debug!("Sending completion request to OpenAI");
+        let start = std::time::Instant::now();
+        info!("[LLM-TRACE] OpenAIProvider::complete started, model={}, messages={}",
+            request.config.model, request.messages.len());
 
         let body = self.request_builder.build_body(request);
+        let body_size = body.to_string().len();
+        info!("[LLM-TRACE] Request body built, size={} bytes", body_size);
+
         let response = self
             .http_client
             .execute_with_retry(&self.config, "/chat/completions", body)
             .await?;
 
+        info!("[LLM-TRACE] HTTP response received after {:?}, status={}",
+            start.elapsed(), response.status());
+
         let llm_response: LLMResponse = response
             .json()
             .await
             .map_err(|e| LLMError::Serialization(e.to_string()))?;
+
+        info!("[LLM-TRACE] OpenAIProvider::complete finished in {:?}", start.elapsed());
 
         debug!(
             "Received response from OpenAI: {} tokens used",

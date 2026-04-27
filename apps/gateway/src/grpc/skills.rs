@@ -18,11 +18,9 @@ use super::generated::beebotos::skills::registry::skill_registry_server::{
 };
 use super::generated::beebotos::skills::registry::*;
 
-/// gRPC service for skill registry and instance operations.
+/// gRPC service for skill registry.
 pub struct SkillsGrpcService {
     registry: Option<Arc<beebotos_agents::skills::SkillRegistry>>,
-    instance_manager: Option<Arc<beebotos_agents::skills::InstanceManager>>,
-    executor: Option<Arc<beebotos_agents::skills::SkillExecutor>>,
     rating_store: Option<beebotos_agents::skills::SkillRatingStore>,
     skills_base_dir: PathBuf,
 }
@@ -30,14 +28,10 @@ pub struct SkillsGrpcService {
 impl SkillsGrpcService {
     pub fn new(
         registry: Option<Arc<beebotos_agents::skills::SkillRegistry>>,
-        instance_manager: Option<Arc<beebotos_agents::skills::InstanceManager>>,
-        executor: Option<Arc<beebotos_agents::skills::SkillExecutor>>,
         skills_base_dir: impl Into<PathBuf>,
     ) -> Self {
         Self {
             registry,
-            instance_manager,
-            executor,
             rating_store: None,
             skills_base_dir: skills_base_dir.into(),
         }
@@ -59,21 +53,6 @@ impl SkillsGrpcService {
         loader
     }
 
-    /// Resolve instance_id → SkillInstance, verifying the instance exists.
-    async fn resolve_instance(
-        &self,
-        instance_id: &str,
-    ) -> Result<beebotos_agents::skills::SkillInstance, Status> {
-        let manager = self
-            .instance_manager
-            .as_ref()
-            .ok_or_else(|| Status::internal("Instance manager not available"))?;
-        manager
-            .get(instance_id)
-            .await
-            .ok_or_else(|| Status::not_found(format!("Instance {} not found", instance_id)))
-    }
-
     /// Load a skill by ID using a fresh loader.
     async fn load_skill(
         &self,
@@ -91,8 +70,6 @@ impl Default for SkillsGrpcService {
     fn default() -> Self {
         Self {
             registry: None,
-            instance_manager: None,
-            executor: None,
             rating_store: None,
             skills_base_dir: PathBuf::from("data/skills"),
         }
@@ -142,39 +119,7 @@ fn convert_registered_skill(r: &beebotos_agents::skills::RegisteredSkill) -> Ski
         version: convert_version(&r.skill.version),
         author: r.skill.manifest.author.clone(),
         categories: vec![r.category.clone()],
-        functions: r
-            .skill
-            .manifest
-            .functions
-            .iter()
-            .map(|f| Function {
-                name: f.name.clone(),
-                description: f.description.clone(),
-                inputs: f
-                    .inputs
-                    .iter()
-                    .map(|p| Parameter {
-                        name: p.name.clone(),
-                        r#type: p.param_type.clone(),
-                        required: p.required,
-                        description: p.description.clone(),
-                        default_value: p.default_value.clone(),
-                    })
-                    .collect(),
-                outputs: f
-                    .outputs
-                    .iter()
-                    .map(|p| Parameter {
-                        name: p.name.clone(),
-                        r#type: p.param_type.clone(),
-                        required: p.required,
-                        description: p.description.clone(),
-                        default_value: p.default_value.clone(),
-                    })
-                    .collect(),
-                example: f.example.clone(),
-            })
-            .collect(),
+        functions: vec![],
         metadata: Some(SkillMetadata {
             icon: "".to_string(),
             readme: "".to_string(),
@@ -195,48 +140,6 @@ fn convert_registered_skill(r: &beebotos_agents::skills::RegisteredSkill) -> Ski
         documentation_url: "".to_string(),
         created_at: r.installed_at as i64,
         updated_at: r.installed_at as i64,
-    }
-}
-
-fn convert_instance_status(s: beebotos_agents::skills::InstanceStatus) -> i32 {
-    use beebotos_agents::skills::InstanceStatus::*;
-    match s {
-        Pending => InstanceStatus::InstancePending as i32,
-        Running => InstanceStatus::InstanceRunning as i32,
-        Paused => InstanceStatus::InstancePaused as i32,
-        Stopped => InstanceStatus::InstanceStopped as i32,
-        Error => InstanceStatus::InstanceError as i32,
-    }
-}
-
-fn proto_status_to_internal(status: i32) -> Option<beebotos_agents::skills::InstanceStatus> {
-    use beebotos_agents::skills::InstanceStatus::*;
-    match status {
-        1 => Some(Pending),
-        2 => Some(Running),
-        3 => Some(Paused),
-        4 => Some(Stopped),
-        5 => Some(Error),
-        _ => None,
-    }
-}
-
-fn convert_instance(i: &beebotos_agents::skills::SkillInstance) -> SkillInstance {
-    SkillInstance {
-        instance_id: i.instance_id.clone(),
-        skill_id: i.skill_id.clone(),
-        agent_id: i.agent_id.clone(),
-        status: convert_instance_status(i.status),
-        config: i.config.clone(),
-        started_at: i.started_at as i64,
-        last_active: i.last_active as i64,
-        usage: Some(UsageStats {
-            total_calls: i.usage.total_calls,
-            successful_calls: i.usage.successful_calls,
-            failed_calls: i.usage.failed_calls,
-            avg_latency_ms: i.usage.avg_latency_ms,
-            total_cost: "0".to_string(),
-        }),
     }
 }
 
@@ -449,222 +352,66 @@ impl SkillRegistry for SkillsGrpcService {
     }
 
     // -----------------------------------------------------------------------
-    // Instance lifecycle
+    // Instance lifecycle — DEPRECATED: instance-based execution removed.
+    // Skills are now used via tool-calling in the Agent.
     // -----------------------------------------------------------------------
 
     async fn create_instance(
         &self,
-        request: Request<CreateInstanceRequest>,
+        _request: Request<CreateInstanceRequest>,
     ) -> Result<Response<SkillInstance>, Status> {
-        let req = request.into_inner();
-        let manager = self
-            .instance_manager
-            .as_ref()
-            .ok_or_else(|| Status::internal("Instance manager not available"))?;
-
-        // Verify skill exists
-        let registry = self
-            .registry
-            .as_ref()
-            .ok_or_else(|| Status::internal("Skill registry not available"))?;
-        if registry.get(&req.skill_id).await.is_none() {
-            return Err(Status::not_found(format!(
-                "Skill {} not found",
-                req.skill_id
-            )));
-        }
-
-        let instance_id = manager
-            .create(req.skill_id, req.agent_id, req.config)
-            .await
-            .map_err(|e| Status::resource_exhausted(format!("Instance limit reached: {}", e)))?;
-
-        // Auto-transition to Running
-        manager
-            .update_status(
-                &instance_id,
-                beebotos_agents::skills::InstanceStatus::Running,
-            )
-            .await
-            .map_err(|e| Status::internal(format!("Failed to start instance: {}", e)))?;
-
-        let instance = manager
-            .get(&instance_id)
-            .await
-            .ok_or_else(|| Status::internal("Instance disappeared after creation"))?;
-
-        Ok(Response::new(convert_instance(&instance)))
+        Err(Status::unimplemented(
+            "Instance-based execution is deprecated. Skills are used via Agent tool-calling.",
+        ))
     }
 
     async fn get_instance(
         &self,
-        request: Request<GetInstanceRequest>,
+        _request: Request<GetInstanceRequest>,
     ) -> Result<Response<SkillInstance>, Status> {
-        let instance = self
-            .resolve_instance(&request.into_inner().instance_id)
-            .await?;
-        Ok(Response::new(convert_instance(&instance)))
+        Err(Status::unimplemented(
+            "Instance-based execution is deprecated. Skills are used via Agent tool-calling.",
+        ))
     }
 
     async fn update_instance(
         &self,
-        request: Request<UpdateInstanceRequest>,
+        _request: Request<UpdateInstanceRequest>,
     ) -> Result<Response<SkillInstance>, Status> {
-        let req = request.into_inner();
-        let manager = self
-            .instance_manager
-            .as_ref()
-            .ok_or_else(|| Status::internal("Instance manager not available"))?;
-
-        // Update config if provided
-        if !req.config_updates.is_empty() {
-            manager
-                .update_config(&req.instance_id, req.config_updates)
-                .await
-                .map_err(|e| Status::internal(format!("Failed to update config: {}", e)))?;
-        }
-
-        // Update status if provided
-        if let Some(status) = proto_status_to_internal(req.new_status) {
-            manager
-                .update_status(&req.instance_id, status)
-                .await
-                .map_err(|e| Status::internal(format!("Failed to update status: {}", e)))?;
-        }
-
-        let instance = manager
-            .get(&req.instance_id)
-            .await
-            .ok_or_else(|| Status::not_found(format!("Instance {} not found", req.instance_id)))?;
-
-        Ok(Response::new(convert_instance(&instance)))
+        Err(Status::unimplemented(
+            "Instance-based execution is deprecated. Skills are used via Agent tool-calling.",
+        ))
     }
 
     async fn delete_instance(
         &self,
-        request: Request<DeleteInstanceRequest>,
+        _request: Request<DeleteInstanceRequest>,
     ) -> Result<Response<DeleteInstanceResponse>, Status> {
-        let req = request.into_inner();
-        let manager = self
-            .instance_manager
-            .as_ref()
-            .ok_or_else(|| Status::internal("Instance manager not available"))?;
-
-        manager
-            .delete(&req.instance_id)
-            .await
-            .map_err(|e| Status::internal(format!("Failed to delete instance: {}", e)))?;
-
-        Ok(Response::new(DeleteInstanceResponse { success: true }))
+        Err(Status::unimplemented(
+            "Instance-based execution is deprecated. Skills are used via Agent tool-calling.",
+        ))
     }
 
     async fn list_instances(
         &self,
-        request: Request<ListInstancesRequest>,
+        _request: Request<ListInstancesRequest>,
     ) -> Result<Response<ListInstancesResponse>, Status> {
-        let req = request.into_inner();
-        let manager = self
-            .instance_manager
-            .as_ref()
-            .ok_or_else(|| Status::internal("Instance manager not available"))?;
-
-        let filter = beebotos_agents::skills::InstanceFilter {
-            agent_id: if req.agent_id.is_empty() {
-                None
-            } else {
-                Some(req.agent_id)
-            },
-            skill_id: if req.skill_id.is_empty() {
-                None
-            } else {
-                Some(req.skill_id)
-            },
-            status: proto_status_to_internal(req.status),
-            page: 0,
-            page_size: 0,
-        };
-
-        let instances = manager.list(&filter).await;
-        Ok(Response::new(ListInstancesResponse {
-            instances: instances.iter().map(convert_instance).collect(),
-        }))
+        Err(Status::unimplemented(
+            "Instance-based execution is deprecated. Skills are used via Agent tool-calling.",
+        ))
     }
 
     // -----------------------------------------------------------------------
-    // Execution
+    // Execution — DEPRECATED: direct execution removed.
     // -----------------------------------------------------------------------
 
     async fn execute_function(
         &self,
-        request: Request<ExecuteFunctionRequest>,
+        _request: Request<ExecuteFunctionRequest>,
     ) -> Result<Response<ExecuteFunctionResponse>, Status> {
-        let req = request.into_inner();
-
-        // Resolve instance
-        let instance = self.resolve_instance(&req.instance_id).await?;
-        if instance.status != beebotos_agents::skills::InstanceStatus::Running {
-            return Err(Status::failed_precondition(format!(
-                "Instance {} is not running (status: {:?})",
-                req.instance_id, instance.status
-            )));
-        }
-
-        // Load skill
-        let skill = self.load_skill(&instance.skill_id).await?;
-
-        // Convert parameters
-        let parameters: HashMap<String, Vec<u8>> = req.parameters.into_iter().collect();
-
-        // Build context from instance config (if any)
-        let context = beebotos_agents::skills::SkillContext {
-            input: String::new(),
-            parameters: instance.config.clone(),
-        };
-
-        let executor = self
-            .executor
-            .as_ref()
-            .ok_or_else(|| Status::internal("Skill executor not available"))?;
-
-        let result = executor
-            .execute_function(
-                &skill,
-                Some(&req.function_name),
-                parameters,
-                if req.timeout_ms > 0 {
-                    Some(req.timeout_ms)
-                } else {
-                    None
-                },
-                context,
-            )
-            .await
-            .map_err(|e| Status::internal(format!("Execution failed: {}", e)))?;
-
-        // Record usage
-        if let Some(manager) = &self.instance_manager {
-            let _ = manager
-                .record_execution(
-                    &req.instance_id,
-                    result.success,
-                    result.execution_time_ms as f64,
-                )
-                .await;
-        }
-
-        // Convert structured output to proto map<string, bytes>
-        let results = result.structured_output.unwrap_or_else(|| {
-            let mut map = HashMap::new();
-            map.insert("output".to_string(), result.output.into_bytes());
-            map
-        });
-
-        Ok(Response::new(ExecuteFunctionResponse {
-            success: result.success,
-            results,
-            error_message: "".to_string(),
-            execution_time_ms: result.execution_time_ms as u32,
-        }))
+        Err(Status::unimplemented(
+            "Direct skill execution is deprecated. Skills are used via Agent tool-calling.",
+        ))
     }
 
     type StreamFunctionStream =
@@ -672,80 +419,11 @@ impl SkillRegistry for SkillsGrpcService {
 
     async fn stream_function(
         &self,
-        request: Request<StreamFunctionRequest>,
+        _request: Request<StreamFunctionRequest>,
     ) -> Result<Response<Self::StreamFunctionStream>, Status> {
-        let req = request.into_inner();
-
-        // Resolve instance
-        let instance = self.resolve_instance(&req.instance_id).await?;
-        if instance.status != beebotos_agents::skills::InstanceStatus::Running {
-            return Err(Status::failed_precondition(format!(
-                "Instance {} is not running (status: {:?})",
-                req.instance_id, instance.status
-            )));
-        }
-
-        // Load skill
-        let skill = self.load_skill(&instance.skill_id).await?;
-
-        // Convert parameters
-        let parameters: HashMap<String, Vec<u8>> = req.parameters.into_iter().collect();
-
-        let context = beebotos_agents::skills::SkillContext {
-            input: String::new(),
-            parameters: instance.config.clone(),
-        };
-
-        let executor = self
-            .executor
-            .as_ref()
-            .ok_or_else(|| Status::internal("Skill executor not available"))?;
-
-        let mut rx = executor
-            .execute_stream(&skill, Some(&req.function_name), parameters, context)
-            .await
-            .map_err(|e| Status::internal(format!("Stream execution failed: {}", e)))?;
-
-        // Bridge mpsc::Receiver<StreamChunk> → tonic Stream<FunctionOutput>
-        let (tx, out_rx) = mpsc::channel::<Result<FunctionOutput, Status>>(16);
-        let instance_id = req.instance_id.clone();
-        let manager = self.instance_manager.clone();
-        tokio::spawn(async move {
-            let start_time = std::time::Instant::now();
-            let mut success = true;
-
-            while let Some(chunk) = rx.recv().await {
-                let msg = match &chunk {
-                    beebotos_agents::skills::StreamChunk::Data(data) => Ok(FunctionOutput {
-                        output: Some(function_output::Output::Data(data.clone().into_bytes())),
-                    }),
-                    beebotos_agents::skills::StreamChunk::Error(err) => {
-                        success = false;
-                        Ok(FunctionOutput {
-                            output: Some(function_output::Output::Error(err.clone())),
-                        })
-                    }
-                    beebotos_agents::skills::StreamChunk::Complete => Ok(FunctionOutput {
-                        output: Some(function_output::Output::Complete(true)),
-                    }),
-                };
-                if tx.send(msg).await.is_err() {
-                    break;
-                }
-                if matches!(chunk, beebotos_agents::skills::StreamChunk::Complete) {
-                    break;
-                }
-            }
-
-            // Record usage after stream actually completes
-            let latency_ms = start_time.elapsed().as_millis() as f64;
-            if let Some(m) = manager {
-                let _ = m.record_execution(&instance_id, success, latency_ms).await;
-            }
-        });
-
-        let stream = tokio_stream::wrappers::ReceiverStream::new(out_rx);
-        Ok(Response::new(Box::pin(stream) as Self::StreamFunctionStream))
+        Err(Status::unimplemented(
+            "Direct skill execution is deprecated. Skills are used via Agent tool-calling.",
+        ))
     }
 
     async fn rate_skill(

@@ -21,8 +21,10 @@ use crate::planning::{
 };
 use crate::task::{Artifact, Task, TaskResult, TaskType};
 use crate::{
-    a2a, communication, events, mcp, queue, skills, state_manager, types, wallet, AgentConfig,
+    a2a, communication, events, llm, mcp, queue, skills, state_manager, types, wallet, AgentConfig,
 };
+use crate::llm::{Message as LlmMessage, Role as LlmRole};
+use crate::tools::{ExecTool, ProcessTool, ReadFileTool, SearchFilesTool, WebFetchTool, WriteFileTool};
 
 pub struct Agent {
     pub(crate) config: AgentConfig,
@@ -33,6 +35,8 @@ pub struct Agent {
     pub(crate) queue_manager: Option<Arc<queue::QueueManager>>,
     pub(crate) skill_registry: Option<Arc<skills::SkillRegistry>>,
     pub(crate) llm_interface: Option<Arc<dyn communication::LLMCallInterface>>,
+    /// 🆕 TOOL-CALLING FIX: Direct LLM client with tool support
+    pub(crate) llm_client: Option<Arc<llm::LLMClient>>,
     // 🔒 P0 FIX: Wallet integration for on-chain transactions
     pub(crate) wallet: Option<Arc<wallet::AgentWallet>>,
     // 🟢 P1 FIX: 统一事件总线 - 复用 core::EventBus
@@ -69,6 +73,7 @@ impl Agent {
             queue_manager: None,
             skill_registry: None,
             llm_interface: None,
+            llm_client: None,
             state: state_manager::AgentState::Registered,
             wallet: None,    // 🔒 P0 FIX: Initialize wallet as None
             event_bus: None, // 🟢 P1 FIX: Initialize event bus as None
@@ -156,6 +161,61 @@ impl Agent {
     ) -> Self {
         self.llm_interface = Some(interface);
         self
+    }
+
+    /// 🆕 TOOL-CALLING FIX: Set LLM client with tool support
+    pub fn with_llm_client(mut self, client: Arc<llm::LLMClient>) -> Self {
+        self.llm_client = Some(client);
+        self
+    }
+
+    /// 🆕 TOOL-CALLING FIX: Register all built-in tools on the LLM client
+    pub async fn register_tools(
+        &self,
+        skill_registry: Option<Arc<skills::SkillRegistry>>,
+    ) -> Result<(), AgentError> {
+        let Some(ref client) = self.llm_client else {
+            return Ok(());
+        };
+
+        // Register general-purpose tools
+        client
+            .register_tool("read_file", Box::new(ReadFileTool::new()))
+            .await;
+        client
+            .register_tool("write_file", Box::new(WriteFileTool::new()))
+            .await;
+        client
+            .register_tool("search_files", Box::new(SearchFilesTool::new()))
+            .await;
+        client
+            .register_tool("web_fetch", Box::new(WebFetchTool::new()))
+            .await;
+        client
+            .register_tool("exec", Box::new(ExecTool::new()))
+            .await;
+        client
+            .register_tool("process", Box::new(ProcessTool::new()))
+            .await;
+
+        // Register skill tools if registry is available
+        if let Some(registry) = skill_registry {
+            client
+                .register_tool(
+                    "list_skills",
+                    Box::new(skills::tools::list_skills::ListSkillsTool::new(registry.clone())),
+                )
+                .await;
+            client
+                .register_tool(
+                    "read_skill",
+                    Box::new(skills::tools::read_skill::ReadSkillTool::new(registry.clone())),
+                )
+                .await;
+        }
+
+        info!("Registered all tools on LLM client for agent {}", self.config.id);
+        Ok(())
     }
 
     /// 🔒 P0 FIX: Set wallet for on-chain transactions
@@ -532,6 +592,11 @@ impl Agent {
             return self.execute_with_planning(task.clone()).await;
         }
 
+        // 🆕 TOOL-CALLING FIX: Use LLM client with tools if available
+        if self.llm_client.is_some() {
+            return self.handle_llm_task_with_tools(task).await;
+        }
+
         let llm = self
             .llm_interface
             .as_ref()
@@ -865,166 +930,141 @@ impl Agent {
         Ok((response, vec![]))
     }
 
-    /// 🟢 P2 FIX: Helper to execute a registered skill (shared by
-    /// handle_skill_task and planning)
+    /// 🆕 TOOL-CALLING FIX: Handle LLM task using the new tool-calling framework.
+    /// Builds messages with skills prompt and uses LLMClient's automatic tool loop.
+    async fn handle_llm_task_with_tools(
+        &self,
+        task: &Task,
+    ) -> Result<(String, Vec<Artifact>), AgentError> {
+        let client = self
+            .llm_client
+            .as_ref()
+            .ok_or_else(|| AgentError::InvalidConfig("LLM client not configured".into()))?;
+
+        // Extract input text
+        let input_text = if let Ok(json) = serde_json::from_str::<serde_json::Value>(&task.input) {
+            json.get("message")
+                .and_then(|m| m.as_str())
+                .unwrap_or(&task.input)
+                .to_string()
+        } else {
+            task.input.clone()
+        };
+
+        // Build system message with skills prompt
+        let mut system_content = format!(
+            "你是 {}（{}）。请保持友好、专业、有帮助的态度回答问题。",
+            self.config.name, self.config.description
+        );
+
+        // Inject available skills prompt if registry exists
+        if let Some(ref registry) = self.skill_registry {
+            let skills_prompt = skills::build_skills_prompt(registry).await;
+            if !skills_prompt.is_empty() {
+                system_content.push_str("\n\n");
+                system_content.push_str(&skills_prompt);
+                system_content.push_str(
+                    "\n\n在回复之前：扫描 <available_skills> 中的 <description> 条目。\
+                     如果恰好有一个技能明显适用：使用 read_skill 工具读取其 SKILL.md，然后遵循它。\
+                     如果多个可能适用：选择最具体的一个，然后读取/遵循它。\
+                     如果没有明显适用的：不要读取任何 SKILL.md。\
+                     约束：永远不要预先读取多个技能；只在选择后读取。"
+                );
+            }
+        }
+
+        // Build messages for LLM
+        let messages = vec![
+            LlmMessage::system(system_content),
+            LlmMessage::user(input_text),
+        ];
+
+        let response = client
+            .chat_with_tools_and_messages(messages)
+            .await
+            .map_err(|e| AgentError::Execution(format!("LLM tool-call failed: {}", e)))?;
+
+        Ok((response, vec![]))
+    }
+
+    /// 🆕 REFACTOR: Execute a registered skill via LLM with skill prompt as
+    /// system message. WASM execution removed; all skills are now
+    /// Markdown-based and executed through the LLM.
     async fn execute_registered_skill(
         &self,
         registered_skill: &skills::RegisteredSkill,
         input: &str,
         parameters: Option<HashMap<String, String>>,
-    ) -> Result<skills::executor::SkillExecutionResult, AgentError> {
-        let context = skills::executor::SkillContext {
-            input: input.to_string(),
-            parameters: parameters.unwrap_or_default(),
-        };
-
+    ) -> Result<(String, u64), AgentError> {
         let start_time = std::time::Instant::now();
 
-        // 🆕 FIX: Skip WASM attempt for markdown-based builtin skills that have no WASM
-        // binary. This avoids pointless fs::read calls and confusing "WASM
-        // unavailable" logs.
-        let wasm_path_empty = registered_skill.skill.wasm_path.as_os_str().is_empty();
+        let llm = self
+            .llm_interface
+            .as_ref()
+            .ok_or_else(|| AgentError::InvalidConfig("LLM interface not configured".into()))?;
 
-        // 🆕 FIX: Try WASM execution if kernel and wasm_engine are available
-        let _wasm_attempted = if !wasm_path_empty {
-            if let Some(kernel) = self.kernel.as_ref() {
-                if let Some(engine) = kernel.wasm_engine() {
-                    let wasm_bytes = tokio::fs::read(&registered_skill.skill.wasm_path).await;
-                    if let Ok(bytes) = wasm_bytes {
-                        let module = engine.compile_cached(&registered_skill.skill.id, &bytes);
-                        if let Ok(m) = module {
-                            let instance = engine.instantiate_with_host(&m, &self.config.id);
-                            if let Ok(mut inst) = instance {
-                                let input_bytes = context.input.as_bytes();
-                                if inst.write_memory(0, input_bytes).is_ok() {
-                                    const MAX_OUTPUT_SIZE: usize = 65536;
-                                    let call_result = inst.call_typed::<(i32, i32), i32>(
-                                        &registered_skill.skill.manifest.entry_point,
-                                        (0i32, input_bytes.len() as i32),
-                                    );
-                                    if let Ok(output_ptr) = call_result {
-                                        let output_addr = output_ptr as usize;
-                                        if let Ok(len_bytes) = inst.read_memory(output_addr, 4) {
-                                            let output_len = u32::from_le_bytes([
-                                                len_bytes[0],
-                                                len_bytes[1],
-                                                len_bytes[2],
-                                                len_bytes[3],
-                                            ])
-                                                as usize;
-                                            if output_len <= MAX_OUTPUT_SIZE {
-                                                if let Ok(output_bytes) =
-                                                    inst.read_memory(output_addr + 4, output_len)
-                                                {
-                                                    if let Ok(output) =
-                                                        String::from_utf8(output_bytes)
-                                                    {
-                                                        return Ok(skills::executor::SkillExecutionResult {
-                                                            task_id: registered_skill.skill.id.clone(),
-                                                            success: true,
-                                                            output,
-                                                            structured_output: None,
-                                                            execution_time_ms: start_time.elapsed().as_millis() as u64,
-                                                        });
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                true
-            } else {
-                false
+        let manifest = &registered_skill.skill.manifest;
+        let system_prompt = if !manifest.prompt_template.is_empty() {
+            let mut prompt = manifest.prompt_template.clone();
+            if !manifest.description.is_empty() && !prompt.contains(&manifest.description) {
+                prompt.push_str(&format!("\n\nAbout this skill: {}", manifest.description));
             }
+            if !manifest.examples.is_empty() {
+                prompt.push_str(&format!("\n\nExamples:\n{}", manifest.examples));
+            }
+            prompt
         } else {
-            false
+            format!(
+                "You are acting as the skill '{}'. {}\n\nSkill capabilities:\n{}\n\nExecute \
+                 the following task using this skill persona.",
+                registered_skill.skill.name,
+                manifest.description,
+                manifest
+                    .capabilities
+                    .iter()
+                    .map(|c| format!("- {}", c))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            )
         };
 
-        // 🆕 FIX: If WASM execution is unavailable or fails, fall back to LLM with
-        // skill description as system prompt
-        if !wasm_path_empty {
-            info!(
-                "Skill '{}' WASM unavailable or failed, falling back to LLM execution",
-                registered_skill.skill.name
-            );
-        } else {
-            info!(
-                "Skill '{}' has no WASM binary, using LLM fallback",
-                registered_skill.skill.name
-            );
-        }
-
-        if let Some(llm) = &self.llm_interface {
-            // 🆕 FIX: Use skill's custom prompt_template if available, otherwise fall back
-            // to generic template
-            let manifest = &registered_skill.skill.manifest;
-            let system_prompt = if !manifest.prompt_template.is_empty() {
-                let mut prompt = manifest.prompt_template.clone();
-                if !manifest.description.is_empty() && !prompt.contains(&manifest.description) {
-                    prompt.push_str(&format!("\n\nAbout this skill: {}", manifest.description));
-                }
-                if !manifest.examples.is_empty() {
-                    prompt.push_str(&format!("\n\nExamples:\n{}", manifest.examples));
-                }
-                prompt
-            } else {
+        let param_context = if let Some(ref params) = parameters {
+            if !params.is_empty() {
                 format!(
-                    "You are acting as the skill '{}'. {}\n\nSkill capabilities:\n{}\n\nExecute \
-                     the following task using this skill persona.",
-                    registered_skill.skill.name,
-                    manifest.description,
-                    manifest
-                        .capabilities
+                    "\n\nParameters:\n{}",
+                    params
                         .iter()
-                        .map(|c| format!("- {}", c))
+                        .map(|(k, v)| format!("- {}: {}", k, v))
                         .collect::<Vec<_>>()
                         .join("\n")
                 )
-            };
-            let messages = vec![
-                communication::Message::new(
-                    uuid::Uuid::new_v4(),
-                    communication::PlatformType::Custom,
-                    system_prompt,
-                ),
-                communication::Message::new(
-                    uuid::Uuid::new_v4(),
-                    communication::PlatformType::Custom,
-                    context.input.clone(),
-                ),
-            ];
-
-            match llm.call_llm(messages, None).await {
-                Ok(response) => {
-                    return Ok(skills::executor::SkillExecutionResult {
-                        task_id: registered_skill.skill.id.clone(),
-                        success: true,
-                        output: response,
-                        structured_output: None,
-                        execution_time_ms: start_time.elapsed().as_millis() as u64,
-                    });
-                }
-                Err(e) => {
-                    warn!(
-                        "LLM fallback for skill '{}' also failed: {}",
-                        registered_skill.skill.name, e
-                    );
-                }
+            } else {
+                String::new()
             }
-        }
+        } else {
+            String::new()
+        };
 
-        // Last resort: try legacy skill executor
-        let executor = skills::SkillExecutor::new().map_err(|e| {
-            AgentError::Execution(format!("Failed to create skill executor: {}", e))
-        })?;
-        executor
-            .execute(&registered_skill.skill, context)
+        let messages = vec![
+            communication::Message::new(
+                uuid::Uuid::new_v4(),
+                communication::PlatformType::Custom,
+                system_prompt,
+            ),
+            communication::Message::new(
+                uuid::Uuid::new_v4(),
+                communication::PlatformType::Custom,
+                format!("{}{}", input, param_context),
+            ),
+        ];
+
+        let response = llm
+            .call_llm(messages, None)
             .await
-            .map_err(|e| AgentError::Execution(format!("Skill execution failed: {}", e)))
+            .map_err(|e| AgentError::Execution(format!("LLM skill execution failed: {}", e)))?;
+
+        let execution_time_ms = start_time.elapsed().as_millis() as u64;
+        Ok((response, execution_time_ms))
     }
 
     async fn handle_skill_task(&self, task: &Task) -> Result<(String, Vec<Artifact>), AgentError> {
@@ -1043,22 +1083,21 @@ impl Agent {
             .await
             .ok_or_else(|| AgentError::SkillNotFound(skill_name.clone()))?;
 
-        let result = self
+        let (output, execution_time_ms) = self
             .execute_registered_skill(
                 &registered_skill,
                 &task.input,
                 Some(task.parameters.clone()),
             )
             .await?;
-        let execution_time_ms = result.execution_time_ms;
 
         let _ = registry.record_usage(skill_name).await;
 
-        let artifacts = if !result.output.is_empty() {
+        let artifacts = if !output.is_empty() {
             vec![Artifact {
                 id: uuid::Uuid::new_v4().to_string(),
                 artifact_type: "skill_output".to_string(),
-                content: result.output.clone().into_bytes(),
+                content: output.into_bytes(),
                 mime_type: "text/plain".to_string(),
             }]
         } else {
@@ -1964,16 +2003,12 @@ impl Agent {
                     .execute_registered_skill(&skill, &step.description, None)
                     .await
                 {
-                    Ok(result) => {
+                    Ok((output, _execution_time_ms)) => {
                         let _ = registry.record_usage(&skill.skill.id).await;
                         return Ok(ExecutionResult {
-                            success: result.success,
-                            data: Some(serde_json::json!({ "output": result.output })),
-                            error: if result.success {
-                                None
-                            } else {
-                                Some(result.output.clone())
-                            },
+                            success: true,
+                            data: Some(serde_json::json!({ "output": output })),
+                            error: None,
                             duration_ms: start_time.elapsed().as_millis() as u64,
                             attempts: 1,
                         });

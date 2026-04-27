@@ -45,38 +45,14 @@ cd contracts && forge test                         # Run contract tests
 cd contracts && forge fmt                          # Format contracts
 ```
 
-### Alternative: Using `just` or `make`
-Both `justfile` and `Makefile` are provided with common recipes:
+### Alternative: `just` and `make`
+Both `justfile` and `Makefile` provide convenience recipes (`build`, `test`, `lint`, `fmt`, `check`, `dev`, `install`, `coverage`, `contract-build`/`contract-test`, `setup`, etc.). Run `just --list` or `make help` to see the full set. The `make` variant additionally has `test-unit` and `test-integration` for split runs.
 
-**`just` recipes:**
-- `just build` - Release build
-- `just debug` - Debug build
-- `just test` - Run all tests
-- `just test-filter <PATTERN>` - Run tests matching pattern
-- `just check` - Full check (fmt + lint + test)
-- `just lint` - Run clippy
-- `just fmt` - Format code
-- `just dev` - Watch mode with cargo-watch
-- `just install` - Install CLI binary locally (`beebot`)
-- `just contract-build` / `just contract-test` - Build/test contracts
-- `just clean` - Clean build artifacts
-- `just coverage` - Generate test coverage report (tarpaulin)
-- `just setup` - Run dev environment setup script
-
-**`make` recipes:**
-- `make build` - Release build
-- `make debug` - Debug build
-- `make test` - Run all tests
-- `make test-unit` - Unit tests only
-- `make test-integration` - Integration tests only
-- `make check` - Full check (fmt + lint + test)
-- `make lint` - Run clippy
-- `make fmt` - Format code
-- `make dev` - Watch mode with cargo-watch
-- `make install` / `make uninstall` - Install/remove CLI binary
-- `make contracts-build` / `make contracts-test` - Build/test contracts
-- `make coverage` - Generate test coverage report
-- `make setup` - Run dev environment setup script
+### Helper Scripts
+Top-level shell scripts are provided for common dev/run workflows:
+- `beebotos-dev.sh` / `beebotos-dev.ps1` — development workflow helper
+- `beebotos-run.sh` / `beebotos-run.ps1` — service runner
+- `scripts/setup-dev.sh` — dev environment bootstrap (also invoked via `just setup` / `make setup`)
 
 ## Workspace Structure
 
@@ -108,6 +84,8 @@ Both `justfile` and `Makefile` are provided with common recipes:
   - `tests/unit/` - Unit tests organized by crate (`agents/`, `brain/`, `kernel/`)
   - `tests/integration/` - Integration tests (`agent_integration.rs`, `kernel_integration.rs`, etc.)
   - `tests/e2e/` - End-to-end tests (`agent_lifecycle.rs`, `a2a_protocol.rs`, etc.)
+  - `tests/fixtures/` - Shared test fixtures
+  - Standalone integration tests also exist directly under `tests/` (e.g., `lark_message_test.rs`, `test_channel_registry.rs`, `test_config.rs`)
 - `config/` - Configuration files (TOML)
 - `skills/` - Skill definitions
 - `docs/` - Documentation
@@ -164,12 +142,13 @@ Note: pre-commit hooks run without `--workspace` and only match `*.rs` files, so
 ## Configuration
 
 ### Environment Variables
-Sensitive config uses `BEE__{SECTION}__{KEY}` format (maps to TOML hierarchy via config crate):
+Sensitive config uses `BEE__{SECTION}__{KEY}` format — note the **double** underscore separator, which the `config` crate maps to TOML hierarchy:
 ```bash
-BEE__JWT__SECRET=...
-BEE__MODELS__KIMI__API_KEY=...
-BEE__CHANNELS__LARK__APP_SECRET=...
+BEE__JWT__SECRET=...                   # → [jwt] secret = ...
+BEE__MODELS__KIMI__API_KEY=...         # → [models.kimi] api_key = ...
+BEE__CHANNELS__LARK__APP_SECRET=...    # → [channels.lark] app_secret = ...
 ```
+See `.env.example` for the full set of expected variables.
 
 ### Fixed Ports
 - Gateway API: `8000`
@@ -218,3 +197,11 @@ Unified message bus (`beebotos-message-bus`) used across crates for inter-module
 
 ### Toolchain
 Nightly Rust is required (see `rust-toolchain.toml`). Components: `rustfmt`, `clippy`. Targets include `wasm32-unknown-unknown` and Windows targets (`x86_64-pc-windows-gnu`, `x86_64-pc-windows-msvc`).
+
+## Related Documentation
+
+- `AGENTS.md` — extended guide for AI coding assistants (deeper coding-style, NatSpec, deployment, security details). Read this if `CLAUDE.md` lacks the context you need.
+- `readme.md` — project overview, 5-layer architecture diagram, quick start
+- `CONTRIBUTING.md` — contribution workflow
+- `contracts/STRUCTURE.md` — Solidity contract layout
+- `tasks/todo.md` — current in-progress task list (the project follows the "plan → todo.md → verify" workflow)

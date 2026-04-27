@@ -62,6 +62,9 @@ pub struct LLMMessage {
     /// Tool call ID (for tool messages)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_call_id: Option<String>,
+    /// Reasoning content (for Kimi k2.5 thinking mode)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_content: Option<String>,
 }
 
 /// Type alias for backward compatibility
@@ -76,6 +79,7 @@ impl LLMMessage {
             name: None,
             tool_calls: None,
             tool_call_id: None,
+            reasoning_content: None,
         }
     }
 
@@ -102,6 +106,7 @@ impl LLMMessage {
             name: None,
             tool_calls: None,
             tool_call_id: None,
+            reasoning_content: None,
         }
     }
 
@@ -126,6 +131,20 @@ impl LLMMessage {
     pub fn with_tool_calls(mut self, tool_calls: Vec<ToolCall>) -> Self {
         self.tool_calls = Some(tool_calls);
         self
+    }
+
+    /// Create a tool result message
+    pub fn tool(tool_call_id: impl Into<String>, content: impl Into<String>) -> Self {
+        let id = tool_call_id.into();
+        Self {
+            role: Role::Tool,
+            content: vec![Content::Text { text: content.into() }],
+            name: None,
+            tool_calls: None,
+            // 🆕 FIX: Skip empty tool_call_id to avoid API errors
+            tool_call_id: if id.is_empty() { None } else { Some(id) },
+            reasoning_content: None,
+        }
     }
 
     /// Get text content (concatenates all text parts)
@@ -321,10 +340,13 @@ pub struct RequestConfig {
 impl Default for RequestConfig {
     fn default() -> Self {
         Self {
-            model: "kimi-latest".to_string(),
-            temperature: Some(0.7),
+            // 🆕 FIX: Empty model so provider uses its own default_model
+            model: String::new(),
+            // 🆕 FIX: No default temperature — some models (e.g. kimi-k2.5, o1, o3)
+            // reject temperature values other than 1. Let the provider/model decide.
+            temperature: None,
             top_p: None,
-            max_tokens: Some(2048),
+            max_tokens: Some(8192),
             stop: None,
             stream: Some(false),
             response_format: None,

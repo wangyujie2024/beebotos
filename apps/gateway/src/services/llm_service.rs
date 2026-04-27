@@ -287,7 +287,7 @@ impl LlmService {
         // Build failover provider
         let mut builder = FailoverProviderBuilder::new()
             .primary(primary)
-            .timeout_secs(90);
+            .timeout_secs(180);
 
         for fallback in fallbacks {
             builder = builder.fallback(fallback);
@@ -311,7 +311,7 @@ impl LlmService {
                     base_url,
                     api_key,
                     default_model,
-                    timeout: Duration::from_secs(90),
+                    timeout: Duration::from_secs(180),
                     retry_policy: RetryPolicy::default(),
                     organization: None,
                 };
@@ -324,7 +324,7 @@ impl LlmService {
                     base_url,
                     api_key,
                     default_model,
-                    timeout: Duration::from_secs(90),
+                    timeout: Duration::from_secs(180),
                     retry_policy: RetryPolicy::default(),
                     version: "2023-06-01".to_string(),
                 };
@@ -344,6 +344,11 @@ impl LlmService {
     /// Get metrics summary
     pub fn get_metrics_summary(&self) -> MetricsSummary {
         self.metrics.get_summary()
+    }
+
+    /// Get the underlying failover provider for building LLMClient
+    pub async fn get_provider(&self) -> Arc<dyn LLMProvider> {
+        self.failover_provider.read().await.clone()
     }
 
     /// Process a message with optional custom image download function

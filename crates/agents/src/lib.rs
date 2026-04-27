@@ -80,6 +80,7 @@ pub mod security;
 pub mod session;
 pub mod skills;
 pub mod spawning;
+pub mod tools;
 pub mod task;
 pub mod timeout;
 pub mod types;

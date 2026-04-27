@@ -160,6 +160,7 @@ impl AgentInstance {
         }
 
         // Attach skill registry (use externally provided one if available)
+        let skill_registry_for_tools = skill_registry.clone();
         if let Some(registry) = skill_registry {
             agent = agent.with_skill_registry(registry);
         }
@@ -194,10 +195,20 @@ impl AgentInstance {
             }
         }
 
-        // Attach LLM interface
+        // Attach LLM interface (legacy path)
         let llm_interface: Arc<dyn beebotos_agents::communication::LLMCallInterface> =
-            Arc::new(GatewayLLMInterface::new(llm_service));
+            Arc::new(GatewayLLMInterface::new(llm_service.clone()));
         agent = agent.with_llm_interface(llm_interface);
+
+        // 🆕 TOOL-CALLING FIX: Attach LLM client with tool support
+        let provider = llm_service.get_provider().await;
+        let llm_client = Arc::new(beebotos_agents::llm::LLMClient::new(provider));
+        agent = agent.with_llm_client(llm_client.clone());
+
+        // Register all tools on the LLM client
+        if let Err(e) = agent.register_tools(skill_registry_for_tools).await {
+            warn!("Failed to register tools for agent {}: {}", agent_id, e);
+        }
 
         // Initialize the agent
         if let Err(e) = agent.initialize().await {

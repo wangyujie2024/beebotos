@@ -49,6 +49,77 @@ fn parse_markdown_sections(content: &str) -> HashMap<String, String> {
     sections
 }
 
+/// Extract YAML frontmatter from markdown content.
+/// Returns (frontmatter_map, markdown_body_without_frontmatter).
+fn extract_frontmatter(content: &str) -> (Option<HashMap<String, String>>, String) {
+    let trimmed = content.trim_start();
+    if !trimmed.starts_with("---") {
+        return (None, content.to_string());
+    }
+
+    let lines: Vec<&str> = trimmed.lines().collect();
+    if lines.len() < 3 {
+        return (None, content.to_string());
+    }
+
+    // Find closing ---
+    let mut end_idx = 0;
+    for (i, line) in lines.iter().enumerate().skip(1) {
+        if line.trim() == "---" {
+            end_idx = i;
+            break;
+        }
+    }
+
+    if end_idx == 0 {
+        return (None, content.to_string());
+    }
+
+    let mut frontmatter = HashMap::new();
+    let yaml_lines = &lines[1..end_idx];
+    let mut i = 0;
+
+    while i < yaml_lines.len() {
+        let line = yaml_lines[i];
+        if line.trim().is_empty() || line.trim().starts_with('#') {
+            i += 1;
+            continue;
+        }
+
+        if let Some((key, value)) = line.split_once(':') {
+            let key = key.trim().to_string();
+            let value = value.trim().to_string();
+
+            // Collect multi-line indented values
+            let mut full_value = value;
+            let mut j = i + 1;
+            while j < yaml_lines.len() {
+                let next = yaml_lines[j];
+                if !next.starts_with(' ') && !next.starts_with('\t') && !next.trim().is_empty() {
+                    break;
+                }
+                if !next.trim().is_empty() {
+                    if !full_value.is_empty() {
+                        full_value.push('\n');
+                    }
+                    full_value.push_str(next);
+                }
+                j += 1;
+            }
+            i = j;
+
+            if !key.is_empty() {
+                frontmatter.insert(key, full_value);
+            }
+        } else {
+            i += 1;
+        }
+    }
+
+    let body = lines[end_idx + 1..].join("\n");
+    (Some(frontmatter), body)
+}
+
 /// Extract bullet-point capabilities from a capabilities text block.
 fn parse_capabilities(text: &str) -> Vec<String> {
     text.lines()
@@ -171,40 +242,75 @@ pub async fn load_builtin_skills(registry: &Arc<SkillRegistry>) {
                 Err(_) => continue,
             };
 
-            // Parse skill name from first heading
-            let first_line = content.lines().next().unwrap_or("").trim();
-            let (skill_name, skill_id) = if first_line.starts_with("# ") {
-                let name = first_line[2..].trim().to_string();
-                let id = name
-                    .to_lowercase()
-                    .replace(' ', "_")
-                    .replace(|c: char| !c.is_alphanumeric() && c != '_', "");
-                (name, id)
+            // 🆕 FIX: Parse YAML frontmatter if present
+            let (frontmatter, body_content) = extract_frontmatter(&content);
+
+            // Parse skill name from frontmatter, first heading, or file stem
+            let (skill_name, skill_id) = if let Some(ref fm) = &frontmatter {
+                if let Some(name) = fm.get("name") {
+                    let id = name
+                        .to_lowercase()
+                        .replace(' ', "_")
+                        .replace(|c: char| !c.is_alphanumeric() && c != '_', "");
+                    (name.clone(), id)
+                } else {
+                    let first_heading = body_content
+                        .lines()
+                        .find(|l| l.trim().starts_with("# "))
+                        .unwrap_or("");
+                    if !first_heading.is_empty() {
+                        let name = first_heading[2..].trim().to_string();
+                        let id = name
+                            .to_lowercase()
+                            .replace(' ', "_")
+                            .replace(|c: char| !c.is_alphanumeric() && c != '_', "");
+                        (name, id)
+                    } else {
+                        let stem = path
+                            .file_stem()
+                            .and_then(|s| s.to_str())
+                            .unwrap_or("unknown")
+                            .to_string();
+                        (stem.clone(), stem.to_lowercase().replace(' ', "_"))
+                    }
+                }
             } else {
-                let stem = path
-                    .file_stem()
-                    .and_then(|s| s.to_str())
-                    .unwrap_or("unknown")
-                    .to_string();
-                (stem.clone(), stem.to_lowercase().replace(' ', "_"))
+                let first_line = content.lines().next().unwrap_or("").trim();
+                if first_line.starts_with("# ") {
+                    let name = first_line[2..].trim().to_string();
+                    let id = name
+                        .to_lowercase()
+                        .replace(' ', "_")
+                        .replace(|c: char| !c.is_alphanumeric() && c != '_', "");
+                    (name, id)
+                } else {
+                    let stem = path
+                        .file_stem()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("unknown")
+                        .to_string();
+                    (stem.clone(), stem.to_lowercase().replace(' ', "_"))
+                }
             };
 
-            // 🆕 FIX: Parse deep markdown sections
-            let sections = parse_markdown_sections(&content);
+            // 🆕 FIX: Parse deep markdown sections from body (without frontmatter)
+            let sections = parse_markdown_sections(&body_content);
 
-            // Description: first paragraph after any heading, fallback to Description
-            // section
-            let description = sections.get("description").cloned().unwrap_or_else(|| {
-                content
-                    .lines()
-                    .skip(1)
-                    .skip_while(|l| l.trim().is_empty() || l.trim().starts_with('#'))
-                    .take_while(|l| !l.trim().starts_with('#') && !l.trim().starts_with("```"))
-                    .collect::<Vec<_>>()
-                    .join(" ")
-                    .trim()
-                    .to_string()
-            });
+            // Description: frontmatter first, then Description section, then first paragraph
+            let description = frontmatter
+                .as_ref()
+                .and_then(|fm| fm.get("description").cloned())
+                .or_else(|| sections.get("description").cloned())
+                .unwrap_or_else(|| {
+                    body_content
+                        .lines()
+                        .skip_while(|l| l.trim().is_empty() || l.trim().starts_with('#'))
+                        .take_while(|l| !l.trim().starts_with('#') && !l.trim().starts_with("```"))
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                        .trim()
+                        .to_string()
+                });
 
             let description = if description.is_empty() {
                 format!("Built-in skill: {}", skill_name)
@@ -216,35 +322,68 @@ pub async fn load_builtin_skills(registry: &Arc<SkillRegistry>) {
             let prompt_template = sections.get("prompt_template").cloned().unwrap_or_default();
             let examples = sections.get("examples").cloned().unwrap_or_default();
 
-            // 🆕 FIX: Parse capabilities from bullet points in Capabilities section
-            let capabilities = sections
-                .get("capabilities")
+            // 🆕 FIX: Parse capabilities from frontmatter or markdown section
+            let fm_capabilities = frontmatter
+                .as_ref()
+                .and_then(|fm| fm.get("capabilities"))
                 .map(|text| parse_capabilities(text))
                 .unwrap_or_default();
+            let capabilities = if fm_capabilities.is_empty() {
+                sections
+                    .get("capabilities")
+                    .map(|text| parse_capabilities(text))
+                    .unwrap_or_default()
+            } else {
+                fm_capabilities
+            };
 
             // Build tags from full content
             let tags = build_tags(&content);
 
+            // 🆕 FIX: Parse version, author, license from frontmatter
+            let version = frontmatter
+                .as_ref()
+                .and_then(|fm| fm.get("version"))
+                .and_then(|v| {
+                    let parts: Vec<&str> = v.split('.').collect();
+                    if !parts.is_empty() {
+                        let major = parts[0].parse().unwrap_or(1);
+                        let minor = parts.get(1).and_then(|s| s.parse().ok()).unwrap_or(0);
+                        let patch = parts.get(2).and_then(|s| s.parse().ok()).unwrap_or(0);
+                        Some(Version::new(major, minor, patch))
+                    } else {
+                        None
+                    }
+                })
+                .unwrap_or_else(|| Version::new(1, 0, 0));
+
+            let author = frontmatter
+                .as_ref()
+                .and_then(|fm| fm.get("author").cloned())
+                .unwrap_or_else(|| "BeeBotOS".to_string());
+
+            let license = frontmatter
+                .as_ref()
+                .and_then(|fm| fm.get("license").cloned())
+                .unwrap_or_else(|| "MIT".to_string());
+
             let skill = LoadedSkill {
                 id: skill_id.clone(),
                 name: skill_name.clone(),
-                version: Version::new(1, 0, 0),
-                wasm_path: PathBuf::new(), // No WASM — execution falls back to LLM
+                version: version.clone(),
+                skill_md_path: path.clone(),
                 manifest: SkillManifest {
                     id: skill_id.clone(),
                     name: skill_name.clone(),
-                    version: Version::new(1, 0, 0),
+                    version,
                     description: description.clone(),
-                    author: "BeeBotOS".to_string(),
+                    author,
                     capabilities: if capabilities.is_empty() {
                         tags.clone()
                     } else {
                         capabilities
                     },
-                    permissions: vec!["llm:chat".to_string()],
-                    entry_point: "run".to_string(),
-                    license: "MIT".to_string(),
-                    functions: vec![],
+                    license,
                     prompt_template,
                     examples,
                 },
