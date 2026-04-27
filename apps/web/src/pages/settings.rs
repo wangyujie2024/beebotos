@@ -4,19 +4,16 @@ use leptos::task::spawn_local;
 use leptos::view;
 use leptos_meta::*;
 
-use crate::api::{Settings as ApiSettings, SettingsService, Theme};
+use crate::api::{Settings as ApiSettings, SettingsService};
 use crate::i18n::I18nContext;
 use crate::state::use_app_state;
-use crate::utils::{
-    event_target_checked, event_target_value, use_theme, FormValidator, StringValidators,
-};
+use crate::utils::{event_target_value, FormValidator, StringValidators};
 
 #[component]
 pub fn SettingsPage() -> impl IntoView {
     let i18n = use_context::<I18nContext>().expect("i18n context not found");
     let i18n_stored = StoredValue::new(i18n.clone());
     let app_state = use_app_state();
-    let theme_manager = use_theme();
     let settings = app_state.settings();
     let saving = RwSignal::new(false);
     let save_message = RwSignal::new(None::<String>);
@@ -24,12 +21,7 @@ pub fn SettingsPage() -> impl IntoView {
     let error_message = RwSignal::new(None::<String>);
     let loading = RwSignal::new(false);
 
-    // Form signals — local frontend-only settings
-    let theme = RwSignal::new(Theme::Dark);
-    let language = RwSignal::new("en".to_string());
-    let notifications_enabled = RwSignal::new(true);
-    let auto_update = RwSignal::new(true);
-    let api_endpoint = RwSignal::new(String::new());
+    // 仅保留钱包地址
     let wallet_address = RwSignal::new(String::new());
 
     // Load from backend or localStorage fallback
@@ -62,27 +54,11 @@ pub fn SettingsPage() -> impl IntoView {
     // Sync form signals from app state
     Effect::new(move |_| {
         let s = settings.get();
-        theme.set(s.theme.clone());
-        language.set(s.language.clone());
-        notifications_enabled.set(s.notifications_enabled);
-        auto_update.set(s.auto_update);
-        api_endpoint.set(s.api_endpoint.clone().unwrap_or_default());
         wallet_address.set(s.wallet_address.clone().unwrap_or_default());
-    });
-
-    // Apply theme when changed
-    Effect::new(move |_| {
-        let t = theme.get();
-        theme_manager.set_theme(t);
     });
 
     let validate = move || {
         let mut v = FormValidator::new();
-
-        // Validate API endpoint if provided
-        if !api_endpoint.get().is_empty() {
-            v.validate(StringValidators::url("api_endpoint", &api_endpoint.get()));
-        }
 
         // Validate wallet address if provided
         if !wallet_address.get().is_empty() {
@@ -102,15 +78,12 @@ pub fn SettingsPage() -> impl IntoView {
         }
 
         let new_settings = ApiSettings {
-            theme: theme.get(),
-            language: language.get(),
-            notifications_enabled: notifications_enabled.get(),
-            auto_update: auto_update.get(),
-            api_endpoint: if api_endpoint.get().is_empty() {
-                None
-            } else {
-                Some(api_endpoint.get())
-            },
+            // 保留字段的默认值，避免破坏后端结构
+            theme: settings.get().theme.clone(),
+            language: settings.get().language.clone(),
+            notifications_enabled: settings.get().notifications_enabled,
+            auto_update: settings.get().auto_update,
+            api_endpoint: settings.get().api_endpoint.clone(),
             wallet_address: if wallet_address.get().is_empty() {
                 None
             } else {
@@ -188,101 +161,6 @@ pub fn SettingsPage() -> impl IntoView {
 
                         <div class="settings-grid">
                             <section class="card settings-section">
-                                <h2>{i18n.t("settings-appearance")}</h2>
-
-                                <div class="form-group">
-                                    <label>{i18n.t("settings-theme")}</label>
-                                    <div class="theme-selector">
-                                        <ThemeOption
-                                            label={i18n.t("theme-dark")}
-                                            value=Theme::Dark
-                                            current=theme
-                                            icon="🌙"
-                                        />
-                                        <ThemeOption
-                                            label={i18n.t("theme-light")}
-                                            value=Theme::Light
-                                            current=theme
-                                            icon="☀️"
-                                        />
-                                        <ThemeOption
-                                            label={i18n.t("theme-system")}
-                                            value=Theme::System
-                                            current=theme
-                                            icon="💻"
-                                        />
-                                    </div>
-                                </div>
-
-                                <div class="form-group">
-                                    <label>{i18n.t("settings-language")}</label>
-                                    <select
-                                        prop:value=language
-                                        on:change=move |e| language.set(event_target_value(&e))
-                                    >
-                                        <option value="en">{i18n.t("lang-en")}</option>
-                                        <option value="zh">{i18n.t("lang-zh")}</option>
-                                        <option value="ja">{i18n.t("lang-ja")}</option>
-                                        <option value="ko">{i18n.t("lang-ko")}</option>
-                                    </select>
-                                </div>
-                            </section>
-
-                            <section class="card settings-section">
-                                <h2>{i18n.t("settings-notifications")}</h2>
-
-                                <div class="form-group checkbox-group">
-                                    <label class="checkbox-label">
-                                        <input
-                                            type="checkbox"
-                                            prop:checked=notifications_enabled
-                                            on:change=move |e| notifications_enabled.set(event_target_checked(&e))
-                                        />
-                                        <span>{i18n.t("settings-enable-notifications")}</span>
-                                    </label>
-                                    <p class="form-help">{i18n.t("settings-notifications-help")}</p>
-                                </div>
-
-                                <div class="form-group checkbox-group">
-                                    <label class="checkbox-label">
-                                        <input
-                                            type="checkbox"
-                                            prop:checked=auto_update
-                                            on:change=move |e| auto_update.set(event_target_checked(&e))
-                                        />
-                                        <span>{i18n.t("settings-auto-update")}</span>
-                                    </label>
-                                    <p class="form-help">{i18n.t("settings-auto-update-help")}</p>
-                                </div>
-                            </section>
-
-                            <section class="card settings-section">
-                                <h2>{i18n.t("settings-network")}</h2>
-
-                                <div class=move || format!("form-group {}",
-                                    if validator.get().has_error("api_endpoint") { "has-error" } else { "" })>
-                                    <label>{i18n.t("settings-api-endpoint")}</label>
-                                    <input
-                                        type="text"
-                                        placeholder="https://api.beebotos.dev"
-                                        prop:value=api_endpoint
-                                        on:input=move |e| {
-                                            api_endpoint.set(event_target_value(&e));
-                                            validator.update(|v| {
-                                                if !api_endpoint.get().is_empty() {
-                                                    v.validate(StringValidators::url("api_endpoint", &api_endpoint.get()));
-                                                }
-                                            });
-                                        }
-                                    />
-                                    <p class="form-help">{i18n.t("settings-api-endpoint-help")}</p>
-                                    {move || validator.get().first_error_message("api_endpoint").map(|msg| view! {
-                                        <span class="form-error">{msg}</span>
-                                    })}
-                                </div>
-                            </section>
-
-                            <section class="card settings-section">
                                 <h2>{i18n.t("settings-wallet")}</h2>
 
                                 <div class=move || format!("form-group {}",
@@ -311,34 +189,6 @@ pub fn SettingsPage() -> impl IntoView {
                                     <button class="btn btn-secondary">{i18n.t("settings-connect-wallet")}</button>
                                     <button class="btn btn-secondary">{i18n.t("settings-disconnect-wallet")}</button>
                                 </div>
-                            </section>
-
-                            <section class="card settings-section">
-                                <h2>{i18n.t("settings-ai-config")}</h2>
-                                <p class="form-help">{i18n.t("settings-ai-config-help")}</p>
-                                <button
-                                    class="btn btn-secondary"
-                                    on:click=move |_| {
-                                        let navigate = leptos_router::hooks::use_navigate();
-                                        navigate("/llm-config", Default::default());
-                                    }
-                                >
-                                    {i18n.t("settings-open-llm-config")}
-                                </button>
-                            </section>
-
-                            <section class="card settings-section">
-                                <h2>{i18n.t("settings-gateway-setup")}</h2>
-                                <p class="form-help">{i18n.t("settings-gateway-setup-help")}</p>
-                                <button
-                                    class="btn btn-secondary"
-                                    on:click=move |_| {
-                                        let navigate = leptos_router::hooks::use_navigate();
-                                        navigate("/settings/wizard", Default::default());
-                                    }
-                                >
-                                    {i18n.t("settings-config-wizard")}
-                                </button>
                             </section>
 
                             <section class="card settings-section">
@@ -412,26 +262,5 @@ pub fn SettingsPage() -> impl IntoView {
                 }.into_any()
             }}
         </div>
-    }
-}
-
-#[component]
-fn ThemeOption(
-    #[prop(into)] label: String,
-    value: Theme,
-    current: RwSignal<Theme>,
-    #[prop(into)] icon: String,
-) -> impl IntoView {
-    let value_for_check = value.clone();
-    let is_selected = move || current.get() == value_for_check;
-
-    view! {
-        <button
-            class=move || format!("theme-option {}", if is_selected() { "selected" } else { "" })
-            on:click=move |_| current.set(value.clone())
-        >
-            <span class="theme-icon">{icon}</span>
-            <span class="theme-label">{label}</span>
-        </button>
     }
 }
