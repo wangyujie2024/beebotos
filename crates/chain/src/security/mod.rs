@@ -10,10 +10,11 @@
 //! - Integer overflow checks
 //! - Replay attack prevention
 
+use parking_lot::Mutex;
+
 use crate::compat::Address;
 use crate::constants::{MAX_GAS_PRICE_WEI, MAX_TX_DATA_SIZE};
 use crate::{ChainError, Result};
-use parking_lot::Mutex;
 
 /// Security validator for blockchain operations
 #[derive(Debug, Clone)]

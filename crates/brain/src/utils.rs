@@ -11,8 +11,9 @@ use std::cmp::Ordering;
 ///
 /// # Examples
 /// ```
-/// use beebotos_brain::utils::compare_f32;
 /// use std::cmp::Ordering;
+///
+/// use beebotos_brain::utils::compare_f32;
 ///
 /// assert_eq!(compare_f32(&1.0, &2.0), Ordering::Less);
 /// assert_eq!(compare_f32(&f32::NAN, &1.0), Ordering::Less);
@@ -257,9 +258,10 @@ pub fn choose_mut<T>(slice: &mut [T]) -> Option<&mut T> {
 // Seeded random number generation (for reproducibility)
 // =============================================================================
 
+use std::cell::RefCell;
+
 use rand::rngs::StdRng;
 use rand::SeedableRng;
-use std::cell::RefCell;
 
 thread_local! {
     static SEEDED_RNG: RefCell<Option<StdRng>> = RefCell::new(None);

@@ -65,8 +65,8 @@ pub mod irc_content;
 pub mod lark_content;
 pub mod line_content;
 pub mod matrix_content;
-pub mod qq_content;
 pub mod poll_feature;
+pub mod qq_content;
 pub mod signal_cli;
 pub mod signal_content;
 pub mod slack_content;
@@ -80,117 +80,111 @@ pub mod whatsapp_content;
 pub mod channel_extensions;
 
 // 🟢 P0 FIX: Export unified content types
-pub use content::{
-    ButtonAction, CardButton, CardContent, ContactContent, ContentBuilder, ContentParser,
-    ContentType, EntityType, LocationContent, MediaContent, PlatformContent, RichContent,
-    StickerContent, TextContent, TextEntity, TextFormat,
-    create_metadata, extract_text_with_format, parse_content_type,
+// 🟢 P0 FIX: Export channel extension traits
+pub use channel_extensions::{
+    BannedUserInfo, ChannelCapabilities, ChannelCapability, ChannelHistoryStats,
+    DeletedMessageInfo, EditableChannel, MessageEditHistory, MessageHistoryTracker,
+    ModeratedChannel, PinnableChannel, PinnedMessage,
 };
-
 // 导出统一 Channel Trait（从 trait.rs）
 // 导出频道管理器
 pub use channel_manager::{
     ChannelHealthMonitor, ChannelManager, ChannelManagerConfig, ChannelRegistration, ChannelRouter,
     ChannelStatus,
 };
+pub use content::{
+    create_metadata, extract_text_with_format, parse_content_type, ButtonAction, CardButton,
+    CardContent, ContactContent, ContentBuilder, ContentParser, ContentType, EntityType,
+    LocationContent, MediaContent, PlatformContent, RichContent, StickerContent, TextContent,
+    TextEntity, TextFormat,
+};
+// 导出 Channel Factories
+pub use dingtalk_channel::DingTalkChannelFactory;
 // 导出新的统一 Channel 实现
 pub use dingtalk_channel::{DingTalkChannel, DingTalkChannelConfig};
-pub use discord_channel::{DiscordChannel, DiscordChannelConfig};
-// 🟢 P0 FIX: Export Mattermost channel
-pub use mattermost_channel::{
-    MattermostChannelClient as MattermostChannel, MattermostChannelConfig, MattermostChannelFactory,
-    MattermostPost, MattermostUser, MattermostChannelInfo,
-    PostEdit,
-};
+pub use discord_channel::{DiscordChannel, DiscordChannelConfig, DiscordChannelFactory};
 // 导出内容解析器
 pub use discord_content::DiscordContentParser;
+// CODE QUALITY FIX: Export unified error types
+pub use error::{ChannelError as UnifiedChannelError, ChannelResult as UnifiedChannelResult};
 pub use google_chat_channel::{GoogleChatChannel, GoogleChatConfig as GoogleChatChannelConfig};
+// 导出 Google Chat 内容解析器
+pub use google_chat_content::GoogleChatContentParser;
+// 🟢 P0 FIX: Export Personal WeChat channel and iLink client
+pub use ilink_client::{BotSession, ILinkClient, ILinkConfig, WeChatMessage};
 pub use imessage_channel::{IMessageChannel, IMessageChannelConfig};
 pub use imessage_content::{IMessageContent, IMessageContentFormatter, IMessageContentParser};
+pub use irc_channel::{IRCChannel, IRCConfig, SASLCredentials};
+// 导出 IRC 内容解析器
+pub use irc_content::{IRCContentParser, IRCFormat, IRCMessageType, CTCP};
+pub use lark_unified::LarkChannelFactory;
 // 导出飞书新实现
 pub use lark_unified::{LarkChannel, LarkConfig};
 pub use lark_ws_impl::LarkWebSocketClient;
-pub use irc_channel::{IRCChannel, IRCConfig, SASLCredentials};
 pub use line_channel::{LineChannel, LineConfig as LineChannelConfig};
+// 导出 LINE 内容解析器
+pub use line_content::LineContentParser;
 pub use matrix_channel::{MatrixChannel, MatrixChannelConfig, MatrixCredential};
-pub use qq_channel::{QQChannel, QQConfig};
+// 🟢 P0 FIX: Export Mattermost channel
+pub use mattermost_channel::{
+    MattermostChannelClient as MattermostChannel, MattermostChannelConfig,
+    MattermostChannelFactory, MattermostChannelInfo, MattermostPost, MattermostUser, PostEdit,
+};
 pub use message_pipeline::{
     ChannelResponse, MessageContext, MessagePipeline, MessageProcessor, PipelineConfig,
     ProcessedMessage, ResponseType,
 };
+// 🔧 P1 FIX: Export new message template system
+pub use message_template::{
+    MessageTemplate as NewMessageTemplate, TemplateBuilder, TemplateManager,
+};
+pub use message_templates::{built_in as template_built_in, MessageTemplate, TemplateEngine};
+pub use personal_wechat_channel::{PersonalWeChatChannel, PersonalWeChatConfig};
+// 🟢 P0 FIX: Export Personal WeChat factory
+pub use personal_wechat_factory::PersonalWeChatFactory;
 // 导出投票功能
 pub use poll_feature::{
     Poll, PollConfig, PollFormatter, PollManager, PollOption, PollResult, PollStatus, Vote,
     VoteIntent,
 };
-// 🔧 P1 FIX: Export new message template system
-pub use message_template::{MessageTemplate as NewMessageTemplate, TemplateManager, TemplateBuilder};
-pub use message_templates::{built_in as template_built_in, MessageTemplate, TemplateEngine};
-// 导出 Channel Factories
-pub use dingtalk_channel::DingTalkChannelFactory;
-pub use discord_channel::DiscordChannelFactory;
-pub use lark_unified::LarkChannelFactory;
-// 🟢 P0 FIX: Export Personal WeChat factory
-pub use personal_wechat_factory::PersonalWeChatFactory;
-// 🟢 P0 FIX: Export WebChat channel and factory
-pub use webchat_channel::{WebChatChannel, WebChatConfig};
-pub use webchat_factory::WebChatFactory;
-pub use slack_channel::SlackChannelFactory;
-pub use telegram_channel::TelegramChannelFactory;
+pub use qq_channel::{QQChannel, QQConfig};
+// 导出 QQ 内容解析器
+pub use qq_content::{QQContentParser, QQMessage, QQSegment};
 pub use r#trait::{
-    BaseChannelConfig, Channel, ChannelConfig, ChannelEvent, ChannelFactory, ChannelInfo, ChannelType, ConnectionMode,
-    MemberInfo, MemberRole,
-};
-
-// 🟢 P1 FIX: Export WebSocket client types
-pub use websocket_client::{
-    WebSocketClient, WebSocketConfig, WebSocketHandler, WsConnectionState,
-    utils::{build_ws_url, http_to_ws_url, parse_close_code},
+    BaseChannelConfig, Channel, ChannelConfig, ChannelEvent, ChannelFactory, ChannelInfo,
+    ChannelType, ConnectionMode, MemberInfo, MemberRole,
 };
 pub use signal_channel::{SignalChannel, SignalChannelConfig};
 pub use signal_cli::{SignalCliConfig, SignalCliManager, SignalCliState, SignalEvent};
 pub use signal_content::{SignalContent, SignalContentParser};
-pub use slack_channel::{SlackChannel, SlackChannelConfig};
+pub use slack_channel::{SlackChannel, SlackChannelConfig, SlackChannelFactory};
 pub use slack_content::SlackContentParser;
 pub use teams_channel::{TeamsChannel, TeamsChannelConfig};
 pub use teams_content::TeamsContentParser;
-pub use telegram_channel::{TelegramChannel, TelegramConfig as TelegramChannelConfig};
+pub use telegram_channel::{
+    TelegramChannel, TelegramChannelFactory, TelegramConfig as TelegramChannelConfig,
+};
 pub use twitter_channel::{TwitterChannel, TwitterChannelConfig};
 pub use twitter_content::TwitterContentParser;
-// 🟢 P0 FIX: Export Personal WeChat channel and iLink client
-pub use ilink_client::{ILinkClient, ILinkConfig, BotSession, WeChatMessage};
-pub use personal_wechat_channel::{PersonalWeChatChannel, PersonalWeChatConfig};
+// 🟢 P0 FIX: Export WebChat channel and factory
+pub use webchat_channel::{WebChatChannel, WebChatConfig};
+pub use webchat_factory::WebChatFactory;
+// 🟢 P1 FIX: Export WebSocket client types
+pub use websocket_client::{
+    utils::{build_ws_url, http_to_ws_url, parse_close_code},
+    WebSocketClient, WebSocketConfig, WebSocketHandler, WsConnectionState,
+};
 pub use wechat_channel::{WeChatChannel, WeChatChannelConfig};
-pub use wechat_factory::WeChatFactory;
 pub use wechat_content::{WeChatContent, WeChatContentParser};
+pub use wechat_factory::WeChatFactory;
 pub use whatsapp_channel::{WhatsAppChannel, WhatsAppChannelConfig};
 pub use whatsapp_content::{WhatsAppContent, WhatsAppContentParser};
-// 导出 Google Chat 内容解析器
-pub use google_chat_content::GoogleChatContentParser;
-// 导出 IRC 内容解析器
-pub use irc_content::{IRCContentParser, IRCFormat, CTCP, IRCMessageType};
-// 导出 LINE 内容解析器
-pub use line_content::LineContentParser;
-// 导出 QQ 内容解析器
-pub use qq_content::{QQContentParser, QQMessage, QQSegment};
 
 // Re-export old adapter types for backward compatibility
 pub use super::PlatformAdapter;
-// 🟢 P0 FIX: Export channel extension traits
-pub use channel_extensions::{
-    PinnableChannel, EditableChannel, ModeratedChannel,
-    PinnedMessage, MessageEditHistory, DeletedMessageInfo,
-    MessageHistoryTracker, ChannelHistoryStats,
-    ChannelCapability, ChannelCapabilities,
-    BannedUserInfo,
-};
-
 // Re-export for backward compatibility
 pub use super::{Message, PlatformType};
 pub use crate::error::{AgentError as ChannelError, Result as ChannelResult};
-
-// CODE QUALITY FIX: Export unified error types
-pub use error::{ChannelError as UnifiedChannelError, ChannelResult as UnifiedChannelResult};
 
 /// Platform configuration for backward compatibility
 #[derive(Debug, Clone, Default)]

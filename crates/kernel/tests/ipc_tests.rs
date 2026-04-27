@@ -2,12 +2,13 @@
 //!
 //! Tests for channels, message queues, shared memory, and pipes.
 
+use std::thread;
+
 use beebotos_kernel::ipc::channel::channel;
 use beebotos_kernel::ipc::message::Message;
 use beebotos_kernel::ipc::shared_memory::SharedMemoryStats;
 use beebotos_kernel::ipc::{init, shared_memory_manager, MessageQueue, SharedMemory};
 use beebotos_kernel::task::TaskId;
-use std::thread;
 
 /// Test channel creation and basic send/receive
 #[test]

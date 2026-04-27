@@ -1,11 +1,13 @@
 //! Event Stream Types
 
-use crate::chains::common::events::EvmEvent;
-use crate::ChainError;
 use std::pin::Pin;
 use std::task::{Context, Poll};
+
 use tokio::sync::mpsc;
 use tokio_stream::Stream;
+
+use crate::chains::common::events::EvmEvent;
+use crate::ChainError;
 
 /// Event stream with additional configuration
 pub struct EventStream {

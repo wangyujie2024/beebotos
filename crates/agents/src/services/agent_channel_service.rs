@@ -7,10 +7,9 @@ use std::sync::Arc;
 
 use tracing::info;
 
+use super::agent_channel_store::AgentChannelBindingStore;
 use crate::communication::agent_channel::{AgentChannelBinding, RoutingRules};
 use crate::error::Result;
-
-use super::agent_channel_store::AgentChannelBindingStore;
 
 /// Service for managing agent-channel bindings.
 pub struct AgentChannelService {
@@ -59,11 +58,7 @@ impl AgentChannelService {
     }
 
     /// Unbind an agent from a user channel.
-    pub async fn unbind_agent(
-        &self,
-        agent_id: &str,
-        user_channel_id: &str,
-    ) -> Result<()> {
+    pub async fn unbind_agent(&self, agent_id: &str, user_channel_id: &str) -> Result<()> {
         self.store.unbind(agent_id, user_channel_id).await?;
         info!(
             "Unbound agent {} from user channel {}",
@@ -74,12 +69,9 @@ impl AgentChannelService {
 
     /// Set an agent as the default for a user channel.
     ///
-    /// Enforces the invariant that at most one agent is default per user channel.
-    pub async fn set_default_agent(
-        &self,
-        user_channel_id: &str,
-        agent_id: &str,
-    ) -> Result<()> {
+    /// Enforces the invariant that at most one agent is default per user
+    /// channel.
+    pub async fn set_default_agent(&self, user_channel_id: &str, agent_id: &str) -> Result<()> {
         self.store.set_default(user_channel_id, agent_id).await?;
         info!(
             "Set agent {} as default for user channel {}",
@@ -104,11 +96,12 @@ impl AgentChannelService {
         self.store.list_by_agent(agent_id).await
     }
 
-    /// Find the default agent for a user channel identified by platform + platform_channel_id.
+    /// Find the default agent for a user channel identified by platform +
+    /// platform_channel_id.
     ///
-    /// P2 OPTIMIZE: Renamed from `find_default_agent_for_platform_user` to clarify that
-    /// the lookup key is the platform-level channel identifier (e.g. chat_id, room_id),
-    /// not the individual sender/user ID.
+    /// P2 OPTIMIZE: Renamed from `find_default_agent_for_platform_user` to
+    /// clarify that the lookup key is the platform-level channel identifier
+    /// (e.g. chat_id, room_id), not the individual sender/user ID.
     pub async fn find_default_agent_for_platform_channel(
         &self,
         platform: crate::communication::PlatformType,

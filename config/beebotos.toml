@@ -48,23 +48,6 @@ kernel_timeout_seconds = 30
 chain_url = "http://localhost:8545"
 chain_timeout_seconds = 30
 
-[models]
-default_provider = "kimi"
-fallback_chain = []
-request_timeout = 60
-max_tokens = 4096
-system_prompt = "你是 BeeBotOS 的个人 AI 助手，由 BeeBotOS 团队开发。请始终以这个身份回答用户问题。"
-
-[models.kimi]
-model = "kimi-k2.5"
-base_url = "https://api.moonshot.cn/v1"
-temperature = 1.0
-
-[models.zhipu]
-model = "glm-4"
-base_url = "https://open.bigmodel.cn/api/paas/v4"
-temperature = 0.7
-
 [channels]
 enabled_platforms = ["personal_wechat", "lark", "wechat"]
 auto_download_media = false

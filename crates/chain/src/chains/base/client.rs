@@ -1,7 +1,7 @@
 //! Base Client
 
-use crate::chains::common::{BaseEvmClient, EvmClient, EvmConfig};
 use crate::chains::base::types::BaseBlockStats;
+use crate::chains::common::{BaseEvmClient, EvmClient, EvmConfig};
 use crate::ChainResult;
 
 /// Base blockchain client

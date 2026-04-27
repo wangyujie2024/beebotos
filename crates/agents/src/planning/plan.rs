@@ -6,10 +6,11 @@
 //! - Plan status and lifecycle
 //! - Actions that can be executed within steps
 
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
 use std::time::Duration;
+
+use serde::{Deserialize, Serialize};
 
 /// Unique plan identifier
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -61,12 +62,18 @@ pub enum PlanStatus {
 impl PlanStatus {
     /// Check if plan is active
     pub fn is_active(&self) -> bool {
-        matches!(self, PlanStatus::Created | PlanStatus::InProgress | PlanStatus::Replanning)
+        matches!(
+            self,
+            PlanStatus::Created | PlanStatus::InProgress | PlanStatus::Replanning
+        )
     }
 
     /// Check if plan is terminal
     pub fn is_terminal(&self) -> bool {
-        matches!(self, PlanStatus::Completed | PlanStatus::Failed | PlanStatus::Cancelled)
+        matches!(
+            self,
+            PlanStatus::Completed | PlanStatus::Failed | PlanStatus::Cancelled
+        )
     }
 }
 
@@ -126,7 +133,8 @@ pub struct Plan {
     pub started_at: Option<chrono::DateTime<chrono::Utc>>,
     /// Completed at
     pub completed_at: Option<chrono::DateTime<chrono::Utc>>,
-    /// ARCHITECTURE FIX: TTL for automatic cleanup (plans older than this are removed)
+    /// ARCHITECTURE FIX: TTL for automatic cleanup (plans older than this are
+    /// removed)
     pub ttl_secs: Option<u64>,
     /// ARCHITECTURE FIX: Last accessed time (for LRU eviction)
     pub last_accessed_at: chrono::DateTime<chrono::Utc>,
@@ -214,9 +222,10 @@ impl Plan {
             .filter(|(i, step)| {
                 !step.is_completed()
                     && !completed.contains(i)
-                    && self.dependencies.get(i).map_or(true, |deps| {
-                        deps.iter().all(|d| completed.contains(d))
-                    })
+                    && self
+                        .dependencies
+                        .get(i)
+                        .map_or(true, |deps| deps.iter().all(|d| completed.contains(d)))
             })
             .map(|(i, _)| i)
             .collect()
@@ -411,23 +420,16 @@ pub enum Action {
         context: HashMap<String, serde_json::Value>,
     },
     /// Execute sub-plan
-    SubPlan {
-        plan_id: PlanId,
-    },
+    SubPlan { plan_id: PlanId },
     /// Delegate to another agent
-    Delegate {
-        agent_id: String,
-        task: String,
-    },
+    Delegate { agent_id: String, task: String },
     /// Wait for condition
     Wait {
         condition: String,
         timeout: Option<Duration>,
     },
     /// User interaction
-    UserInteraction {
-        question: String,
-    },
+    UserInteraction { question: String },
 }
 
 /// Planning error types
@@ -497,7 +499,8 @@ mod tests {
         let mut plan = Plan::new("Test", "Goal");
         plan.add_step(PlanStep::new("1", "Step 1"));
         plan.add_step(PlanStep::new("2", "Step 2"));
-        plan.add_step_with_deps(PlanStep::new("3", "Step 3"), vec![0, 1]).unwrap();
+        plan.add_step_with_deps(PlanStep::new("3", "Step 3"), vec![0, 1])
+            .unwrap();
 
         let ready = plan.get_ready_steps(&[]);
         assert_eq!(ready.len(), 2); // Steps 0 and 1

@@ -18,49 +18,49 @@ use crate::error::Result;
 #[async_trait]
 pub trait PinnableChannel: Channel {
     /// Pin a message to the channel
-    /// 
+    ///
     /// # Arguments
     /// * `channel_id` - The channel ID
     /// * `message_id` - The message ID to pin
-    /// 
+    ///
     /// # Returns
     /// Result indicating success or failure
     async fn pin_message(&self, channel_id: &str, message_id: &str) -> Result<()>;
 
     /// Unpin a message from the channel
-    /// 
+    ///
     /// # Arguments
     /// * `channel_id` - The channel ID
     /// * `message_id` - The message ID to unpin
-    /// 
+    ///
     /// # Returns
     /// Result indicating success or failure
     async fn unpin_message(&self, channel_id: &str, message_id: &str) -> Result<()>;
 
     /// Get all pinned messages in a channel
-    /// 
+    ///
     /// # Arguments
     /// * `channel_id` - The channel ID
-    /// 
+    ///
     /// # Returns
     /// List of pinned messages
     async fn get_pinned_messages(&self, channel_id: &str) -> Result<Vec<PinnedMessage>>;
 
     /// Clear all pinned messages in a channel
-    /// 
+    ///
     /// # Arguments
     /// * `channel_id` - The channel ID
-    /// 
+    ///
     /// # Returns
     /// Number of messages unpinned
     async fn clear_pinned_messages(&self, channel_id: &str) -> Result<u32> {
         let pinned = self.get_pinned_messages(channel_id).await?;
         let count = pinned.len() as u32;
-        
+
         for msg in pinned {
             self.unpin_message(channel_id, &msg.message_id).await?;
         }
-        
+
         Ok(count)
     }
 }
@@ -80,42 +80,51 @@ pub struct PinnedMessage {
 #[async_trait]
 pub trait EditableChannel: Channel {
     /// Edit a message
-    /// 
+    ///
     /// # Arguments
     /// * `channel_id` - The channel ID
     /// * `message_id` - The message ID to edit
     /// * `new_content` - The new message content
-    /// 
+    ///
     /// # Returns
     /// Result indicating success or failure
-    async fn edit_message(&self, channel_id: &str, message_id: &str, new_content: &str) -> Result<()>;
+    async fn edit_message(
+        &self,
+        channel_id: &str,
+        message_id: &str,
+        new_content: &str,
+    ) -> Result<()>;
 
     /// Delete a message
-    /// 
+    ///
     /// # Arguments
     /// * `channel_id` - The channel ID
     /// * `message_id` - The message ID to delete
-    /// 
+    ///
     /// # Returns
     /// Result indicating success or failure
     async fn delete_message(&self, channel_id: &str, message_id: &str) -> Result<()>;
 
     /// Get edit history for a message
-    /// 
+    ///
     /// # Arguments
     /// * `channel_id` - The channel ID
     /// * `message_id` - The message ID
-    /// 
+    ///
     /// # Returns
     /// List of edit history entries
-    async fn get_message_edit_history(&self, channel_id: &str, message_id: &str) -> Result<Vec<MessageEditHistory>>;
+    async fn get_message_edit_history(
+        &self,
+        channel_id: &str,
+        message_id: &str,
+    ) -> Result<Vec<MessageEditHistory>>;
 
     /// Bulk delete messages
-    /// 
+    ///
     /// # Arguments
     /// * `channel_id` - The channel ID
     /// * `message_ids` - List of message IDs to delete
-    /// 
+    ///
     /// # Returns
     /// Number of messages deleted
     async fn bulk_delete_messages(&self, channel_id: &str, message_ids: &[String]) -> Result<u32> {
@@ -177,30 +186,32 @@ impl MessageHistoryTracker {
 
     /// Record a message edit
     pub fn record_edit(&mut self, edit: MessageEditHistory) {
-        let channel_history = self.edit_history
+        let channel_history = self
+            .edit_history
             .entry(edit.channel_id.clone())
             .or_default();
-        
-        let message_history = channel_history
-            .entry(edit.message_id.clone())
-            .or_default();
-        
+
+        let message_history = channel_history.entry(edit.message_id.clone()).or_default();
+
         message_history.push(edit);
     }
 
     /// Get edit history for a message
-    pub fn get_edit_history(&self, channel_id: &str, message_id: &str) -> Option<&Vec<MessageEditHistory>> {
-        self.edit_history
-            .get(channel_id)?
-            .get(message_id)
+    pub fn get_edit_history(
+        &self,
+        channel_id: &str,
+        message_id: &str,
+    ) -> Option<&Vec<MessageEditHistory>> {
+        self.edit_history.get(channel_id)?.get(message_id)
     }
 
     /// Record a pinned message
     pub fn record_pin(&mut self, message: PinnedMessage) {
-        let channel_pins = self.pinned_messages
+        let channel_pins = self
+            .pinned_messages
             .entry(message.channel_id.clone())
             .or_default();
-        
+
         // Remove if already exists (re-pinning)
         channel_pins.retain(|m| m.message_id != message.message_id);
         channel_pins.push(message);
@@ -220,10 +231,11 @@ impl MessageHistoryTracker {
 
     /// Record a deleted message
     pub fn record_deletion(&mut self, info: DeletedMessageInfo) {
-        let channel_deletions = self.deleted_messages
+        let channel_deletions = self
+            .deleted_messages
             .entry(info.channel_id.clone())
             .or_default();
-        
+
         channel_deletions.push(info);
     }
 
@@ -235,7 +247,7 @@ impl MessageHistoryTracker {
     /// Search in message history
     pub fn search_history(&self, channel_id: &str, query: &str) -> Vec<&MessageEditHistory> {
         let mut results = Vec::new();
-        
+
         if let Some(channel_history) = self.edit_history.get(channel_id) {
             for history in channel_history.values() {
                 for edit in history {
@@ -245,27 +257,30 @@ impl MessageHistoryTracker {
                 }
             }
         }
-        
+
         results
     }
 
     /// Get statistics for a channel
     pub fn get_channel_stats(&self, channel_id: &str) -> ChannelHistoryStats {
-        let edit_count = self.edit_history
+        let edit_count = self
+            .edit_history
             .get(channel_id)
             .map(|h| h.values().map(|v| v.len()).sum())
             .unwrap_or(0);
-        
-        let pinned_count = self.pinned_messages
+
+        let pinned_count = self
+            .pinned_messages
             .get(channel_id)
             .map(|v| v.len())
             .unwrap_or(0);
-        
-        let deleted_count = self.deleted_messages
+
+        let deleted_count = self
+            .deleted_messages
             .get(channel_id)
             .map(|v| v.len())
             .unwrap_or(0);
-        
+
         ChannelHistoryStats {
             total_edits: edit_count,
             total_pinned: pinned_count as u32,
@@ -282,21 +297,31 @@ impl MessageHistoryTracker {
 
     /// Export history to JSON
     pub fn export_history(&self, channel_id: &str) -> Option<serde_json::Value> {
-        let edit_history: Vec<&MessageEditHistory> = self.edit_history
+        let edit_history: Vec<&MessageEditHistory> = self
+            .edit_history
             .get(channel_id)?
             .values()
             .flat_map(|v| v.iter())
             .collect();
-        
-        let pinned = self.pinned_messages.get(channel_id).cloned().unwrap_or_default();
-        let deleted = self.deleted_messages.get(channel_id).cloned().unwrap_or_default();
-        
+
+        let pinned = self
+            .pinned_messages
+            .get(channel_id)
+            .cloned()
+            .unwrap_or_default();
+        let deleted = self
+            .deleted_messages
+            .get(channel_id)
+            .cloned()
+            .unwrap_or_default();
+
         serde_json::json!({
             "channel_id": channel_id,
             "edit_history": edit_history,
             "pinned_messages": pinned,
             "deleted_messages": deleted,
-        }).into()
+        })
+        .into()
     }
 }
 
@@ -327,7 +352,8 @@ pub trait ModeratedChannel: Channel {
     async fn unban_user(&self, channel_id: &str, user_id: &str) -> Result<()>;
 
     /// Timeout a user (mute temporarily)
-    async fn timeout_user(&self, channel_id: &str, user_id: &str, duration_secs: u64) -> Result<()>;
+    async fn timeout_user(&self, channel_id: &str, user_id: &str, duration_secs: u64)
+        -> Result<()>;
 
     /// Remove timeout from a user
     async fn remove_timeout(&self, channel_id: &str, user_id: &str) -> Result<()>;
@@ -398,7 +424,12 @@ macro_rules! impl_editable_channel {
     ($type:ty, $edit_fn:expr, $delete_fn:expr, $history_fn:expr) => {
         #[async_trait::async_trait]
         impl EditableChannel for $type {
-            async fn edit_message(&self, channel_id: &str, message_id: &str, new_content: &str) -> Result<()> {
+            async fn edit_message(
+                &self,
+                channel_id: &str,
+                message_id: &str,
+                new_content: &str,
+            ) -> Result<()> {
                 $edit_fn(self, channel_id, message_id, new_content).await
             }
 
@@ -406,7 +437,11 @@ macro_rules! impl_editable_channel {
                 $delete_fn(self, channel_id, message_id).await
             }
 
-            async fn get_message_edit_history(&self, channel_id: &str, message_id: &str) -> Result<Vec<MessageEditHistory>> {
+            async fn get_message_edit_history(
+                &self,
+                channel_id: &str,
+                message_id: &str,
+            ) -> Result<Vec<MessageEditHistory>> {
                 $history_fn(self, channel_id, message_id).await
             }
         }
@@ -480,7 +515,7 @@ mod tests {
 
         let json = serde_json::to_string(&stats).unwrap();
         let deserialized: ChannelHistoryStats = serde_json::from_str(&json).unwrap();
-        
+
         assert_eq!(deserialized.total_edits, 10);
         assert_eq!(deserialized.total_pinned, 5);
         assert_eq!(deserialized.total_deleted, 2);

@@ -10,13 +10,15 @@
 //! - Self-reflection and correction
 //! - Multi-step task decomposition
 
-use crate::error::{AgentError, Result};
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
+
+use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 use tracing::{debug, info};
 use uuid::Uuid;
+
+use crate::error::{AgentError, Result};
 
 /// ReAct agent that performs reasoning and actions
 pub struct ReActAgent {
@@ -195,10 +197,12 @@ impl ReActAgent {
     pub async fn execute(&self, task: &str) -> Result<ReActResult> {
         let task_id = Uuid::new_v4().to_string();
         let start_time = std::time::Instant::now();
-        
+
         info!("Starting ReAct execution for task: {}", task_id);
-        
-        let llm = self.llm_interface.as_ref()
+
+        let llm = self
+            .llm_interface
+            .as_ref()
             .ok_or_else(|| AgentError::configuration("LLM interface not set"))?;
 
         let mut steps = Vec::new();
@@ -210,10 +214,10 @@ impl ReActAgent {
 
             // Generate reasoning prompt
             let prompt = self.build_reasoning_prompt(task, &steps);
-            
+
             // Get reasoning from LLM
             let reasoning = llm.reason(&prompt, &steps).await?;
-            
+
             // Check for completion phrases
             if self.should_complete(&reasoning) {
                 final_answer = Some(self.extract_answer(&reasoning));
@@ -229,7 +233,10 @@ impl ReActAgent {
 
             // Generate reflection if enabled
             let reflection = if self.config.enable_reflection {
-                Some(self.generate_reflection(&reasoning, &action, &observation, success).await?)
+                Some(
+                    self.generate_reflection(&reasoning, &action, &observation, success)
+                        .await?,
+                )
             } else {
                 None
             };
@@ -254,7 +261,9 @@ impl ReActAgent {
             }
 
             // Check if final answer
-            if let Some(Action::FinalAnswer { answer }) = steps.last().and_then(|s| s.action.clone()) {
+            if let Some(Action::FinalAnswer { answer }) =
+                steps.last().and_then(|s| s.action.clone())
+            {
                 final_answer = Some(answer);
                 completed = true;
                 break;
@@ -263,8 +272,11 @@ impl ReActAgent {
 
         let execution_time = start_time.elapsed().as_secs_f64();
 
-        info!("ReAct execution completed in {:.2}s, steps: {}", 
-              execution_time, steps.len());
+        info!(
+            "ReAct execution completed in {:.2}s, steps: {}",
+            execution_time,
+            steps.len()
+        );
 
         let steps_used = steps.len();
         Ok(ReActResult {
@@ -280,15 +292,13 @@ impl ReActAgent {
     /// Build reasoning prompt with context
     fn build_reasoning_prompt(&self, task: &str, steps: &[ReActStep]) -> String {
         let mut prompt = format!(
-            "You are a helpful AI assistant that solves tasks by thinking step by step \
-             and taking actions.\n\n\
-             Task: {}\n\n\
-             Available tools:\n",
+            "You are a helpful AI assistant that solves tasks by thinking step by step and taking \
+             actions.\n\nTask: {}\n\nAvailable tools:\n",
             task
         );
 
-        // Add tool descriptions (this would need to be implemented with proper tool access)
-        // For now, using a simplified version
+        // Add tool descriptions (this would need to be implemented with proper tool
+        // access) For now, using a simplified version
         prompt.push_str("\nThink step by step:\n");
         prompt.push_str("1. What is the current state?\n");
         prompt.push_str("2. What do I need to know or do?\n");
@@ -314,39 +324,50 @@ impl ReActAgent {
     /// Execute an action
     async fn execute_action(&self, action: &Action) -> Result<(String, bool)> {
         match action {
-            Action::ToolUse { tool_name, parameters } => {
+            Action::ToolUse {
+                tool_name,
+                parameters,
+            } => {
                 let tools = self.tools.read().await;
-                let tool = tools.get(tool_name)
-                    .ok_or_else(|| AgentError::not_found(format!("Tool {} not found", tool_name)))?;
-                
+                let tool = tools.get(tool_name).ok_or_else(|| {
+                    AgentError::not_found(format!("Tool {} not found", tool_name))
+                })?;
+
                 let result = tool.execute(parameters.clone()).await?;
-                
+
                 let observation = if result.success {
-                    format!("Tool '{}' executed successfully: {}", tool_name, result.data)
+                    format!(
+                        "Tool '{}' executed successfully: {}",
+                        tool_name, result.data
+                    )
                 } else {
-                    format!("Tool '{}' failed: {}", tool_name, result.error.unwrap_or_default())
+                    format!(
+                        "Tool '{}' failed: {}",
+                        tool_name,
+                        result.error.unwrap_or_default()
+                    )
                 };
-                
+
                 Ok((observation, result.success))
             }
-            Action::FinalAnswer { answer } => {
-                Ok((format!("Final answer: {}", answer), true))
-            }
+            Action::FinalAnswer { answer } => Ok((format!("Final answer: {}", answer), true)),
             Action::RequestInfo { question } => {
                 Ok((format!("Requesting information: {}", question), true))
             }
-            Action::Delegate { agent_id, task } => {
-                Ok((format!("Delegating task '{}' to agent '{}'", task, agent_id), true))
-            }
+            Action::Delegate { agent_id, task } => Ok((
+                format!("Delegating task '{}' to agent '{}'", task, agent_id),
+                true,
+            )),
         }
     }
 
     /// Check if reasoning indicates task completion
     fn should_complete(&self, reasoning: &str) -> bool {
         let reasoning_lower = reasoning.to_lowercase();
-        self.config.stop_phrases.iter().any(|phrase| {
-            reasoning_lower.contains(&phrase.to_lowercase())
-        })
+        self.config
+            .stop_phrases
+            .iter()
+            .any(|phrase| reasoning_lower.contains(&phrase.to_lowercase()))
     }
 
     /// Extract final answer from reasoning
@@ -370,14 +391,14 @@ impl ReActAgent {
     ) -> Result<String> {
         let reflection = if success {
             format!(
-                "The action {:?} was successful. Observation: {}. \
-                 I should continue building on this progress.",
+                "The action {:?} was successful. Observation: {}. I should continue building on \
+                 this progress.",
                 action, observation
             )
         } else {
             format!(
-                "The action {:?} failed. Observation: {}. \
-                 I should try a different approach or tool.",
+                "The action {:?} failed. Observation: {}. I should try a different approach or \
+                 tool.",
                 action, observation
             )
         };
@@ -426,7 +447,8 @@ pub mod tools {
         }
 
         async fn execute(&self, params: HashMap<String, serde_json::Value>) -> Result<ToolResult> {
-            let expression = params.get("expression")
+            let expression = params
+                .get("expression")
                 .and_then(|v| v.as_str())
                 .ok_or_else(|| AgentError::platform("Missing expression parameter"))?;
 
@@ -476,7 +498,8 @@ pub mod tools {
         }
 
         async fn execute(&self, params: HashMap<String, serde_json::Value>) -> Result<ToolResult> {
-            let query = params.get("query")
+            let query = params
+                .get("query")
                 .and_then(|v| v.as_str())
                 .ok_or_else(|| AgentError::platform("Missing query parameter"))?;
 
@@ -524,10 +547,10 @@ mod tests {
     async fn test_react_agent_creation() {
         let config = ReActConfig::default();
         let agent = ReActAgent::new(config);
-        
+
         // Register a tool
         agent.register_tool(Box::new(tools::CalculatorTool)).await;
-        
+
         let tools = agent.tools.read().await;
         assert!(tools.contains_key("calculator"));
     }

@@ -5,11 +5,11 @@
 
 use std::sync::Arc;
 use std::time::Duration;
+
+use beebotos_chain::compat::ChainClientTrait;
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
 use tracing::{debug, info};
-
-use beebotos_chain::compat::ChainClientTrait;
 
 /// Cache warmer configuration
 #[derive(Debug, Clone)]
@@ -74,10 +74,7 @@ pub struct CacheWarmer {
 impl CacheWarmer {
     /// Create new cache warmer
     #[allow(dead_code)]
-    pub fn new(
-        config: CacheWarmerConfig,
-        client: Arc<dyn ChainClientTrait>,
-    ) -> Self {
+    pub fn new(config: CacheWarmerConfig, client: Arc<dyn ChainClientTrait>) -> Self {
         Self {
             config,
             client,

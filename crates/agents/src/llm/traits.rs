@@ -167,8 +167,8 @@ impl RetryPolicy {
 
     /// Calculate delay for a specific retry attempt
     pub fn delay_for_attempt(&self, attempt: u32) -> std::time::Duration {
-        let exponential = self.base_delay.as_millis() as f64 
-            * self.backoff_multiplier.powi(attempt as i32);
+        let exponential =
+            self.base_delay.as_millis() as f64 * self.backoff_multiplier.powi(attempt as i32);
         let jitter = rand::random::<f64>() * 0.1 * exponential; // 10% jitter
         let delay_ms = (exponential + jitter) as u64;
         std::time::Duration::from_millis(delay_ms.min(self.max_delay.as_millis() as u64))
@@ -215,10 +215,5 @@ pub trait MetricsCollector: Send + Sync {
     );
 
     /// Record a streaming chunk
-    async fn record_stream_chunk(
-        &self,
-        provider: &str,
-        model: &str,
-        chunk_size: usize,
-    );
+    async fn record_stream_chunk(&self, provider: &str, model: &str, chunk_size: usize);
 }

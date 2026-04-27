@@ -1,11 +1,11 @@
 //! 浏览器自动化状态管理
 
-use crate::browser::{
-    BrowserError, BrowserInstance, BrowserProfile, BrowserSandbox,
-    ConnectionStatus,
-};
 // SandboxStats may be used in future implementations
 use leptos::prelude::*;
+
+use crate::browser::{
+    BrowserError, BrowserInstance, BrowserProfile, BrowserSandbox, ConnectionStatus,
+};
 
 /// 浏览器状态
 #[derive(Clone, Debug)]
@@ -99,10 +99,7 @@ impl BrowserState {
 
     /// 检查是否已连接
     pub fn is_connected(&self) -> bool {
-        matches!(
-            self.connection_status.get(),
-            ConnectionStatus::Connected
-        )
+        matches!(self.connection_status.get(), ConnectionStatus::Connected)
     }
 }
 

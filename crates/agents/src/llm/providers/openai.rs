@@ -5,16 +5,14 @@
 
 use async_trait::async_trait;
 use reqwest::header::{self, HeaderMap, HeaderValue};
-
 use tokio::sync::mpsc;
 use tracing::{debug, error, info, trace};
 
 use crate::llm::http_client::{LLMHttpClient, OpenAIRequestBuilder, ProviderConfig};
 use crate::llm::traits::*;
-use crate::llm::types::*;
-
 // Re-export models for public access
 pub use crate::llm::types::openai_models;
+use crate::llm::types::*;
 
 /// OpenAI API configuration
 #[derive(Debug, Clone)]
@@ -40,7 +38,7 @@ impl Default for OpenAIConfig {
             api_key: String::new(),
             organization: None,
             default_model: openai_models::GPT_4O.to_string(),
-            timeout: std::time::Duration::from_secs(60),
+            timeout: std::time::Duration::from_secs(120),
             retry_policy: RetryPolicy::default(),
         }
     }
@@ -50,15 +48,15 @@ impl OpenAIConfig {
     /// Create from environment variables
     pub fn from_env() -> Result<Self, String> {
         use std::env;
-        
-        let api_key = env::var("OPENAI_API_KEY")
-            .map_err(|_| "OPENAI_API_KEY not set".to_string())?;
 
-        let base_url = env::var("OPENAI_BASE_URL")
-            .unwrap_or_else(|_| "https://api.openai.com/v1".to_string());
+        let api_key =
+            env::var("OPENAI_API_KEY").map_err(|_| "OPENAI_API_KEY not set".to_string())?;
 
-        let default_model = env::var("OPENAI_DEFAULT_MODEL")
-            .unwrap_or_else(|_| openai_models::GPT_4O.to_string());
+        let base_url =
+            env::var("OPENAI_BASE_URL").unwrap_or_else(|_| "https://api.openai.com/v1".to_string());
+
+        let default_model =
+            env::var("OPENAI_DEFAULT_MODEL").unwrap_or_else(|_| openai_models::GPT_4O.to_string());
 
         let organization = env::var("OPENAI_ORGANIZATION").ok();
 
@@ -67,7 +65,7 @@ impl OpenAIConfig {
             api_key,
             organization,
             default_model,
-            timeout: std::time::Duration::from_secs(60),
+            timeout: std::time::Duration::from_secs(120),
             retry_policy: RetryPolicy::default(),
         })
     }
@@ -96,13 +94,13 @@ impl ProviderConfig for OpenAIConfig {
 
     fn build_headers(&self) -> Result<HeaderMap, LLMError> {
         let mut headers = HeaderMap::new();
-        
+
         headers.insert(
             header::AUTHORIZATION,
             HeaderValue::from_str(&format!("Bearer {}", self.api_key))
                 .map_err(|e| LLMError::InvalidRequest(e.to_string()))?,
         );
-        
+
         headers.insert(
             header::CONTENT_TYPE,
             HeaderValue::from_static("application/json"),
@@ -111,8 +109,7 @@ impl ProviderConfig for OpenAIConfig {
         if let Some(org) = &self.organization {
             headers.insert(
                 "OpenAI-Organization",
-                HeaderValue::from_str(org)
-                    .map_err(|e| LLMError::InvalidRequest(e.to_string()))?,
+                HeaderValue::from_str(org).map_err(|e| LLMError::InvalidRequest(e.to_string()))?,
             );
         }
 
@@ -131,10 +128,6 @@ pub struct OpenAIProvider {
 impl OpenAIProvider {
     /// Create new OpenAI provider
     pub fn new(config: OpenAIConfig) -> Result<Self, LLMError> {
-        if config.api_key.is_empty() {
-            return Err(LLMError::Auth("API key is required".to_string()));
-        }
-
         let http_client = LLMHttpClient::new(config.timeout)?;
         let request_builder = OpenAIRequestBuilder::new(config.default_model.clone());
 
@@ -148,7 +141,10 @@ impl OpenAIProvider {
             max_output_tokens: 4_096,
         };
 
-        info!("OpenAI provider initialized with model: {}", config.default_model);
+        info!(
+            "OpenAI provider initialized with model: {}",
+            config.default_model
+        );
 
         Ok(Self {
             config,
@@ -160,8 +156,7 @@ impl OpenAIProvider {
 
     /// Create from environment
     pub fn from_env() -> Result<Self, LLMError> {
-        let config = OpenAIConfig::from_env()
-            .map_err(|e| LLMError::InvalidRequest(e))?;
+        let config = OpenAIConfig::from_env().map_err(|e| LLMError::InvalidRequest(e))?;
         Self::new(config)
     }
 }
@@ -177,23 +172,36 @@ impl LLMProvider for OpenAIProvider {
     }
 
     async fn complete(&self, request: LLMRequest) -> LLMResult<LLMResponse> {
-        debug!("Sending completion request to OpenAI");
+        let start = std::time::Instant::now();
+        info!("[LLM-TRACE] OpenAIProvider::complete started, model={}, messages={}",
+            request.config.model, request.messages.len());
 
         let body = self.request_builder.build_body(request);
-        let response = self.http_client.execute_with_retry(
-            &self.config,
-            "/chat/completions",
-            body
-        ).await?;
-        
+        let body_size = body.to_string().len();
+        info!("[LLM-TRACE] Request body built, size={} bytes", body_size);
+
+        let response = self
+            .http_client
+            .execute_with_retry(&self.config, "/chat/completions", body)
+            .await?;
+
+        info!("[LLM-TRACE] HTTP response received after {:?}, status={}",
+            start.elapsed(), response.status());
+
         let llm_response: LLMResponse = response
             .json()
             .await
             .map_err(|e| LLMError::Serialization(e.to_string()))?;
 
+        info!("[LLM-TRACE] OpenAIProvider::complete finished in {:?}", start.elapsed());
+
         debug!(
             "Received response from OpenAI: {} tokens used",
-            llm_response.usage.as_ref().map(|u| u.total_tokens).unwrap_or(0)
+            llm_response
+                .usage
+                .as_ref()
+                .map(|u| u.total_tokens)
+                .unwrap_or(0)
         );
 
         Ok(llm_response)
@@ -208,12 +216,11 @@ impl LLMProvider for OpenAIProvider {
         request.config.stream = Some(true);
 
         let body = self.request_builder.build_body(request);
-        let response = self.http_client.stream_with_retry(
-            &self.config,
-            "/chat/completions",
-            body
-        ).await?;
-        
+        let response = self
+            .http_client
+            .stream_with_retry(&self.config, "/chat/completions", body)
+            .await?;
+
         let mut stream = response.bytes_stream();
 
         tokio::spawn(async move {
@@ -221,11 +228,11 @@ impl LLMProvider for OpenAIProvider {
                 match chunk_result {
                     Ok(bytes) => {
                         let text = String::from_utf8_lossy(&bytes);
-                        
+
                         for line in text.lines() {
                             if line.starts_with("data: ") {
                                 let data = &line[6..];
-                                
+
                                 if data == "[DONE]" {
                                     break;
                                 }
@@ -255,7 +262,8 @@ impl LLMProvider for OpenAIProvider {
     }
 
     async fn health_check(&self) -> LLMResult<()> {
-        let _response = self.http_client
+        let _response = self
+            .http_client
             .get_with_retry(&self.config, "/models")
             .await?;
         Ok(())

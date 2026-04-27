@@ -20,7 +20,8 @@ fn bench_wallet(c: &mut Criterion) {
     });
 
     group.bench_function("hd_wallet_from_mnemonic", |b| {
-        let mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+        let mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon \
+                        abandon abandon about";
         b.iter(|| {
             let wallet = HDWallet::from_mnemonic(mnemonic).unwrap();
             black_box(wallet.derive_account(0, None).unwrap());
@@ -28,7 +29,8 @@ fn bench_wallet(c: &mut Criterion) {
     });
 
     group.bench_function("hd_wallet_derive", |b| {
-        let mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+        let mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon \
+                        abandon abandon about";
         let wallet = HDWallet::from_mnemonic(mnemonic).unwrap();
         let mut index = 0u32;
         b.iter(|| {

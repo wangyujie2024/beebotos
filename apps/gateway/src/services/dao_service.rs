@@ -5,17 +5,14 @@
 
 use std::sync::Arc;
 
-use beebotos_chain::{
-    compat::{Address, ChainClientTrait, TxHash, U256, ProposalInfo},
-    dao::{ProposalId, ProposalType, VoteType},
-    dao::proposal::ProposalAction,
-};
+use beebotos_chain::compat::{Address, ChainClientTrait, ProposalInfo, TxHash, U256};
+use beebotos_chain::dao::proposal::ProposalAction;
+use beebotos_chain::dao::{ProposalId, ProposalType, VoteType};
 use tracing::{info, instrument};
 
+use super::wallet_service::WalletService;
 use crate::config::BlockchainConfig;
 use crate::error::AppError;
-
-use super::wallet_service::WalletService;
 
 /// DAO service configuration
 #[derive(Debug, Clone)]
@@ -34,7 +31,8 @@ impl From<&BlockchainConfig> for DaoServiceConfig {
             addr.as_ref().and_then(|a| {
                 let a = a.trim();
                 if a.len() >= 42 && a.starts_with("0x") {
-                    hex::decode(&a[2..]).ok()
+                    hex::decode(&a[2..])
+                        .ok()
                         .filter(|b| b.len() == 20)
                         .map(|b| Address::from_slice(&b))
                 } else {
@@ -140,14 +138,21 @@ impl DaoService {
         &self,
         request: CreateProposalRequest,
     ) -> Result<ProposalId, AppError> {
-        let _client = self.client.as_ref()
+        let _client = self
+            .client
+            .as_ref()
             .ok_or_else(|| AppError::Configuration("Chain client not initialized".into()))?;
-        
-        let dao_contract = self.config.dao_contract.as_ref()
+
+        let dao_contract = self
+            .config
+            .dao_contract
+            .as_ref()
             .ok_or_else(|| AppError::Configuration("DAO contract not configured".into()))?;
 
         if !self.wallet_service.has_wallet() {
-            return Err(AppError::Configuration("Wallet not initialized for signing".into()));
+            return Err(AppError::Configuration(
+                "Wallet not initialized for signing".into(),
+            ));
         }
 
         info!(
@@ -160,7 +165,8 @@ impl DaoService {
         let tx_data = build_create_proposal_call(&request);
 
         // Send transaction via wallet service
-        let tx_hash = self.wallet_service
+        let tx_hash = self
+            .wallet_service
             .send_contract_transaction(
                 dao_contract.clone(),
                 tx_data,
@@ -169,9 +175,7 @@ impl DaoService {
             .await?;
 
         // Wait for receipt to get proposal ID from event
-        let receipt = self.wallet_service
-            .wait_for_receipt(tx_hash, 120)
-            .await?;
+        let receipt = self.wallet_service.wait_for_receipt(tx_hash, 120).await?;
 
         if !receipt.success {
             return Err(AppError::Chain("Proposal creation failed".into()));
@@ -181,8 +185,14 @@ impl DaoService {
         // In real implementation, parse event logs
         // ProposalId is u64, generate from tx_hash bytes
         let proposal_id = ProposalId::from_le_bytes([
-            receipt.tx_hash[0], receipt.tx_hash[1], receipt.tx_hash[2], receipt.tx_hash[3],
-            receipt.tx_hash[4], receipt.tx_hash[5], receipt.tx_hash[6], receipt.tx_hash[7],
+            receipt.tx_hash[0],
+            receipt.tx_hash[1],
+            receipt.tx_hash[2],
+            receipt.tx_hash[3],
+            receipt.tx_hash[4],
+            receipt.tx_hash[5],
+            receipt.tx_hash[6],
+            receipt.tx_hash[7],
         ]);
 
         info!(proposal_id = %proposal_id, "Proposal created");
@@ -193,14 +203,21 @@ impl DaoService {
     /// Cast a vote on a proposal
     #[instrument(skip(self, request), fields(proposal_id = %request.proposal_id))]
     pub async fn cast_vote(&self, request: CastVoteRequest) -> Result<TxHash, AppError> {
-        let _client = self.client.as_ref()
+        let _client = self
+            .client
+            .as_ref()
             .ok_or_else(|| AppError::Configuration("Chain client not initialized".into()))?;
-        
-        let dao_contract = self.config.dao_contract.as_ref()
+
+        let dao_contract = self
+            .config
+            .dao_contract
+            .as_ref()
             .ok_or_else(|| AppError::Configuration("DAO contract not configured".into()))?;
 
         if !self.wallet_service.has_wallet() {
-            return Err(AppError::Configuration("Wallet not initialized for signing".into()));
+            return Err(AppError::Configuration(
+                "Wallet not initialized for signing".into(),
+            ));
         }
 
         info!(
@@ -213,7 +230,8 @@ impl DaoService {
         let tx_data = build_cast_vote_call(&request);
 
         // Send transaction
-        let tx_hash = self.wallet_service
+        let tx_hash = self
+            .wallet_service
             .send_contract_transaction(
                 dao_contract.clone(),
                 tx_data,
@@ -231,17 +249,22 @@ impl DaoService {
 
     /// Get proposal information
     pub async fn get_proposal(&self, proposal_id: ProposalId) -> Result<ProposalInfo, AppError> {
-        let client = self.client.as_ref()
+        let client = self
+            .client
+            .as_ref()
             .ok_or_else(|| AppError::Configuration("Chain client not initialized".into()))?;
-        
-        let dao_contract = self.config.dao_contract.as_ref()
+
+        let dao_contract = self
+            .config
+            .dao_contract
+            .as_ref()
             .ok_or_else(|| AppError::Configuration("DAO contract not configured".into()))?;
 
         // Call contract to get proposal info
-        let proposal = client.get_proposal(
-            dao_contract.clone(),
-            proposal_id,
-        ).await.map_err(|e| AppError::Chain(format!("Failed to get proposal: {}", e)))?;
+        let proposal = client
+            .get_proposal(dao_contract.clone(), proposal_id)
+            .await
+            .map_err(|e| AppError::Chain(format!("Failed to get proposal: {}", e)))?;
 
         match proposal {
             Some(info) => Ok(info),
@@ -256,10 +279,15 @@ impl DaoService {
         limit: usize,
         offset: usize,
     ) -> Result<Vec<ProposalInfo>, AppError> {
-        let _client = self.client.as_ref()
+        let _client = self
+            .client
+            .as_ref()
             .ok_or_else(|| AppError::Configuration("Chain client not initialized".into()))?;
-        
-        let _dao_contract = self.config.dao_contract.as_ref()
+
+        let _dao_contract = self
+            .config
+            .dao_contract
+            .as_ref()
             .ok_or_else(|| AppError::Configuration("DAO contract not configured".into()))?;
 
         // Get proposal count
@@ -287,24 +315,35 @@ impl DaoService {
 
     /// Get total proposal count
     pub async fn get_proposal_count(&self) -> Result<u64, AppError> {
-        let client = self.client.as_ref()
+        let client = self
+            .client
+            .as_ref()
             .ok_or_else(|| AppError::Configuration("Chain client not initialized".into()))?;
-        
-        let dao_contract = self.config.dao_contract.as_ref()
+
+        let dao_contract = self
+            .config
+            .dao_contract
+            .as_ref()
             .ok_or_else(|| AppError::Configuration("DAO contract not configured".into()))?;
 
-        client.get_proposal_count(dao_contract.clone())
+        client
+            .get_proposal_count(dao_contract.clone())
             .await
             .map_err(|e| AppError::Chain(format!("Failed to get proposal count: {}", e)))
     }
 
     /// Execute a passed proposal
     pub async fn execute_proposal(&self, proposal_id: ProposalId) -> Result<TxHash, AppError> {
-        let dao_contract = self.config.dao_contract.as_ref()
+        let dao_contract = self
+            .config
+            .dao_contract
+            .as_ref()
             .ok_or_else(|| AppError::Configuration("DAO contract not configured".into()))?;
 
         if !self.wallet_service.has_wallet() {
-            return Err(AppError::Configuration("Wallet not initialized for signing".into()));
+            return Err(AppError::Configuration(
+                "Wallet not initialized for signing".into(),
+            ));
         }
 
         info!(
@@ -316,7 +355,8 @@ impl DaoService {
         let tx_data = build_execute_proposal_call(proposal_id);
 
         // Send transaction
-        let tx_hash = self.wallet_service
+        let tx_hash = self
+            .wallet_service
             .send_contract_transaction(
                 dao_contract.clone(),
                 tx_data,
@@ -334,13 +374,19 @@ impl DaoService {
 
     /// Get voting power for an address
     pub async fn get_voting_power(&self, address: Address) -> Result<U256, AppError> {
-        let client = self.client.as_ref()
+        let client = self
+            .client
+            .as_ref()
             .ok_or_else(|| AppError::Configuration("Chain client not initialized".into()))?;
-        
-        let dao_contract = self.config.dao_contract.as_ref()
+
+        let dao_contract = self
+            .config
+            .dao_contract
+            .as_ref()
             .ok_or_else(|| AppError::Configuration("DAO contract not configured".into()))?;
 
-        client.get_voting_power(dao_contract.clone(), address)
+        client
+            .get_voting_power(dao_contract.clone(), address)
             .await
             .map_err(|e| AppError::Chain(format!("Failed to get voting power: {}", e)))
     }
@@ -395,7 +441,7 @@ mod tests {
         };
 
         let dao_config = DaoServiceConfig::from(&blockchain_config);
-        
+
         assert_eq!(dao_config.chain_id, 1);
         assert!(dao_config.dao_contract.is_some());
     }

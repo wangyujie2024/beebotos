@@ -1977,6 +1977,7 @@ dependencies = [
  "beebotos-agents",
  "beebotos-chain",
  "beebotos-core",
+ "beebotos-crypto",
  "beebotos-gateway-lib",
  "beebotos-kernel",
  "beebotos-message-bus",

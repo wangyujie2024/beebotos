@@ -5,18 +5,20 @@
 //! # Usage
 //!
 //! ```rust
-//! use beebotos_chain::metrics::{MetricsCollector, ContractMetrics};
 //! use std::time::Duration;
+//!
+//! use beebotos_chain::metrics::{ContractMetrics, MetricsCollector};
 //!
 //! let metrics = MetricsCollector::new();
 //! metrics.record_transaction("transfer", true, Some(Duration::from_secs(1)));
 //! ```
 
-use metrics::{counter, gauge, histogram, Counter, Gauge, Histogram};
-use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
+
+use metrics::{counter, gauge, histogram, Counter, Gauge, Histogram};
+use parking_lot::RwLock;
 
 /// Chain operation types
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

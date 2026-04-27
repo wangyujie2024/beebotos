@@ -1,7 +1,8 @@
 //! Notification state management
 
-use leptos::prelude::*;
 use std::collections::VecDeque;
+
+use leptos::prelude::*;
 
 /// Notification state
 #[derive(Clone, Debug)]

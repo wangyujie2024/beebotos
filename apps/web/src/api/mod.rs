@@ -9,42 +9,41 @@
 pub mod browser;
 pub mod client;
 pub mod gateway;
+pub mod llm_provider_service;
 pub mod services;
 pub mod webchat;
 
 // Re-export 浏览器 API
-pub use browser::{BrowserApiService, ClickRequest, EvaluateResponse, InputRequest, NavigationResponse};
-
-// Re-export WebChat API
-pub use webchat::{
-    EditMessageRequest, ExportResponse, SideQuestionResponse, SlashCommandRequest,
-    SlashCommandResponse, StreamingResponse, UploadAttachmentRequest, UploadAttachmentResponse,
-    WebchatApiService,
+pub use browser::{
+    BrowserApiService, ClickRequest, EvaluateResponse, InputRequest, NavigationResponse,
 };
-
-// Re-export Gateway API
-pub use gateway::{
-    AgentStatusInfo, ApiEndpoints, GatewayApiConfig, GatewayAuthConfig, GatewayService,
-    HealthResponse, StatusResponse,
-};
-
 // Re-export 通用客户端
 pub use client::{
     sanitize_for_log, ApiClient, ApiError, ApiResponse, ClientConfig, RequestBuilder,
     RequestInterceptor, ResponseInterceptor,
 };
-
+// Re-export Gateway API
+pub use gateway::{
+    AgentStatusInfo, ApiEndpoints, GatewayApiConfig, GatewayAuthConfig, GatewayService,
+    HealthResponse, StatusResponse,
+};
 // Re-export 服务
 pub use services::{
     AgentInfo, AgentLogEntry, AgentService, AgentStatus, ApiService, AssetInfo, AuthService,
     ChannelConfig, ChannelInfo, ChannelService, ChannelStatus, CreateAgentRequest,
     CreateInstanceRequest, CreateProposalRequest, DaoService, DaoSummary, ExecuteSkillResponse,
-    InstanceInfo, InstallSkillRequest, InstallSkillResponse, LoginResponse, LlmConfigService,
-    LlmGlobalConfig, LlmHealthResponse, LlmLatency, LlmMetricsResponse, LlmProviderConfig,
-    LlmProviderHealth, LlmSummary, LlmTokens, PaginatedResponse, ProposalInfo, ProposalStatus,
+    InstallSkillRequest, InstallSkillResponse, InstanceInfo, LlmConfigService, LlmGlobalConfig,
+    LlmHealthResponse, LlmLatency, LlmMetricsResponse, LlmProviderConfig, LlmProviderHealth,
+    LlmSummary, LlmTokens, LoginResponse, PaginatedResponse, ProposalInfo, ProposalStatus,
     QrStatusResponse, Settings, SettingsService, SkillCategory, SkillInfo, SkillService,
     TestConnectionResponse, Theme, TokenRefreshResponse, TransactionInfo, TransactionStatus,
     TransactionType, TreasuryInfo, TreasuryService, UpdateAgentRequest, UserInfo, WeChatQrResponse,
+};
+// Re-export WebChat API
+pub use webchat::{
+    EditMessageRequest, ExportResponse, SideQuestionResponse, SlashCommandRequest,
+    SlashCommandResponse, StreamingResponse, UploadAttachmentRequest, UploadAttachmentResponse,
+    WebchatApiService,
 };
 
 /// 创建默认 API 客户端

@@ -1,7 +1,8 @@
 //! Resource limit management
 
-use super::{ResourceLimits, ResourceType};
 use std::time::Duration;
+
+use super::{ResourceLimits, ResourceType};
 
 /// Resource limit manager
 #[derive(Debug, Clone)]

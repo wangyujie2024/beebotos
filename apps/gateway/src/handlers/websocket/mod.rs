@@ -15,7 +15,6 @@ use tracing::info;
 
 use crate::AppState;
 
-
 /// WebSocket upgrade handler using gateway-lib's WebSocketManager
 ///
 /// This handler authenticates the user and then delegates to the

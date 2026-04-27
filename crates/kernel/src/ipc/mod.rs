@@ -8,13 +8,14 @@ pub mod pipe;
 pub mod router;
 pub mod shared_memory;
 
+use std::sync::Arc;
+
 pub use channel::IpcChannel;
 pub use message::MessageQueue;
+use parking_lot::RwLock;
 pub use shared_memory::{SharedMemory, SharedMemoryManager, SharedMemoryStats};
 
 use crate::error::Result;
-use parking_lot::RwLock;
-use std::sync::Arc;
 
 /// Global shared memory manager
 static SHARED_MEMORY_MANAGER: std::sync::OnceLock<Arc<RwLock<SharedMemoryManager>>> =

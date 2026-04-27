@@ -1,15 +1,13 @@
 //! Monad Module
 //!
-//! Monad-specific implementations. Generic EVM components have been moved to `chains::common`.
-//! BeeBotOS contract bindings are in `contracts::bindings` and `contracts::events`.
+//! Monad-specific implementations. Generic EVM components have been moved to
+//! `chains::common`. BeeBotOS contract bindings are in `contracts::bindings`
+//! and `contracts::events`.
 
 pub mod client;
 pub mod types;
 
 // Re-export BeeBotOS contract bindings from contracts module (chain-agnostic)
-pub use crate::contracts::bindings as contracts;
-pub use crate::contracts::events as events_comprehensive;
-
 // Re-export comprehensive event types (BeeBotOS specific)
 pub use events_comprehensive::{
     BeeBotOSEvent, BeeBotOSEventFilter, BeeBotOSEventListener, BeeBotOSEventStream,
@@ -21,6 +19,7 @@ pub use crate::chains::common::{
     format_native_token, parse_native_token, ContractCall, ContractDeploy, ContractInstance,
     EventFilter, EvmConfig, EvmProvider, Mempool, TransactionBuilder,
 };
+pub use crate::contracts::{bindings as contracts, events as events_comprehensive};
 
 pub const MONAD_CHAIN_ID: u64 = 1_014_301;
 pub const MONAD_TESTNET_CHAIN_ID: u64 = 10_143;

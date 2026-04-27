@@ -1,8 +1,9 @@
 //! Configuration management for BeeBotOS
 
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
+
+use serde::{Deserialize, Serialize};
 
 /// Main configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -31,8 +32,8 @@ impl Config {
     /// Load configuration from file
     pub fn from_file<P: AsRef<Path>>(path: P) -> crate::Result<Self> {
         let content = std::fs::read_to_string(path)?;
-        let config: Self =
-            toml::from_str(&content).map_err(|e| crate::BeeBotOSError::configuration(e.to_string()))?;
+        let config: Self = toml::from_str(&content)
+            .map_err(|e| crate::BeeBotOSError::configuration(e.to_string()))?;
         Ok(config)
     }
 
@@ -332,21 +333,21 @@ impl Default for GatewayConfig {
 }
 
 /// Configuration Center
-/// 
+///
 /// Provides unified configuration management with:
 /// - Environment-based configuration loading
 /// - Configuration validation
 /// - Hot-reload support
 /// - Change notifications
-/// 
+///
 /// # Usage
-/// 
+///
 /// ```rust
 /// use beebotos_core::config::{Config, ConfigCenter, Environment};
-/// 
+///
 /// // Load with environment detection
 /// let config = ConfigCenter::load().unwrap();
-/// 
+///
 /// // Or load specific environment
 /// let config = ConfigCenter::load_env(Environment::Production).unwrap();
 /// ```
@@ -362,7 +363,7 @@ pub struct ConfigCenter {
 
 impl ConfigCenter {
     /// Load configuration from default locations
-    /// 
+    ///
     /// Tries (in order):
     /// 1. Environment-specific config file (config/{env}.toml)
     /// 2. Local config file (config/local.toml)
@@ -394,7 +395,7 @@ impl ConfigCenter {
     /// Load configuration from file
     pub fn load_from_file<P: AsRef<Path>>(path: P) -> crate::Result<Self> {
         let config = Config::from_file(&path)?;
-        
+
         // Validate after loading
         config.validate()?;
 
@@ -430,12 +431,12 @@ impl ConfigCenter {
     }
 
     /// Reload configuration from source
-    /// 
+    ///
     /// Returns true if configuration changed, false otherwise
     pub fn reload(&mut self) -> crate::Result<bool> {
         let Some(ref path) = self.source_path else {
             return Err(crate::BeeBotOSError::configuration(
-                "No source path configured for reload".to_string()
+                "No source path configured for reload".to_string(),
             ));
         };
 
@@ -444,7 +445,7 @@ impl ConfigCenter {
 
         // Check if configuration actually changed
         let changed = self.has_config_changed(&new_config);
-        
+
         if changed {
             self.config = new_config;
             self.last_loaded = chrono::Utc::now();

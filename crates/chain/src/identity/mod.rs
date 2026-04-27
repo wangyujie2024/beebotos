@@ -1,8 +1,9 @@
 //! Identity Module
 
+use serde::{Deserialize, Serialize};
+
 use crate::compat::Address;
 use crate::Result;
-use serde::{Deserialize, Serialize};
 
 /// DID Document
 #[derive(Debug, Clone, Serialize, Deserialize)]

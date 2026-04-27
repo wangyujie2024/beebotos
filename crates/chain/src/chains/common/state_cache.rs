@@ -1,18 +1,20 @@
 //! Chain State Cache Module
 //!
-//! Provides caching for frequently accessed on-chain data like balances and nonces.
-//! Reduces RPC calls and improves performance for wallet operations.
+//! Provides caching for frequently accessed on-chain data like balances and
+//! nonces. Reduces RPC calls and improves performance for wallet operations.
+
+use std::num::NonZeroUsize;
+use std::sync::Arc;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+
+use lru::LruCache;
+use parking_lot::RwLock;
+use serde::{Deserialize, Serialize};
+use tracing::{debug, trace};
 
 use crate::chains::common::EvmError;
 use crate::compat::{Address, U256};
 use crate::constants::DEFAULT_CACHE_TTL_SECS;
-use lru::LruCache;
-use parking_lot::RwLock;
-use serde::{Deserialize, Serialize};
-use std::num::NonZeroUsize;
-use std::sync::Arc;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use tracing::{debug, trace};
 
 /// Chain state cache for balances and nonces
 #[derive(Clone)]
@@ -650,7 +652,8 @@ mod tests {
         // Should be available immediately
         assert!(cache.get_balance(&address).is_some());
 
-        // Wait for expiration (sleep 2.5 seconds to ensure we cross 2 second boundaries)
+        // Wait for expiration (sleep 2.5 seconds to ensure we cross 2 second
+        // boundaries)
         std::thread::sleep(Duration::from_millis(2500));
 
         // Should be expired

@@ -122,13 +122,13 @@ pub async fn check_chain(config: &crate::config::AppConfig) -> ComponentStatus {
 #[allow(dead_code)]
 pub async fn check_system(state: &Arc<AppState>) -> SystemHealth {
     use chrono::Utc;
-    
+
     let database = check_database(&state.db).await;
     let kernel = check_kernel(&state.kernel).await;
     let chain = check_chain(&state.config).await;
-    
+
     let is_healthy = database.status == "ok" && kernel.status == "ok" && chain.status == "ok";
-    
+
     SystemHealth {
         database,
         kernel,
@@ -136,7 +136,11 @@ pub async fn check_system(state: &Arc<AppState>) -> SystemHealth {
         redis: None,
         llm_service: None,
         webhook_handler: None,
-        overall: if is_healthy { "healthy".to_string() } else { "unhealthy".to_string() },
+        overall: if is_healthy {
+            "healthy".to_string()
+        } else {
+            "unhealthy".to_string()
+        },
         timestamp: Utc::now().to_rfc3339(),
     }
 }
@@ -158,12 +162,24 @@ pub struct SystemHealth {
 impl SystemHealth {
     /// Check if all components are healthy
     pub fn is_healthy(&self) -> bool {
-        self.database.status == "ok" 
-            && self.kernel.status == "ok" 
+        self.database.status == "ok"
+            && self.kernel.status == "ok"
             && self.chain.status == "ok"
-            && self.redis.as_ref().map(|r| r.status == "ok").unwrap_or(true)
-            && self.llm_service.as_ref().map(|s| s.status == "ok").unwrap_or(true)
-            && self.webhook_handler.as_ref().map(|w| w.status == "ok").unwrap_or(true)
+            && self
+                .redis
+                .as_ref()
+                .map(|r| r.status == "ok")
+                .unwrap_or(true)
+            && self
+                .llm_service
+                .as_ref()
+                .map(|s| s.status == "ok")
+                .unwrap_or(true)
+            && self
+                .webhook_handler
+                .as_ref()
+                .map(|w| w.status == "ok")
+                .unwrap_or(true)
     }
 
     /// Get overall status
@@ -187,11 +203,11 @@ pub async fn check_llm_service(config: &crate::config::AppConfig) -> ComponentSt
 
     // Check if API key is available (simplified check)
     let api_key_env = format!("{}_API_KEY", config.models.default_provider.to_uppercase());
-    if std::env::var(&api_key_env).is_err() && 
-       std::env::var("OPENAI_API_KEY").is_err() {
-        return ComponentStatus::error(
-            format!("LLM API key not found (checked {} and OPENAI_API_KEY)", api_key_env)
-        );
+    if std::env::var(&api_key_env).is_err() && std::env::var("OPENAI_API_KEY").is_err() {
+        return ComponentStatus::error(format!(
+            "LLM API key not found (checked {} and OPENAI_API_KEY)",
+            api_key_env
+        ));
     }
 
     let latency = start.elapsed().as_millis() as u64;
@@ -210,7 +226,7 @@ pub async fn check_webhook_handler(
 
     let state = webhook_state.read().await;
     let paths = state.manager.list_registered_paths().await;
-    
+
     let latency = start.elapsed().as_millis() as u64;
     ComponentStatus {
         status: "ok".to_string(),
@@ -226,11 +242,11 @@ pub async fn check_system_full(state: &Arc<crate::AppState>) -> SystemHealth {
     let database = check_database(&state.db).await;
     let kernel = check_kernel(&state.kernel).await;
     let chain = check_chain(&state.config).await;
-    
+
     // Optional checks
     let llm_service = Some(check_llm_service(&state.config).await);
     let webhook_handler = Some(check_webhook_handler(&state.webhook_state).await);
-    
+
     let health = SystemHealth {
         database,
         kernel,
@@ -241,7 +257,7 @@ pub async fn check_system_full(state: &Arc<crate::AppState>) -> SystemHealth {
         overall: "unknown".to_string(),
         timestamp: Utc::now().to_rfc3339(),
     };
-    
+
     let overall = health.overall_status().to_string();
     SystemHealth { overall, ..health }
 }

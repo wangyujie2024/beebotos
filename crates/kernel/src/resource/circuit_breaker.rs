@@ -7,9 +7,10 @@
 //! - Open: Failure threshold reached, requests fail fast
 //! - HalfOpen: Testing if service has recovered
 
-use parking_lot::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
+
+use parking_lot::Mutex;
 
 /// Circuit breaker states
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

@@ -2,11 +2,13 @@
 //!
 //! LLM provider configuration and failover management
 
-use crate::progress::TaskProgress;
+use std::io::{self, Write};
+
 use anyhow::Result;
 use clap::{Parser, Subcommand, ValueEnum};
 use futures::StreamExt;
-use std::io::{self, Write};
+
+use crate::progress::TaskProgress;
 
 #[derive(Parser)]
 pub struct ModelArgs {
@@ -348,7 +350,11 @@ pub async fn execute(args: ModelArgs) -> Result<()> {
     let client = crate::client::ApiClient::new()?;
 
     match args.command {
-        ModelCommand::List { provider, verbose, format } => {
+        ModelCommand::List {
+            provider,
+            verbose,
+            format,
+        } => {
             let progress = TaskProgress::new("Fetching models");
             let models = client.list_models(provider.as_deref()).await?;
             progress.finish_success(Some(&format!("{} models", models.len())));
@@ -362,41 +368,52 @@ pub async fn execute(args: ModelArgs) -> Result<()> {
                 }
                 OutputFormat::Table => {
                     if verbose {
-                        println!("{:<20} {:<15} {:<25} {:<12} {:<10}",
-                            "ID", "Provider", "Name", "Context", "Default");
+                        println!(
+                            "{:<20} {:<15} {:<25} {:<12} {:<10}",
+                            "ID", "Provider", "Name", "Context", "Default"
+                        );
                         println!("{}", "-".repeat(100));
                         for m in models {
                             let default_icon = if m.is_default { "✓" } else { "" };
-                            println!("{:<20} {:<15} {:<25} {:<12} {:<10}",
-                                m.id, m.provider, m.name, m.context_length, default_icon);
+                            println!(
+                                "{:<20} {:<15} {:<25} {:<12} {:<10}",
+                                m.id, m.provider, m.name, m.context_length, default_icon
+                            );
                         }
                     } else {
-                        println!("{:<20} {:<15} {:<25} {:<10}",
-                            "ID", "Provider", "Name", "Default");
+                        println!(
+                            "{:<20} {:<15} {:<25} {:<10}",
+                            "ID", "Provider", "Name", "Default"
+                        );
                         println!("{}", "-".repeat(80));
                         for m in models {
                             let default_icon = if m.is_default { "✓" } else { "" };
-                            println!("{:<20} {:<15} {:<25} {:<10}",
-                                m.id, m.provider, m.name, default_icon);
+                            println!(
+                                "{:<20} {:<15} {:<25} {:<10}",
+                                m.id, m.provider, m.name, default_icon
+                            );
                         }
                     }
                 }
             }
         }
 
-        ModelCommand::Status { id, provider_details } => {
+        ModelCommand::Status {
+            id,
+            provider_details,
+        } => {
             let progress = TaskProgress::new("Checking model status");
-            
+
             if let Some(model_id) = id {
                 let status = client.get_model_status(&model_id).await?;
                 progress.finish_success(None);
-                
+
                 println!("📊 Model: {} ({})", status.name, status.id);
                 println!("Status: {}", status.status);
                 println!("Availability: {}%", status.availability_percentage);
                 println!("Average latency: {}ms", status.avg_latency_ms);
                 println!("Rate limit: {}/min", status.rate_limit_per_minute);
-                
+
                 if provider_details {
                     println!("\nProvider Details:");
                     println!("  Provider: {}", status.provider);
@@ -406,9 +423,11 @@ pub async fn execute(args: ModelArgs) -> Result<()> {
             } else {
                 let statuses = client.get_all_model_status().await?;
                 progress.finish_success(Some(&format!("{} models checked", statuses.len())));
-                
-                println!("{:<20} {:<12} {:<10} {:<15}",
-                    "Model", "Status", "Latency", "Availability");
+
+                println!(
+                    "{:<20} {:<12} {:<10} {:<15}",
+                    "Model", "Status", "Latency", "Availability"
+                );
                 println!("{}", "-".repeat(70));
                 for s in statuses {
                     let status_icon = match s.status.as_str() {
@@ -417,16 +436,23 @@ pub async fn execute(args: ModelArgs) -> Result<()> {
                         "unavailable" => "🔴",
                         _ => "⚪",
                     };
-                    println!("{:<20} {} {:<10} {:<10}ms {:<15}",
-                        s.id, status_icon, s.status, s.avg_latency_ms, 
-                        format!("{}%", s.availability_percentage));
+                    println!(
+                        "{:<20} {} {:<10} {:<10}ms {:<15}",
+                        s.id,
+                        status_icon,
+                        s.status,
+                        s.avg_latency_ms,
+                        format!("{}%", s.availability_percentage)
+                    );
                 }
             }
         }
 
         ModelCommand::Set { id, for_task } => {
             let progress = TaskProgress::new("Setting default model");
-            client.set_default_model(&id, &format!("{:?}", for_task).to_lowercase()).await?;
+            client
+                .set_default_model(&id, &format!("{:?}", for_task).to_lowercase())
+                .await?;
             progress.finish_success(None);
             println!("✅ Set '{}' as default for {:?} tasks", id, for_task);
         }
@@ -438,7 +464,11 @@ pub async fn execute(args: ModelArgs) -> Result<()> {
             println!("✅ Set '{}' as default image model", id);
         }
 
-        ModelCommand::Scan { source, ollama_url, capability } => {
+        ModelCommand::Scan {
+            source,
+            ollama_url,
+            capability,
+        } => {
             let progress = TaskProgress::new("Scanning for models");
             let options = ScanOptions {
                 source: format!("{:?}", source).to_lowercase(),
@@ -468,7 +498,7 @@ pub async fn execute(args: ModelArgs) -> Result<()> {
             println!("Provider: {}", info.provider);
             println!("Context length: {} tokens", info.context_length);
             println!("Training cutoff: {}", info.training_cutoff);
-            
+
             if !info.capabilities.is_empty() {
                 println!("\nCapabilities:");
                 for cap in info.capabilities {
@@ -490,7 +520,7 @@ pub async fn execute(args: ModelArgs) -> Result<()> {
 
             println!("📊 Model Comparison");
             println!("{}", "=".repeat(80));
-            
+
             // Print comparison table
             for (i, result) in comparison.iter().enumerate() {
                 println!("\n{}. {}", i + 1, result.model_id);
@@ -501,9 +531,14 @@ pub async fn execute(args: ModelArgs) -> Result<()> {
             }
         }
 
-        ModelCommand::Test { model, prompt, max_tokens, runs } => {
+        ModelCommand::Test {
+            model,
+            prompt,
+            max_tokens,
+            runs,
+        } => {
             let progress = TaskProgress::new("Testing model");
-            
+
             let mut total_latency = 0u64;
             let mut total_tokens = 0u32;
 
@@ -513,7 +548,9 @@ pub async fn execute(args: ModelArgs) -> Result<()> {
                     io::stdout().flush()?;
                 }
 
-                let result = client.test_model(model.as_deref(), &prompt, max_tokens).await?;
+                let result = client
+                    .test_model(model.as_deref(), &prompt, max_tokens)
+                    .await?;
                 total_latency += result.latency_ms;
                 total_tokens += result.tokens_generated;
 
@@ -547,7 +584,7 @@ pub async fn execute(args: ModelArgs) -> Result<()> {
             ModelAuthCommand::Login { provider, browser } => {
                 let progress = TaskProgress::new(format!("Authenticating with {}", provider));
                 let auth_url = client.get_provider_auth_url(&provider).await?;
-                
+
                 if browser {
                     open::that(&auth_url)?;
                     println!("Opening browser for authentication...");
@@ -555,7 +592,7 @@ pub async fn execute(args: ModelArgs) -> Result<()> {
                     println!("Please open this URL to authenticate:");
                     println!("  {}", auth_url);
                 }
-                
+
                 println!("\nWaiting for authentication...");
                 client.wait_for_provider_auth(&provider).await?;
                 progress.finish_success(None);
@@ -573,12 +610,17 @@ pub async fn execute(args: ModelArgs) -> Result<()> {
                 let auths = client.list_provider_auths().await?;
                 progress.finish_success(Some(&format!("{} providers", auths.len())));
 
-                println!("{:<20} {:<15} {:<20}", "Provider", "Status", "Last Verified");
+                println!(
+                    "{:<20} {:<15} {:<20}",
+                    "Provider", "Status", "Last Verified"
+                );
                 println!("{}", "-".repeat(60));
                 for auth in auths {
                     let status_icon = if auth.valid { "✓" } else { "✗" };
-                    println!("{:<20} {} {:<14} {:<20}",
-                        auth.provider, status_icon, auth.status, auth.last_verified);
+                    println!(
+                        "{:<20} {} {:<14} {:<20}",
+                        auth.provider, status_icon, auth.status, auth.last_verified
+                    );
                 }
             }
             ModelAuthCommand::Remove { provider } => {
@@ -591,7 +633,7 @@ pub async fn execute(args: ModelArgs) -> Result<()> {
                 let progress = TaskProgress::new(format!("Testing {}", provider));
                 let result = client.test_provider_auth(&provider).await?;
                 progress.finish_success(None);
-                
+
                 if result.valid {
                     println!("✅ {} authentication is valid", provider);
                     println!("   Rate limit: {}/min", result.rate_limit);
@@ -659,29 +701,47 @@ pub async fn execute(args: ModelArgs) -> Result<()> {
 
         ModelCommand::Fallbacks(cmd) => match cmd {
             ModelFallbackCommand::List { for_task } => {
-                let chain = client.get_fallback_chain(&format!("{:?}", for_task).to_lowercase()).await?;
+                let chain = client
+                    .get_fallback_chain(&format!("{:?}", for_task).to_lowercase())
+                    .await?;
                 println!("Fallback chain for {:?}:", for_task);
                 for (i, model) in chain.iter().enumerate() {
                     println!("  {}. {}", i + 1, model);
                 }
             }
-            ModelFallbackCommand::Add { model, position, for_task } => {
-                client.add_to_fallback_chain(&model, position, &format!("{:?}", for_task).to_lowercase()).await?;
+            ModelFallbackCommand::Add {
+                model,
+                position,
+                for_task,
+            } => {
+                client
+                    .add_to_fallback_chain(
+                        &model,
+                        position,
+                        &format!("{:?}", for_task).to_lowercase(),
+                    )
+                    .await?;
                 println!("✅ '{}' added to fallback chain", model);
             }
             ModelFallbackCommand::Remove { model, for_task } => {
-                client.remove_from_fallback_chain(&model, &format!("{:?}", for_task).to_lowercase()).await?;
+                client
+                    .remove_from_fallback_chain(&model, &format!("{:?}", for_task).to_lowercase())
+                    .await?;
                 println!("✅ '{}' removed from fallback chain", model);
             }
             ModelFallbackCommand::Clear { for_task } => {
-                client.clear_fallback_chain(&format!("{:?}", for_task).to_lowercase()).await?;
+                client
+                    .clear_fallback_chain(&format!("{:?}", for_task).to_lowercase())
+                    .await?;
                 println!("✅ Fallback chain cleared");
             }
             ModelFallbackCommand::Test { for_task } => {
                 let progress = TaskProgress::new("Testing fallback chain");
-                let result = client.test_fallback_chain(&format!("{:?}", for_task).to_lowercase()).await?;
+                let result = client
+                    .test_fallback_chain(&format!("{:?}", for_task).to_lowercase())
+                    .await?;
                 progress.finish_success(None);
-                
+
                 println!("Fallback chain test results:");
                 for r in result {
                     let icon = if r.available { "✓" } else { "✗" };
@@ -690,13 +750,21 @@ pub async fn execute(args: ModelArgs) -> Result<()> {
             }
         },
 
-        ModelCommand::Chat { model, system, file, stream } => {
+        ModelCommand::Chat {
+            model,
+            system,
+            file,
+            stream,
+        } => {
             println!("🤖 Interactive Chat (type 'exit' or 'quit' to end)\n");
-            
+
             let mut messages = vec![];
-            
+
             if let Some(sys) = system {
-                messages.push(ChatMessage { role: "system".to_string(), content: sys });
+                messages.push(ChatMessage {
+                    role: "system".to_string(),
+                    content: sys,
+                });
             }
 
             // Load files into context
@@ -729,15 +797,18 @@ pub async fn execute(args: ModelArgs) -> Result<()> {
                 }
 
                 rl.add_history_entry(input)?;
-                messages.push(ChatMessage { role: "user".to_string(), content: input.to_string() });
+                messages.push(ChatMessage {
+                    role: "user".to_string(),
+                    content: input.to_string(),
+                });
 
                 if stream {
                     print!("🤖 ");
                     io::stdout().flush()?;
-                    
+
                     let mut response_text = String::new();
                     let mut stream = client.chat_stream(model.as_deref(), &messages).await?;
-                    
+
                     while let Some(chunk) = stream.next().await {
                         match chunk {
                             Ok(text) => {
@@ -752,7 +823,10 @@ pub async fn execute(args: ModelArgs) -> Result<()> {
                         }
                     }
                     println!();
-                    messages.push(ChatMessage { role: "assistant".to_string(), content: response_text });
+                    messages.push(ChatMessage {
+                        role: "assistant".to_string(),
+                        content: response_text,
+                    });
                 } else {
                     let response = client.chat(model.as_deref(), &messages).await?;
                     println!("🤖 {}\n", response.content);
@@ -761,7 +835,14 @@ pub async fn execute(args: ModelArgs) -> Result<()> {
             }
         }
 
-        ModelCommand::Complete { prompt, model, stream, temperature, max_tokens, output } => {
+        ModelCommand::Complete {
+            prompt,
+            model,
+            stream,
+            temperature,
+            max_tokens,
+            output,
+        } => {
             let req = CompletionRequest {
                 prompt,
                 model_id: model,
@@ -772,7 +853,7 @@ pub async fn execute(args: ModelArgs) -> Result<()> {
             if stream {
                 let mut stream = client.complete_stream(&req).await?;
                 let mut full_response = String::new();
-                
+
                 while let Some(chunk) = stream.next().await {
                     match chunk {
                         Ok(text) => {
@@ -805,13 +886,19 @@ pub async fn execute(args: ModelArgs) -> Result<()> {
                 }
 
                 if response.tokens_generated > 0 {
-                    println!("\n📊 {} tokens generated in {}ms", 
-                        response.tokens_generated, response.latency_ms);
+                    println!(
+                        "\n📊 {} tokens generated in {}ms",
+                        response.tokens_generated, response.latency_ms
+                    );
                 }
             }
         }
 
-        ModelCommand::Embed { text, model, format } => {
+        ModelCommand::Embed {
+            text,
+            model,
+            format,
+        } => {
             let progress = TaskProgress::new("Generating embeddings");
             let embedding = client.generate_embeddings(model.as_deref(), &text).await?;
             progress.finish_success(Some(&format!("{} dimensions", embedding.dimensions)));
@@ -821,7 +908,9 @@ pub async fn execute(args: ModelArgs) -> Result<()> {
                     println!("{}", serde_json::to_string_pretty(&embedding.vector)?);
                 }
                 EmbedFormat::Csv => {
-                    let csv = embedding.vector.iter()
+                    let csv = embedding
+                        .vector
+                        .iter()
                         .map(|v| v.to_string())
                         .collect::<Vec<_>>()
                         .join(",");
@@ -830,7 +919,9 @@ pub async fn execute(args: ModelArgs) -> Result<()> {
                 EmbedFormat::Binary => {
                     // Output raw binary
                     use std::io::Write;
-                    let bytes: Vec<u8> = embedding.vector.iter()
+                    let bytes: Vec<u8> = embedding
+                        .vector
+                        .iter()
                         .flat_map(|&f| f.to_le_bytes().to_vec())
                         .collect();
                     io::stdout().write_all(&bytes)?;
@@ -995,8 +1086,17 @@ trait ModelClient {
     async fn set_default_image_model(&self, id: &str) -> Result<()>;
     async fn scan_models(&self, options: &ScanOptions) -> Result<Vec<ScannedModel>>;
     async fn get_model_info(&self, id: &str) -> Result<ModelInfo>;
-    async fn compare_models(&self, models: &[String], dimensions: &[CompareDimension]) -> Result<Vec<ComparisonResult>>;
-    async fn test_model(&self, model: Option<&str>, prompt: &str, max_tokens: u32) -> Result<TestResult>;
+    async fn compare_models(
+        &self,
+        models: &[String],
+        dimensions: &[CompareDimension],
+    ) -> Result<Vec<ComparisonResult>>;
+    async fn test_model(
+        &self,
+        model: Option<&str>,
+        prompt: &str,
+        max_tokens: u32,
+    ) -> Result<TestResult>;
     async fn add_provider_credentials(&self, provider: &str, key: &str) -> Result<()>;
     async fn get_provider_auth_url(&self, provider: &str) -> Result<String>;
     async fn wait_for_provider_auth(&self, provider: &str) -> Result<()>;
@@ -1014,14 +1114,26 @@ trait ModelClient {
     async fn remove_model_alias(&self, name: &str) -> Result<()>;
     async fn get_model_alias(&self, name: &str) -> Result<ModelAlias>;
     async fn get_fallback_chain(&self, task_type: &str) -> Result<Vec<String>>;
-    async fn add_to_fallback_chain(&self, model: &str, position: Option<usize>, task_type: &str) -> Result<()>;
+    async fn add_to_fallback_chain(
+        &self,
+        model: &str,
+        position: Option<usize>,
+        task_type: &str,
+    ) -> Result<()>;
     async fn remove_from_fallback_chain(&self, model: &str, task_type: &str) -> Result<()>;
     async fn clear_fallback_chain(&self, task_type: &str) -> Result<()>;
     async fn test_fallback_chain(&self, task_type: &str) -> Result<Vec<FallbackTestResult>>;
     async fn chat(&self, model: Option<&str>, messages: &[ChatMessage]) -> Result<ChatMessage>;
-    async fn chat_stream(&self, model: Option<&str>, messages: &[ChatMessage]) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>>;
+    async fn chat_stream(
+        &self,
+        model: Option<&str>,
+        messages: &[ChatMessage],
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>>;
     async fn complete(&self, request: &CompletionRequest) -> Result<CompletionResponse>;
-    async fn complete_stream(&self, request: &CompletionRequest) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>>;
+    async fn complete_stream(
+        &self,
+        request: &CompletionRequest,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>>;
     async fn generate_embeddings(&self, model: Option<&str>, text: &str) -> Result<Embedding>;
     async fn update_model_list(&self) -> Result<ModelUpdateResult>;
 }
@@ -1051,10 +1163,19 @@ impl ModelClient for crate::client::ApiClient {
     async fn get_model_info(&self, _id: &str) -> Result<ModelInfo> {
         anyhow::bail!("Not implemented")
     }
-    async fn compare_models(&self, _models: &[String], _dimensions: &[CompareDimension]) -> Result<Vec<ComparisonResult>> {
+    async fn compare_models(
+        &self,
+        _models: &[String],
+        _dimensions: &[CompareDimension],
+    ) -> Result<Vec<ComparisonResult>> {
         Ok(vec![])
     }
-    async fn test_model(&self, _model: Option<&str>, _prompt: &str, _max_tokens: u32) -> Result<TestResult> {
+    async fn test_model(
+        &self,
+        _model: Option<&str>,
+        _prompt: &str,
+        _max_tokens: u32,
+    ) -> Result<TestResult> {
         anyhow::bail!("Not implemented")
     }
     async fn add_provider_credentials(&self, _provider: &str, _key: &str) -> Result<()> {
@@ -1108,7 +1229,12 @@ impl ModelClient for crate::client::ApiClient {
     async fn get_fallback_chain(&self, _task_type: &str) -> Result<Vec<String>> {
         Ok(vec![])
     }
-    async fn add_to_fallback_chain(&self, _model: &str, _position: Option<usize>, _task_type: &str) -> Result<()> {
+    async fn add_to_fallback_chain(
+        &self,
+        _model: &str,
+        _position: Option<usize>,
+        _task_type: &str,
+    ) -> Result<()> {
         Ok(())
     }
     async fn remove_from_fallback_chain(&self, _model: &str, _task_type: &str) -> Result<()> {
@@ -1123,13 +1249,20 @@ impl ModelClient for crate::client::ApiClient {
     async fn chat(&self, _model: Option<&str>, _messages: &[ChatMessage]) -> Result<ChatMessage> {
         anyhow::bail!("Not implemented")
     }
-    async fn chat_stream(&self, _model: Option<&str>, _messages: &[ChatMessage]) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
+    async fn chat_stream(
+        &self,
+        _model: Option<&str>,
+        _messages: &[ChatMessage],
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
         anyhow::bail!("Not implemented")
     }
     async fn complete(&self, _request: &CompletionRequest) -> Result<CompletionResponse> {
         anyhow::bail!("Not implemented")
     }
-    async fn complete_stream(&self, _request: &CompletionRequest) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
+    async fn complete_stream(
+        &self,
+        _request: &CompletionRequest,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
         anyhow::bail!("Not implemented")
     }
     async fn generate_embeddings(&self, _model: Option<&str>, _text: &str) -> Result<Embedding> {

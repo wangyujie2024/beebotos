@@ -7,17 +7,17 @@
 //! - Connection limits and rate limiting
 //! - Graceful shutdown support
 
-use axum::{
-    extract::ws::{CloseFrame, Message, WebSocket},
-    extract::{ConnectInfo, WebSocketUpgrade},
-    response::IntoResponse,
-};
-use futures::{sink::SinkExt, stream::StreamExt};
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+
+use axum::extract::ws::{CloseFrame, Message, WebSocket};
+use axum::extract::{ConnectInfo, WebSocketUpgrade};
+use axum::response::IntoResponse;
+use futures::sink::SinkExt;
+use futures::stream::StreamExt;
+use serde::{Deserialize, Serialize};
 use tokio::sync::{broadcast, mpsc, RwLock};
 use tokio::time::interval;
 use tracing::{debug, error, info, warn};
@@ -196,7 +196,8 @@ impl ConnectionState {
         false // Can continue
     }
 
-    /// 🟡 MEDIUM SECURITY FIX: Check if connection is currently in backoff period
+    /// 🟡 MEDIUM SECURITY FIX: Check if connection is currently in backoff
+    /// period
     fn is_in_backoff(&self) -> bool {
         self.backoff_until
             .map_or(false, |until| Instant::now() < until)
@@ -316,7 +317,8 @@ impl WebSocketManager {
             let mut state = ConnectionState::new(connection_id.clone(), addr);
             state.user_id = user_id;
             states.insert(connection_id.clone(), state);
-            // Note: connection_count is already incremented atomically in handle_upgrade
+            // Note: connection_count is already incremented atomically in
+            // handle_upgrade
         }
 
         // Send connection info
@@ -392,7 +394,8 @@ impl WebSocketManager {
                             }
 
                             if should_disconnect {
-                                break; // Disconnect the client due to too many errors
+                                break; // Disconnect the client due to too many
+                                       // errors
                             }
                             continue;
                         }
@@ -408,7 +411,8 @@ impl WebSocketManager {
                             let mut states = self.states.write().await;
                             if let Some(state) = states.get_mut(&connection_id) {
                                 state.touch();
-                                state.reset_errors(); // Reset on successful message
+                                state.reset_errors(); // Reset on successful
+                                                      // message
                             }
                         }
 
@@ -459,7 +463,8 @@ impl WebSocketManager {
                         }
                     }
                     Message::Binary(data) => {
-                        // 🟡 MEDIUM SECURITY FIX: Check binary message size to prevent memory exhaustion
+                        // 🟡 MEDIUM SECURITY FIX: Check binary message size to prevent memory
+                        // exhaustion
                         let data_len = data.len();
                         if data_len > self.config.max_message_size {
                             warn!(
@@ -719,8 +724,9 @@ impl WebSocketManager {
 
     /// Remove connection and cleanup
     ///
-    /// Note: connection_count is decremented by the caller (handle_upgrade's on_upgrade
-    /// or the maintenance task) to ensure exactly-once semantics.
+    /// Note: connection_count is decremented by the caller (handle_upgrade's
+    /// on_upgrade or the maintenance task) to ensure exactly-once
+    /// semantics.
     async fn remove_connection(&self, connection_id: &str) {
         let mut connections = self.connections.write().await;
         connections.remove(connection_id);

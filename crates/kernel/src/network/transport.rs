@@ -1,8 +1,10 @@
 //! Network transport layer
 
-use crate::error::Result;
-use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
+
+use serde::{Deserialize, Serialize};
+
+use crate::error::Result;
 
 /// Transport protocol
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

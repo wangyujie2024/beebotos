@@ -19,30 +19,21 @@ pub mod worker_tasks;
 // 🟢 P0 FIX: DAG Task Scheduler
 pub mod dag_scheduler;
 
+// 🟢 P0 FIX: Re-export DAG scheduler types
+pub use dag_scheduler::{
+    DagScheduler, DagTask, DagWorkflow, DagWorkflowBuilder, ResourceRequirements, SchedulerConfig,
+    SchedulerError, SchedulerEvent, SchedulerMetrics, TaskExecutionRequest, TaskExecutionStatus,
+    TaskExecutor, TaskPriority, TaskRetryPolicy, WorkflowConfig, WorkflowInstance, WorkflowStatus,
+};
+// ARCHITECTURE FIX: Re-export dead letter queue types
+pub use dead_letter::{DLQConfig, DLQStats, DLQTaskProcessor, DeadLetterEntry, DeadLetterQueue};
 pub use manager::{
     Priority, QueueError, QueueManager, QueueStats, QueueTask, TaskProcessor, TaskResult, TaskType,
 };
 
-// ARCHITECTURE FIX: Re-export dead letter queue types
-pub use dead_letter::{
-    DeadLetterEntry, DeadLetterQueue, DLQConfig, DLQStats, DLQTaskProcessor,
-};
-
-// 🟢 P0 FIX: Re-export DAG scheduler types
-pub use dag_scheduler::{
-    DagScheduler, DagWorkflow, DagWorkflowBuilder, DagTask,
-    TaskExecutionStatus, WorkflowStatus, WorkflowInstance,
-    TaskExecutor, TaskExecutionRequest,
-    SchedulerConfig, SchedulerEvent, SchedulerMetrics,
-    TaskPriority, ResourceRequirements,
-    WorkflowConfig, TaskRetryPolicy,
-    SchedulerError,
-};
-
 // 🟢 P1 FIX: Re-export cron types from scheduling module
 pub use crate::scheduling::cron::{
-    CronScheduler, CronJob, JobId, ScheduleType, ContextMode,
-    CronPersistence, CronError,
+    ContextMode, CronError, CronJob, CronPersistence, CronScheduler, JobId, ScheduleType,
 };
 
 // Example module (optional, for documentation)

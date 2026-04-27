@@ -4,8 +4,9 @@
 //! flushed once the agent reconnects.
 
 use async_trait::async_trait;
-use crate::error::Result;
+
 use super::message_router_v2::UserMessageContext;
+use crate::error::Result;
 
 #[async_trait]
 pub trait OfflineMessageStore: Send + Sync {

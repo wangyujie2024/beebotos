@@ -14,19 +14,20 @@
 //! - OneBot Protocol: <https://github.com/howmanybots/onebot>
 //! - go-cqhttp: <https://docs.go-cqhttp.org/>
 
-use super::r#trait::{
-    BaseChannelConfig, Channel, ChannelConfig, ChannelEvent, ChannelInfo, ChannelType, ConnectionMode,
-    ContentType, MemberInfo, MemberRole,
-};
-use crate::communication::{Message, PlatformType};
-use crate::error::{AgentError, Result};
+use std::collections::HashMap;
+
 use async_trait::async_trait;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use tokio::sync::mpsc;
 use tracing::{debug, info};
 
+use super::r#trait::{
+    BaseChannelConfig, Channel, ChannelConfig, ChannelEvent, ChannelInfo, ChannelType,
+    ConnectionMode, ContentType, MemberInfo, MemberRole,
+};
+use crate::communication::{Message, PlatformType};
+use crate::error::{AgentError, Result};
 
 /// OneBot API base URL
 const ONEBOT_API_BASE: &str = "http://localhost:5700";
@@ -80,7 +81,7 @@ impl Default for QQConfig {
         let mut base = BaseChannelConfig::default();
         // QQ uses Webhook mode for receiving messages
         base.connection_mode = ConnectionMode::Webhook;
-        
+
         Self {
             api_base: ONEBOT_API_BASE.to_string(),
             webhook_secret: None,
@@ -220,7 +221,9 @@ impl QQChannel {
         let client = Client::builder()
             .timeout(std::time::Duration::from_secs(30))
             .build()
-            .map_err(|e| AgentError::configuration(format!("Failed to create HTTP client: {}", e)))?;
+            .map_err(|e| {
+                AgentError::configuration(format!("Failed to create HTTP client: {}", e))
+            })?;
 
         Ok(Self {
             config,
@@ -329,10 +332,13 @@ impl QQChannel {
             return Ok(vec![]);
         }
 
-        let data: OneBotResponse = response.json().await
+        let data: OneBotResponse = response
+            .json()
+            .await
             .map_err(|e| AgentError::platform(format!("Failed to parse response: {}", e)))?;
 
-        let members: Vec<MemberInfo> = data.data
+        let members: Vec<MemberInfo> = data
+            .data
             .and_then(|d| d.as_array().cloned())
             .unwrap_or_default()
             .iter()
@@ -340,7 +346,7 @@ impl QQChannel {
                 let user_id = m.get("user_id")?.as_i64()?;
                 let nickname = m.get("nickname")?.as_str()?.to_string();
                 let role = m.get("role")?.as_str().unwrap_or("member");
-                
+
                 let member_role = match role {
                     "owner" => MemberRole::Owner,
                     "admin" => MemberRole::Admin,
@@ -376,10 +382,13 @@ impl QQChannel {
             return Ok(vec![]);
         }
 
-        let data: OneBotResponse = response.json().await
+        let data: OneBotResponse = response
+            .json()
+            .await
             .map_err(|e| AgentError::platform(format!("Failed to parse response: {}", e)))?;
 
-        let friends: Vec<ChannelInfo> = data.data
+        let friends: Vec<ChannelInfo> = data
+            .data
             .and_then(|d| d.as_array().cloned())
             .unwrap_or_default()
             .iter()
@@ -415,10 +424,13 @@ impl QQChannel {
             return Ok(vec![]);
         }
 
-        let data: OneBotResponse = response.json().await
+        let data: OneBotResponse = response
+            .json()
+            .await
             .map_err(|e| AgentError::platform(format!("Failed to parse response: {}", e)))?;
 
-        let groups: Vec<ChannelInfo> = data.data
+        let groups: Vec<ChannelInfo> = data
+            .data
             .and_then(|d| d.as_array().cloned())
             .unwrap_or_default()
             .iter()
@@ -450,7 +462,7 @@ impl QQChannel {
 
         let message_type = event.message_type.as_deref().unwrap_or("");
         let content = event.raw_message.clone().unwrap_or_default();
-        
+
         let (channel_id, sender_id) = match message_type {
             "private" => {
                 let user_id = event.user_id.unwrap_or(0);
@@ -471,11 +483,7 @@ impl QQChannel {
             }
         }
 
-        let message = Message::new(
-            uuid::Uuid::new_v4(),
-            PlatformType::QQ,
-            content,
-        );
+        let message = Message::new(uuid::Uuid::new_v4(), PlatformType::QQ, content);
 
         info!("Received QQ message from {} in {}", sender_id, channel_id);
 
@@ -532,7 +540,8 @@ impl Channel for QQChannel {
     }
 
     async fn send(&self, channel_id: &str, message: &Message) -> Result<()> {
-        let id = channel_id.parse::<i64>()
+        let id = channel_id
+            .parse::<i64>()
             .map_err(|_| AgentError::platform("Invalid QQ ID"))?;
 
         // Try group first, then private
@@ -560,8 +569,14 @@ impl Channel for QQChannel {
         self.config.base.connection_mode
     }
 
-    async fn download_image(&self, _file_key: &str, _message_id: Option<&str>) -> crate::error::Result<Vec<u8>> {
-        Err(crate::error::AgentError::platform("Image download not implemented for QQ"))
+    async fn download_image(
+        &self,
+        _file_key: &str,
+        _message_id: Option<&str>,
+    ) -> crate::error::Result<Vec<u8>> {
+        Err(crate::error::AgentError::platform(
+            "Image download not implemented for QQ",
+        ))
     }
 
     async fn list_channels(&self) -> Result<Vec<ChannelInfo>> {
@@ -572,12 +587,12 @@ impl Channel for QQChannel {
     }
 
     async fn list_members(&self, channel_id: &str) -> Result<Vec<MemberInfo>> {
-        let group_id = channel_id.parse::<i64>()
+        let group_id = channel_id
+            .parse::<i64>()
             .map_err(|_| AgentError::platform("Invalid group ID"))?;
-        
+
         self.get_group_member_list(group_id).await
     }
-
 }
 
 #[cfg(test)]

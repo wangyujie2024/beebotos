@@ -429,7 +429,10 @@ mod tests {
             execution_time_ms: 100,
         });
 
-        result.add_failure("task-2".to_string(), AgentError::Timeout("test timeout".to_string()));
+        result.add_failure(
+            "task-2".to_string(),
+            AgentError::Timeout("test timeout".to_string()),
+        );
 
         assert_eq!(result.success_count, 1);
         assert_eq!(result.failure_count, 1);

@@ -2,8 +2,9 @@
 //!
 //! Validates configuration values and provides helpful error messages.
 
-use crate::BrainConfig;
 use std::fmt;
+
+use crate::BrainConfig;
 
 /// Validation error
 #[derive(Debug, Clone, PartialEq)]

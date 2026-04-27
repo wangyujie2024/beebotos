@@ -10,7 +10,7 @@
 //!
 //! # Example
 //! ```rust,no_run
-//! use beebotos_agents::device::{IosDevice, DeviceAutomation, AppLifecycle};
+//! use beebotos_agents::device::{AppLifecycle, DeviceAutomation, IosDevice};
 //!
 //! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 //! let device = IosDevice::new("00008030-001234567890ABCD");
@@ -26,20 +26,21 @@
 //! # }
 //! ```
 
-use super::{
-    AppInfo, AppLifecycle, DeviceAutomation, DeviceCapability, DeviceInfo,
-    DeviceStatus, ElementLocator, HardwareButton, LocatorType, ScreenBounds,
-    Size, SwipeDirection, UiElement,
-};
-use crate::error::{AgentError, Result};
+use std::sync::Arc;
+
 use async_trait::async_trait;
 use reqwest::Client;
 use serde::Deserialize;
 use serde_json::json;
-use std::sync::Arc;
 use tokio::sync::Mutex;
-use tokio::time::{sleep, Duration, timeout};
+use tokio::time::{sleep, timeout, Duration};
 use tracing::{debug, info};
+
+use super::{
+    AppInfo, AppLifecycle, DeviceAutomation, DeviceCapability, DeviceInfo, DeviceStatus,
+    ElementLocator, HardwareButton, LocatorType, ScreenBounds, Size, SwipeDirection, UiElement,
+};
+use crate::error::{AgentError, Result};
 
 /// WebDriverAgent session response
 #[derive(Debug, Deserialize)]
@@ -119,14 +120,24 @@ impl IosDevice {
     }
 
     /// Make WDA request
-    async fn wda_request(&self, method: &str, endpoint: &str, body: Option<serde_json::Value>) -> Result<serde_json::Value> {
+    async fn wda_request(
+        &self,
+        method: &str,
+        endpoint: &str,
+        body: Option<serde_json::Value>,
+    ) -> Result<serde_json::Value> {
         let url = format!("{}{}", self.wda_url, endpoint);
-        
+
         let mut request = match method.to_uppercase().as_str() {
             "GET" => self.client.get(&url),
             "POST" => self.client.post(&url),
             "DELETE" => self.client.delete(&url),
-            _ => return Err(AgentError::Execution(format!("Invalid HTTP method: {}", method))),
+            _ => {
+                return Err(AgentError::Execution(format!(
+                    "Invalid HTTP method: {}",
+                    method
+                )))
+            }
         };
 
         if let Some(body) = body {
@@ -181,7 +192,7 @@ impl IosDevice {
         });
 
         let response = self.wda_request("POST", "/session", Some(body)).await?;
-        
+
         let session_id = response
             .get("sessionId")
             .and_then(|s| s.as_str())
@@ -201,7 +212,7 @@ impl IosDevice {
     async fn find_element_wda(&self, locator: &ElementLocator) -> Result<WdaElement> {
         let session_id = self.get_session_id().await?;
         let (strategy, value) = self.convert_locator(locator);
-        
+
         let body = json!({
             "using": strategy,
             "value": value
@@ -210,9 +221,9 @@ impl IosDevice {
         let endpoint = format!("/session/{}/element", session_id);
         let response = self.wda_request("POST", &endpoint, Some(body)).await?;
 
-        let element: WdaElement = serde_json::from_value(
-            response.get("value").cloned().unwrap_or_default()
-        ).map_err(|e| AgentError::Execution(format!("Failed to parse element: {}", e)))?;
+        let element: WdaElement =
+            serde_json::from_value(response.get("value").cloned().unwrap_or_default())
+                .map_err(|e| AgentError::Execution(format!("Failed to parse element: {}", e)))?;
 
         Ok(element)
     }
@@ -221,7 +232,7 @@ impl IosDevice {
     async fn find_elements_wda(&self, locator: &ElementLocator) -> Result<Vec<WdaElement>> {
         let session_id = self.get_session_id().await?;
         let (strategy, value) = self.convert_locator(locator);
-        
+
         let body = json!({
             "using": strategy,
             "value": value
@@ -230,9 +241,9 @@ impl IosDevice {
         let endpoint = format!("/session/{}/elements", session_id);
         let response = self.wda_request("POST", &endpoint, Some(body)).await?;
 
-        let elements: Vec<WdaElement> = serde_json::from_value(
-            response.get("value").cloned().unwrap_or_default()
-        ).map_err(|e| AgentError::Execution(format!("Failed to parse elements: {}", e)))?;
+        let elements: Vec<WdaElement> =
+            serde_json::from_value(response.get("value").cloned().unwrap_or_default())
+                .map_err(|e| AgentError::Execution(format!("Failed to parse elements: {}", e)))?;
 
         Ok(elements)
     }
@@ -253,9 +264,11 @@ impl IosDevice {
     /// Get element attribute
     async fn get_element_attribute(&self, element_id: &str, attribute: &str) -> Result<String> {
         let session_id = self.get_session_id().await?;
-            
 
-        let endpoint = format!("/session/{}/element/{}/attribute/{}", session_id, element_id, attribute);
+        let endpoint = format!(
+            "/session/{}/element/{}/attribute/{}",
+            session_id, element_id, attribute
+        );
         let response = self.wda_request("GET", &endpoint, None).await?;
 
         response
@@ -268,14 +281,13 @@ impl IosDevice {
     /// Get element rect
     async fn get_element_rect(&self, element_id: &str) -> Result<ScreenBounds> {
         let session_id = self.get_session_id().await?;
-            
 
         let endpoint = format!("/session/{}/element/{}/rect", session_id, element_id);
         let response = self.wda_request("GET", &endpoint, None).await?;
 
-        let value = response.get("value").ok_or_else(|| {
-            AgentError::Execution("No value in rect response".to_string())
-        })?;
+        let value = response
+            .get("value")
+            .ok_or_else(|| AgentError::Execution("No value in rect response".to_string()))?;
 
         let x = value.get("x").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
         let y = value.get("y").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
@@ -288,7 +300,6 @@ impl IosDevice {
     /// Get source (UI hierarchy)
     async fn get_source(&self) -> Result<String> {
         let session_id = self.get_session_id().await?;
-            
 
         let endpoint = format!("/session/{}/source", session_id);
         let response = self.wda_request("GET", &endpoint, None).await?;
@@ -302,19 +313,33 @@ impl IosDevice {
 
     /// WDA element to UiElement
     async fn convert_to_ui_element(&self, wda_element: &WdaElement) -> Result<UiElement> {
-        let id = self.get_element_attribute(&wda_element.element_id, "name").await.ok();
-        let text = self.get_element_attribute(&wda_element.element_id, "value").await.ok();
-        let description = self.get_element_attribute(&wda_element.element_id, "label").await.ok();
-        let class_name = self.get_element_attribute(&wda_element.element_id, "type").await.ok();
+        let id = self
+            .get_element_attribute(&wda_element.element_id, "name")
+            .await
+            .ok();
+        let text = self
+            .get_element_attribute(&wda_element.element_id, "value")
+            .await
+            .ok();
+        let description = self
+            .get_element_attribute(&wda_element.element_id, "label")
+            .await
+            .ok();
+        let class_name = self
+            .get_element_attribute(&wda_element.element_id, "type")
+            .await
+            .ok();
         let bounds = self.get_element_rect(&wda_element.element_id).await?;
-        
+
         // Get other attributes
-        let enabled = self.get_element_attribute(&wda_element.element_id, "enabled")
+        let enabled = self
+            .get_element_attribute(&wda_element.element_id, "enabled")
             .await
             .map(|v| v == "true")
             .unwrap_or(true);
-        
-        let visible = self.get_element_attribute(&wda_element.element_id, "visible")
+
+        let visible = self
+            .get_element_attribute(&wda_element.element_id, "visible")
             .await
             .map(|v| v == "true")
             .unwrap_or(true);
@@ -336,7 +361,7 @@ impl IosDevice {
     async fn ios_deploy(&self, args: &[&str]) -> Result<String> {
         // Try go-ios first, then ios-deploy
         let tools = ["ios", "ios-deploy", "xcuitrunner"];
-        
+
         for tool in &tools {
             let output = tokio::process::Command::new(tool)
                 .args(args)
@@ -354,7 +379,7 @@ impl IosDevice {
         }
 
         Err(AgentError::Execution(
-            "No iOS deployment tool found (tried: ios, ios-deploy, xcuitrunner)".to_string()
+            "No iOS deployment tool found (tried: ios, ios-deploy, xcuitrunner)".to_string(),
         ))
     }
 }
@@ -401,7 +426,7 @@ impl DeviceAutomation for IosDevice {
 
         let mut connected = self.connected.lock().await;
         *connected = false;
-        
+
         let mut session = self.session_id.lock().await;
         *session = None;
 
@@ -420,9 +445,12 @@ impl DeviceAutomation for IosDevice {
 
         // Get device info from WDA status
         let _status = self.wda_request("GET", "/status", None).await?;
-        
+
         // Get screen dimensions - try primary endpoint first, fallback to secondary
-        let window_size = match self.wda_request("GET", "/session/active/window/size", None).await {
+        let window_size = match self
+            .wda_request("GET", "/session/active/window/size", None)
+            .await
+        {
             Ok(resp) => Ok(resp),
             Err(_) => self.wda_request("GET", "/window/size", None).await,
         };
@@ -472,7 +500,7 @@ impl DeviceAutomation for IosDevice {
         debug!("Taking screenshot on iOS device {}", self.udid);
 
         let response = self.wda_request("GET", "/screenshot", None).await?;
-        
+
         let base64_data = response
             .get("value")
             .and_then(|v| v.as_str())
@@ -487,7 +515,6 @@ impl DeviceAutomation for IosDevice {
         debug!("Tapping at ({}, {}) on iOS device {}", x, y, self.udid);
 
         let session_id = self.get_session_id().await?;
-            
 
         let body = json!({
             "x": x,
@@ -496,7 +523,7 @@ impl DeviceAutomation for IosDevice {
 
         let endpoint = format!("/session/{}/wda/tap/0", session_id);
         self.wda_request("POST", &endpoint, Some(body)).await?;
-        
+
         Ok(())
     }
 
@@ -504,7 +531,6 @@ impl DeviceAutomation for IosDevice {
         debug!("Long pressing at ({}, {}) for {}ms", x, y, duration_ms);
 
         let session_id = self.get_session_id().await?;
-            
 
         let body = json!({
             "x": x,
@@ -514,15 +540,24 @@ impl DeviceAutomation for IosDevice {
 
         let endpoint = format!("/session/{}/wda/touchAndHold", session_id);
         self.wda_request("POST", &endpoint, Some(body)).await?;
-        
+
         Ok(())
     }
 
-    async fn swipe(&self, from_x: i32, from_y: i32, to_x: i32, to_y: i32, duration_ms: u64) -> Result<()> {
-        debug!("Swiping from ({}, {}) to ({}, {})", from_x, from_y, to_x, to_y);
+    async fn swipe(
+        &self,
+        from_x: i32,
+        from_y: i32,
+        to_x: i32,
+        to_y: i32,
+        duration_ms: u64,
+    ) -> Result<()> {
+        debug!(
+            "Swiping from ({}, {}) to ({}, {})",
+            from_x, from_y, to_x, to_y
+        );
 
         let session_id = self.get_session_id().await?;
-            
 
         let body = json!({
             "actions": [
@@ -546,31 +581,64 @@ impl DeviceAutomation for IosDevice {
 
         let endpoint = format!("/session/{}/wda/touch/perform", session_id);
         self.wda_request("POST", &endpoint, Some(body)).await?;
-        
+
         Ok(())
     }
 
-    async fn swipe_direction(&self, direction: SwipeDirection, distance: u32, duration_ms: u64) -> Result<()> {
+    async fn swipe_direction(
+        &self,
+        direction: SwipeDirection,
+        distance: u32,
+        duration_ms: u64,
+    ) -> Result<()> {
         let info = self.get_device_info().await?;
         let center_x = info.screen_width as i32 / 2;
         let center_y = info.screen_height as i32 / 2;
         let distance = distance as i32;
 
         let (from_x, from_y, to_x, to_y) = match direction {
-            SwipeDirection::Up => (center_x, center_y + distance / 2, center_x, center_y - distance / 2),
-            SwipeDirection::Down => (center_x, center_y - distance / 2, center_x, center_y + distance / 2),
-            SwipeDirection::Left => (center_x + distance / 2, center_y, center_x - distance / 2, center_y),
-            SwipeDirection::Right => (center_x - distance / 2, center_y, center_x + distance / 2, center_y),
+            SwipeDirection::Up => (
+                center_x,
+                center_y + distance / 2,
+                center_x,
+                center_y - distance / 2,
+            ),
+            SwipeDirection::Down => (
+                center_x,
+                center_y - distance / 2,
+                center_x,
+                center_y + distance / 2,
+            ),
+            SwipeDirection::Left => (
+                center_x + distance / 2,
+                center_y,
+                center_x - distance / 2,
+                center_y,
+            ),
+            SwipeDirection::Right => (
+                center_x - distance / 2,
+                center_y,
+                center_x + distance / 2,
+                center_y,
+            ),
         };
 
         self.swipe(from_x, from_y, to_x, to_y, duration_ms).await
     }
 
-    async fn pinch(&self, center_x: i32, center_y: i32, scale: f64, _duration_ms: u64) -> Result<()> {
-        debug!("Pinch gesture at ({}, {}) with scale {}", center_x, center_y, scale);
+    async fn pinch(
+        &self,
+        center_x: i32,
+        center_y: i32,
+        scale: f64,
+        _duration_ms: u64,
+    ) -> Result<()> {
+        debug!(
+            "Pinch gesture at ({}, {}) with scale {}",
+            center_x, center_y, scale
+        );
 
         let session_id = self.get_session_id().await?;
-            
 
         let body = json!({
             "scale": scale,
@@ -581,17 +649,21 @@ impl DeviceAutomation for IosDevice {
 
         let endpoint = format!("/session/{}/wda/pinch", session_id);
         self.wda_request("POST", &endpoint, Some(body)).await?;
-        
+
         Ok(())
     }
 
     async fn find_element(&self, locator: &ElementLocator) -> Result<UiElement> {
-        debug!("Finding element: {:?} = {}", locator.locator_type, locator.value);
+        debug!(
+            "Finding element: {:?} = {}",
+            locator.locator_type, locator.value
+        );
 
         let result = timeout(
             Duration::from_millis(locator.timeout_ms),
-            self.find_element_wda(locator)
-        ).await;
+            self.find_element_wda(locator),
+        )
+        .await;
 
         match result {
             Ok(Ok(wda_element)) => self.convert_to_ui_element(&wda_element).await,
@@ -605,7 +677,7 @@ impl DeviceAutomation for IosDevice {
 
     async fn find_elements(&self, locator: &ElementLocator) -> Result<Vec<UiElement>> {
         let wda_elements = self.find_elements_wda(locator).await?;
-        
+
         let mut elements = Vec::new();
         for wda_element in wda_elements {
             if let Ok(element) = self.convert_to_ui_element(&wda_element).await {
@@ -618,13 +690,15 @@ impl DeviceAutomation for IosDevice {
 
     async fn tap_element(&self, locator: &ElementLocator) -> Result<()> {
         let wda_element = self.find_element_wda(locator).await?;
-        
-        let session_id = self.get_session_id().await?;
-            
 
-        let endpoint = format!("/session/{}/element/{}/click", session_id, wda_element.element_id);
+        let session_id = self.get_session_id().await?;
+
+        let endpoint = format!(
+            "/session/{}/element/{}/click",
+            session_id, wda_element.element_id
+        );
         self.wda_request("POST", &endpoint, Some(json!({}))).await?;
-        
+
         Ok(())
     }
 
@@ -636,11 +710,13 @@ impl DeviceAutomation for IosDevice {
 
     async fn get_element_text(&self, locator: &ElementLocator) -> Result<String> {
         let wda_element = self.find_element_wda(locator).await?;
-        
-        let session_id = self.get_session_id().await?;
-            
 
-        let endpoint = format!("/session/{}/element/{}/text", session_id, wda_element.element_id);
+        let session_id = self.get_session_id().await?;
+
+        let endpoint = format!(
+            "/session/{}/element/{}/text",
+            session_id, wda_element.element_id
+        );
         let response = self.wda_request("GET", &endpoint, None).await?;
 
         response
@@ -664,13 +740,15 @@ impl DeviceAutomation for IosDevice {
 
     async fn clear_element_text(&self, locator: &ElementLocator) -> Result<()> {
         let wda_element = self.find_element_wda(locator).await?;
-        
-        let session_id = self.get_session_id().await?;
-            
 
-        let endpoint = format!("/session/{}/element/{}/clear", session_id, wda_element.element_id);
+        let session_id = self.get_session_id().await?;
+
+        let endpoint = format!(
+            "/session/{}/element/{}/clear",
+            session_id, wda_element.element_id
+        );
         self.wda_request("POST", &endpoint, Some(json!({}))).await?;
-        
+
         Ok(())
     }
 
@@ -691,11 +769,15 @@ impl DeviceAutomation for IosDevice {
             HardwareButton::VolumeUp => 0x400000007_i64,
             HardwareButton::VolumeDown => 0x400000008_i64,
             HardwareButton::Home => 0x400000001_i64,
-            _ => return Err(AgentError::Execution(format!("Button {:?} not supported on iOS", button))),
+            _ => {
+                return Err(AgentError::Execution(format!(
+                    "Button {:?} not supported on iOS",
+                    button
+                )))
+            }
         };
 
         let session_id = self.get_session_id().await?;
-            
 
         let body = json!({
             "key": keycode
@@ -703,13 +785,12 @@ impl DeviceAutomation for IosDevice {
 
         let endpoint = format!("/session/{}/wda/pressButton", session_id);
         self.wda_request("POST", &endpoint, Some(body)).await?;
-        
+
         Ok(())
     }
 
     async fn type_text(&self, text: &str) -> Result<()> {
         let session_id = self.get_session_id().await?;
-            
 
         let body = json!({
             "value": text.chars().map(|c| c.to_string()).collect::<Vec<_>>()
@@ -717,7 +798,7 @@ impl DeviceAutomation for IosDevice {
 
         let endpoint = format!("/session/{}/keys", session_id);
         self.wda_request("POST", &endpoint, Some(body)).await?;
-        
+
         Ok(())
     }
 
@@ -729,7 +810,14 @@ impl DeviceAutomation for IosDevice {
     async fn go_back(&self) -> Result<()> {
         // iOS back gesture - swipe from left edge
         let size = self.get_screen_size().await?;
-        self.swipe(10, size.height as i32 / 2, size.width as i32 / 2, size.height as i32 / 2, 300).await
+        self.swipe(
+            10,
+            size.height as i32 / 2,
+            size.width as i32 / 2,
+            size.height as i32 / 2,
+            300,
+        )
+        .await
     }
 
     async fn go_home(&self) -> Result<()> {
@@ -739,17 +827,26 @@ impl DeviceAutomation for IosDevice {
     async fn open_recents(&self) -> Result<()> {
         // Double click home button
         let session_id = self.get_session_id().await?;
-            
 
         let body = json!({
             "key": 0x400000001_i64 // Home button
         });
 
         // WDA doesn't have direct recents, use home button double press
-        self.wda_request("POST", &format!("/session/{}/wda/pressButton", session_id), Some(body.clone())).await?;
+        self.wda_request(
+            "POST",
+            &format!("/session/{}/wda/pressButton", session_id),
+            Some(body.clone()),
+        )
+        .await?;
         sleep(Duration::from_millis(100)).await;
-        self.wda_request("POST", &format!("/session/{}/wda/pressButton", session_id), Some(body)).await?;
-        
+        self.wda_request(
+            "POST",
+            &format!("/session/{}/wda/pressButton", session_id),
+            Some(body),
+        )
+        .await?;
+
         Ok(())
     }
 }
@@ -773,7 +870,6 @@ impl AppLifecycle for IosDevice {
 
         // Use WDA to launch app
         let session_id = self.get_session_id().await?;
-            
 
         let body = json!({
             "bundleId": bundle_id,
@@ -783,7 +879,7 @@ impl AppLifecycle for IosDevice {
 
         let endpoint = format!("/session/{}/wda/apps/launch", session_id);
         self.wda_request("POST", &endpoint, Some(body)).await?;
-        
+
         Ok(())
     }
 
@@ -796,7 +892,6 @@ impl AppLifecycle for IosDevice {
         info!("Closing app: {}", bundle_id);
 
         let session_id = self.get_session_id().await?;
-            
 
         let body = json!({
             "bundleId": bundle_id
@@ -804,7 +899,7 @@ impl AppLifecycle for IosDevice {
 
         let endpoint = format!("/session/{}/wda/apps/terminate", session_id);
         self.wda_request("POST", &endpoint, Some(body)).await?;
-        
+
         Ok(())
     }
 
@@ -817,13 +912,13 @@ impl AppLifecycle for IosDevice {
 
     async fn is_app_running(&self, bundle_id: &str) -> Result<bool> {
         info!("Checking if app is running: {}", bundle_id);
-        
+
         let session_id = self.get_session_id().await?;
-        
+
         let body = json!({
             "bundleId": bundle_id
         });
-        
+
         let endpoint = format!("/session/{}/wda/apps/state", session_id);
         match self.wda_request("POST", &endpoint, Some(body)).await {
             Ok(response) => {
@@ -879,7 +974,9 @@ impl AppLifecycle for IosDevice {
         info!("Clearing app data: {}", bundle_id);
         // iOS doesn't support clearing app data via command line
         // Would need to uninstall and reinstall
-        Err(AgentError::Execution("Clearing app data not supported on iOS".to_string()))
+        Err(AgentError::Execution(
+            "Clearing app data not supported on iOS".to_string(),
+        ))
     }
 
     async fn grant_permission(&self, _bundle_id: &str, _permission: &str) -> Result<()> {
@@ -919,7 +1016,9 @@ impl IosController {
         let session_id = self.get_session_id().await?;
 
         let endpoint = format!("/session/{}/wda/shake", session_id);
-        self.device.wda_request("POST", &endpoint, Some(json!({}))).await?;
+        self.device
+            .wda_request("POST", &endpoint, Some(json!({})))
+            .await?;
         Ok(())
     }
 
@@ -933,14 +1032,19 @@ impl IosController {
         });
 
         let endpoint = format!("/session/{}/wda/touchAndHold", session_id);
-        self.device.wda_request("POST", &endpoint, Some(body)).await?;
+        self.device
+            .wda_request("POST", &endpoint, Some(body))
+            .await?;
         Ok(())
     }
 
     /// Get battery level
     pub async fn get_battery_level(&self) -> Result<f64> {
-        let response = self.device.wda_request("GET", "/wda/batteryInfo", None).await?;
-        
+        let response = self
+            .device
+            .wda_request("GET", "/wda/batteryInfo", None)
+            .await?;
+
         response
             .get("value")
             .and_then(|v| v.get("level"))
@@ -951,7 +1055,7 @@ impl IosController {
     /// Get device orientation
     pub async fn get_orientation(&self) -> Result<String> {
         let response = self.device.wda_request("GET", "/orientation", None).await?;
-        
+
         response
             .get("value")
             .and_then(|v| v.as_str())
@@ -965,7 +1069,9 @@ impl IosController {
             "orientation": orientation
         });
 
-        self.device.wda_request("POST", "/orientation", Some(body)).await?;
+        self.device
+            .wda_request("POST", "/orientation", Some(body))
+            .await?;
         Ok(())
     }
 
@@ -974,7 +1080,9 @@ impl IosController {
         let session_id = self.get_session_id().await?;
 
         let endpoint = format!("/session/{}/wda/lock", session_id);
-        self.device.wda_request("POST", &endpoint, Some(json!({}))).await?;
+        self.device
+            .wda_request("POST", &endpoint, Some(json!({})))
+            .await?;
         Ok(())
     }
 
@@ -983,14 +1091,16 @@ impl IosController {
         let session_id = self.get_session_id().await?;
 
         let endpoint = format!("/session/{}/wda/unlock", session_id);
-        self.device.wda_request("POST", &endpoint, Some(json!({}))).await?;
+        self.device
+            .wda_request("POST", &endpoint, Some(json!({})))
+            .await?;
         Ok(())
     }
 
     /// Check if device is locked
     pub async fn is_locked(&self) -> Result<bool> {
         let response = self.device.wda_request("GET", "/wda/locked", None).await?;
-        
+
         response
             .get("value")
             .and_then(|v| v.as_bool())
@@ -1016,7 +1126,9 @@ impl IosController {
         let session_id = self.get_session_id().await?;
 
         let endpoint = format!("/session/{}/alert/accept", session_id);
-        self.device.wda_request("POST", &endpoint, Some(json!({}))).await?;
+        self.device
+            .wda_request("POST", &endpoint, Some(json!({})))
+            .await?;
         Ok(())
     }
 
@@ -1025,14 +1137,19 @@ impl IosController {
         let session_id = self.get_session_id().await?;
 
         let endpoint = format!("/session/{}/alert/dismiss", session_id);
-        self.device.wda_request("POST", &endpoint, Some(json!({}))).await?;
+        self.device
+            .wda_request("POST", &endpoint, Some(json!({})))
+            .await?;
         Ok(())
     }
 
     /// Get device logs
     pub async fn get_logs(&self) -> Result<Vec<String>> {
-        let response = self.device.wda_request("POST", "/wda/getLogs", Some(json!({}))).await?;
-        
+        let response = self
+            .device
+            .wda_request("POST", "/wda/getLogs", Some(json!({})))
+            .await?;
+
         let logs = response
             .get("value")
             .and_then(|v| v.as_array())
@@ -1048,7 +1165,9 @@ impl IosController {
 
     /// Clear device logs
     pub async fn clear_logs(&self) -> Result<()> {
-        self.device.wda_request("POST", "/wda/clearLogs", Some(json!({}))).await?;
+        self.device
+            .wda_request("POST", "/wda/clearLogs", Some(json!({})))
+            .await?;
         Ok(())
     }
 
@@ -1079,15 +1198,14 @@ mod tests {
 
     #[test]
     fn test_ios_device_with_custom_url() {
-        let device = IosDevice::new("test-udid")
-            .with_wda_url("http://192.168.1.100:8100");
+        let device = IosDevice::new("test-udid").with_wda_url("http://192.168.1.100:8100");
         assert_eq!(device.wda_url(), "http://192.168.1.100:8100");
     }
 
     #[test]
     fn test_convert_locator() {
         let device = IosDevice::new("test");
-        
+
         let locator = ElementLocator::new(LocatorType::AccessibilityId, "button1");
         let (strategy, value) = device.convert_locator(&locator);
         assert_eq!(strategy, "accessibility id");

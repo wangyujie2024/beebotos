@@ -36,23 +36,23 @@
 //! └─────────────────────────────────────────────────────────────────┘
 //! ```
 
+use std::collections::HashMap;
+use std::sync::Arc;
+
+use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
+use tokio::sync::RwLock;
+use tracing::{debug, info, warn};
+use uuid::Uuid;
+
 use crate::error::{AgentError, Result};
 use crate::runtime::session_pool::{
     PooledSession, PooledSessionState, SessionCapabilities, SessionPool, SessionPoolConfig,
     SessionPoolStats, SessionRequirements,
 };
-use crate::session::{
-    key::{SessionKey, SessionType},
-    websocket::{WebSocketSessionManager, WsSessionManagerConfig},
-    SessionContext,
-};
-use async_trait::async_trait;
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::sync::Arc;
-use tokio::sync::RwLock;
-use tracing::{debug, info, warn};
-use uuid::Uuid;
+use crate::session::key::{SessionKey, SessionType};
+use crate::session::websocket::{WebSocketSessionManager, WsSessionManagerConfig};
+use crate::session::SessionContext;
 
 // =============================================================================
 // Session State (from former manager.rs)
@@ -465,7 +465,9 @@ impl SessionManager {
                     .filter(|(_, s)| {
                         let elapsed =
                             chrono::Utc::now().signed_duration_since(s.metadata.last_activity);
-                        elapsed > chrono::Duration::from_std(default_timeout).unwrap_or(chrono::Duration::seconds(3600))
+                        elapsed
+                            > chrono::Duration::from_std(default_timeout)
+                                .unwrap_or(chrono::Duration::seconds(3600))
                     })
                     .map(|(k, _)| k.clone())
                     .collect();
@@ -501,16 +503,16 @@ impl Default for SessionManager {
 pub trait SessionPersistence: Send + Sync {
     /// Save session state
     async fn save_session(&self, session: &UnifiedSession) -> Result<()>;
-    
+
     /// Load session by ID
     async fn load_session(&self, session_id: &str) -> Result<Option<UnifiedSession>>;
-    
+
     /// Delete session
     async fn delete_session(&self, session_id: &str) -> Result<()>;
-    
+
     /// List active sessions
     async fn list_sessions(&self) -> Result<Vec<UnifiedSession>>;
-    
+
     /// Update session state
     async fn update_state(&self, session_id: &str, state: UnifiedSessionState) -> Result<()>;
 }
@@ -562,7 +564,7 @@ impl UnifiedSessionManager {
     pub async fn new(config: UnifiedSessionManagerConfig) -> Result<Self> {
         let pool = Arc::new(RwLock::new(SessionPool::new(config.pool_config.clone())));
         let manager = Arc::new(RwLock::new(SessionManager::new(
-            config.manager_config.clone()
+            config.manager_config.clone(),
         )));
 
         // Start pool and manager
@@ -666,7 +668,7 @@ impl UnifiedSessionManager {
         // 1. Try to find from pool
         let pool = self.pool.write().await;
         let task_id = Uuid::new_v4();
-        
+
         let pool_session_id = match pool.acquire_session(task_id, requirements).await? {
             Some(id) => id,
             None => return Ok(None),
@@ -685,16 +687,16 @@ impl UnifiedSessionManager {
                     let key = manager
                         .create_session(agent_id, SessionType::Standard, context.clone())
                         .await?;
-                    
+
                     // Update mappings
                     drop(manager);
                     let mut mappings = self.session_mappings.write().await;
                     mappings.insert(pool_session_id, key.clone());
                     drop(mappings);
-                    
+
                     let mut reverse = self.reverse_mappings.write().await;
                     reverse.insert(key.to_string(), pool_session_id);
-                    
+
                     key
                 }
             }
@@ -735,13 +737,13 @@ impl UnifiedSessionManager {
         // 5. Update managed session state
         {
             let manager = self.manager.write().await;
-            manager.update_session_state(&session_key, SessionState::Active).await.ok();
+            manager
+                .update_session_state(&session_key, SessionState::Active)
+                .await
+                .ok();
         }
 
-        debug!(
-            "Acquired session for {}: {}",
-            agent_id, session_key
-        );
+        debug!("Acquired session for {}: {}", agent_id, session_key);
         Ok(Some(unified_session))
     }
 
@@ -749,12 +751,16 @@ impl UnifiedSessionManager {
     pub async fn release_session(&self, session: &UnifiedSession) -> Result<()> {
         // 1. Release from pool
         let pool = self.pool.write().await;
-        pool.release_session(session.pool_session_id, Uuid::new_v4()).await?;
+        pool.release_session(session.pool_session_id, Uuid::new_v4())
+            .await?;
         drop(pool);
 
         // 2. Update managed session
         let manager = self.manager.write().await;
-        manager.update_session_state(&session.session_key, SessionState::Active).await.ok();
+        manager
+            .update_session_state(&session.session_key, SessionState::Active)
+            .await
+            .ok();
         drop(manager);
 
         // 3. Update unified session
@@ -770,7 +776,10 @@ impl UnifiedSessionManager {
             if let Some(ref persistence) = self.config.persistence {
                 let cache = self.session_cache.read().await;
                 if let Some(s) = cache.get(&session.session_key.to_string()) {
-                    persistence.update_state(&s.session_key.to_string(), UnifiedSessionState::Idle).await.ok();
+                    persistence
+                        .update_state(&s.session_key.to_string(), UnifiedSessionState::Idle)
+                        .await
+                        .ok();
                 }
             }
         }
@@ -789,7 +798,10 @@ impl UnifiedSessionManager {
 
         // 2. Update managed session state
         let manager = self.manager.write().await;
-        manager.update_session_state(session_key, SessionState::Terminating).await.ok();
+        manager
+            .update_session_state(session_key, SessionState::Terminating)
+            .await
+            .ok();
         drop(manager);
 
         // 3. Terminate pooled session if exists
@@ -818,7 +830,10 @@ impl UnifiedSessionManager {
         // 5. Delete from persistence
         if self.config.enable_persistence {
             if let Some(ref persistence) = self.config.persistence {
-                persistence.delete_session(&session_key.to_string()).await.ok();
+                persistence
+                    .delete_session(&session_key.to_string())
+                    .await
+                    .ok();
             }
         }
 
@@ -843,7 +858,14 @@ impl UnifiedSessionManager {
         let cache = self.session_cache.read().await;
         cache
             .values()
-            .filter(|s| matches!(s.state, UnifiedSessionState::Active | UnifiedSessionState::Idle | UnifiedSessionState::Busy))
+            .filter(|s| {
+                matches!(
+                    s.state,
+                    UnifiedSessionState::Active
+                        | UnifiedSessionState::Idle
+                        | UnifiedSessionState::Busy
+                )
+            })
             .cloned()
             .collect()
     }
@@ -873,7 +895,10 @@ impl UnifiedSessionManager {
         // Persist
         if self.config.enable_persistence {
             if let Some(ref persistence) = self.config.persistence {
-                persistence.update_state(&session_key.to_string(), UnifiedSessionState::Hibernating).await.ok();
+                persistence
+                    .update_state(&session_key.to_string(), UnifiedSessionState::Hibernating)
+                    .await
+                    .ok();
             }
         }
 
@@ -914,7 +939,8 @@ impl UnifiedSessionManager {
         let interval_secs = self.config.auto_save_interval_secs;
 
         tokio::spawn(async move {
-            let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(interval_secs));
+            let mut interval =
+                tokio::time::interval(tokio::time::Duration::from_secs(interval_secs));
 
             loop {
                 interval.tick().await;
@@ -923,7 +949,10 @@ impl UnifiedSessionManager {
                 if let Some(ref pers) = persistence {
                     let cache_guard = cache.read().await;
                     for (_, session) in cache_guard.iter() {
-                        if matches!(session.state, UnifiedSessionState::Active | UnifiedSessionState::Idle) {
+                        if matches!(
+                            session.state,
+                            UnifiedSessionState::Active | UnifiedSessionState::Idle
+                        ) {
                             pers.save_session(session).await.ok();
                         }
                     }
@@ -945,7 +974,7 @@ mod tests {
         // Create session
         let context = SessionContext::new("test-context".to_string());
         let capabilities = SessionCapabilities::default();
-        
+
         let session = manager
             .create_session("test-agent", SessionType::Standard, context, capabilities)
             .await

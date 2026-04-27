@@ -179,7 +179,10 @@ impl MessageActions {
     }
 
     /// 重新生成回复
-    pub fn regenerate_response(messages: &mut Vec<ChatMessage>, user_message_id: &str) -> Option<String> {
+    pub fn regenerate_response(
+        messages: &mut Vec<ChatMessage>,
+        user_message_id: &str,
+    ) -> Option<String> {
         // 找到用户消息后的助手消息并删除
         if let Some(idx) = messages.iter().position(|m| m.id == user_message_id) {
             // 收集要删除的索引
@@ -227,10 +230,7 @@ mod tests {
             Some(("/clear", ""))
         );
 
-        assert_eq!(
-            ChatInterface::detect_slash_command("Hello world"),
-            None
-        );
+        assert_eq!(ChatInterface::detect_slash_command("Hello world"), None);
     }
 
     #[test]

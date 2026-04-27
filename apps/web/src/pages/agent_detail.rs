@@ -1,14 +1,14 @@
-use crate::api::{AgentInfo, AgentLogEntry, AgentStatus, CreateAgentRequest, UpdateAgentRequest};
-use crate::components::{InfoItem, Modal};
-use crate::state::use_app_state;
-use crate::utils::{download_file, event_target_value};
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 use leptos::view;
 use leptos_meta::*;
 use leptos_router::components::A;
-use leptos_router::hooks::use_params_map;
-use leptos_router::hooks::use_navigate;
+use leptos_router::hooks::{use_navigate, use_params_map};
+
+use crate::api::{AgentInfo, AgentLogEntry, AgentStatus, CreateAgentRequest, UpdateAgentRequest};
+use crate::components::{InfoItem, Modal};
+use crate::state::use_app_state;
+use crate::utils::{download_file, event_target_value};
 
 #[component]
 pub fn AgentDetail() -> impl IntoView {
@@ -431,7 +431,8 @@ fn AgentDetailView(
 
     let is_running = agent.status == AgentStatus::Running;
 
-    // Use Rc<RefCell> for callbacks (not Send/Sync but works in single-threaded WASM)
+    // Use Rc<RefCell> for callbacks (not Send/Sync but works in single-threaded
+    // WASM)
     let on_start = std::rc::Rc::new(std::cell::RefCell::new(on_start));
     let on_stop = std::rc::Rc::new(std::cell::RefCell::new(on_stop));
     let on_edit = std::rc::Rc::new(std::cell::RefCell::new(on_edit));

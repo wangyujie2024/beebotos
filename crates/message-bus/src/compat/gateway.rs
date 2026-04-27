@@ -7,9 +7,7 @@ use std::sync::Arc;
 use serde_json::json;
 use tracing::{info, warn};
 
-use crate::{
-    Message, MessageBus, Result, SubscriptionId, MessageStream,
-};
+use crate::{Message, MessageBus, MessageStream, Result, SubscriptionId};
 
 /// Gateway event types
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -100,7 +98,9 @@ impl<B: MessageBus> GatewayEventAdapter<B> {
         });
 
         let msg = self.create_message(GatewayEventType::WsConnected, event);
-        self.bus.publish(GatewayEventType::WsConnected.topic(), msg).await
+        self.bus
+            .publish(GatewayEventType::WsConnected.topic(), msg)
+            .await
     }
 
     /// Publish WebSocket connection closed event
@@ -121,7 +121,9 @@ impl<B: MessageBus> GatewayEventAdapter<B> {
         });
 
         let msg = self.create_message(GatewayEventType::WsDisconnected, event);
-        self.bus.publish(GatewayEventType::WsDisconnected.topic(), msg).await
+        self.bus
+            .publish(GatewayEventType::WsDisconnected.topic(), msg)
+            .await
     }
 
     /// Publish WebSocket message received event
@@ -140,7 +142,9 @@ impl<B: MessageBus> GatewayEventAdapter<B> {
         });
 
         let msg = self.create_message(GatewayEventType::WsMessageReceived, event);
-        self.bus.publish(GatewayEventType::WsMessageReceived.topic(), msg).await
+        self.bus
+            .publish(GatewayEventType::WsMessageReceived.topic(), msg)
+            .await
     }
 
     /// Publish WebSocket message sent event
@@ -159,7 +163,9 @@ impl<B: MessageBus> GatewayEventAdapter<B> {
         });
 
         let msg = self.create_message(GatewayEventType::WsMessageSent, event);
-        self.bus.publish(GatewayEventType::WsMessageSent.topic(), msg).await
+        self.bus
+            .publish(GatewayEventType::WsMessageSent.topic(), msg)
+            .await
     }
 
     // ==================== HTTP Events ====================
@@ -184,7 +190,9 @@ impl<B: MessageBus> GatewayEventAdapter<B> {
         });
 
         let msg = self.create_message(GatewayEventType::HttpRequestReceived, event);
-        self.bus.publish(GatewayEventType::HttpRequestReceived.topic(), msg).await
+        self.bus
+            .publish(GatewayEventType::HttpRequestReceived.topic(), msg)
+            .await
     }
 
     /// Publish HTTP response sent event
@@ -205,7 +213,9 @@ impl<B: MessageBus> GatewayEventAdapter<B> {
         });
 
         let msg = self.create_message(GatewayEventType::HttpResponseSent, event);
-        self.bus.publish(GatewayEventType::HttpResponseSent.topic(), msg).await
+        self.bus
+            .publish(GatewayEventType::HttpResponseSent.topic(), msg)
+            .await
     }
 
     // ==================== Security Events ====================
@@ -228,7 +238,9 @@ impl<B: MessageBus> GatewayEventAdapter<B> {
         });
 
         let msg = self.create_message(GatewayEventType::RateLimitExceeded, event);
-        self.bus.publish(GatewayEventType::RateLimitExceeded.topic(), msg).await
+        self.bus
+            .publish(GatewayEventType::RateLimitExceeded.topic(), msg)
+            .await
     }
 
     /// Publish authentication success event
@@ -247,7 +259,9 @@ impl<B: MessageBus> GatewayEventAdapter<B> {
         });
 
         let msg = self.create_message(GatewayEventType::AuthSuccess, event);
-        self.bus.publish(GatewayEventType::AuthSuccess.topic(), msg).await
+        self.bus
+            .publish(GatewayEventType::AuthSuccess.topic(), msg)
+            .await
     }
 
     /// Publish authentication failed event
@@ -266,7 +280,9 @@ impl<B: MessageBus> GatewayEventAdapter<B> {
         });
 
         let msg = self.create_message(GatewayEventType::AuthFailed, event);
-        self.bus.publish(GatewayEventType::AuthFailed.topic(), msg).await
+        self.bus
+            .publish(GatewayEventType::AuthFailed.topic(), msg)
+            .await
     }
 
     // ==================== Service Discovery Events ====================
@@ -288,7 +304,9 @@ impl<B: MessageBus> GatewayEventAdapter<B> {
         });
 
         let msg = self.create_message(GatewayEventType::ServiceDiscovery, event);
-        self.bus.publish(GatewayEventType::ServiceDiscovery.topic(), msg).await
+        self.bus
+            .publish(GatewayEventType::ServiceDiscovery.topic(), msg)
+            .await
     }
 
     // ==================== Circuit Breaker Events ====================
@@ -311,7 +329,9 @@ impl<B: MessageBus> GatewayEventAdapter<B> {
         });
 
         let msg = self.create_message(GatewayEventType::CircuitBreaker, event);
-        self.bus.publish(GatewayEventType::CircuitBreaker.topic(), msg).await
+        self.bus
+            .publish(GatewayEventType::CircuitBreaker.topic(), msg)
+            .await
     }
 
     // ==================== Health Events ====================
@@ -332,7 +352,9 @@ impl<B: MessageBus> GatewayEventAdapter<B> {
         });
 
         let msg = self.create_message(GatewayEventType::HealthCheck, event);
-        self.bus.publish(GatewayEventType::HealthCheck.topic(), msg).await
+        self.bus
+            .publish(GatewayEventType::HealthCheck.topic(), msg)
+            .await
     }
 
     // ==================== Subscription Helpers ====================
@@ -466,7 +488,9 @@ impl<B: MessageBus + 'static> GatewayMetricsCollector<B> {
             while let Some(msg) = stream.recv().await {
                 match msg.metadata.topic.as_str() {
                     "gateway/websocket/connected" => ws_connections += 1,
-                    "gateway/websocket/disconnected" => ws_connections = ws_connections.saturating_sub(1),
+                    "gateway/websocket/disconnected" => {
+                        ws_connections = ws_connections.saturating_sub(1)
+                    }
                     "gateway/http/request/received" => http_requests += 1,
                     "gateway/auth/failed" => auth_failures += 1,
                     _ => {}
@@ -474,7 +498,9 @@ impl<B: MessageBus + 'static> GatewayMetricsCollector<B> {
 
                 tracing::debug!(
                     "Gateway metrics - WS: {}, HTTP: {}, Auth Failures: {}",
-                    ws_connections, http_requests, auth_failures
+                    ws_connections,
+                    http_requests,
+                    auth_failures
                 );
             }
         });
@@ -511,8 +537,14 @@ mod tests {
         let (_sub_id, mut stream) = adapter.subscribe_websocket().await.unwrap();
 
         // Publish events
-        adapter.publish_ws_connected("conn-123", "192.168.1.1:12345").await.unwrap();
-        adapter.publish_ws_disconnected("conn-123", "192.168.1.1:12345", "client_close", 60).await.unwrap();
+        adapter
+            .publish_ws_connected("conn-123", "192.168.1.1:12345")
+            .await
+            .unwrap();
+        adapter
+            .publish_ws_disconnected("conn-123", "192.168.1.1:12345", "client_close", 60)
+            .await
+            .unwrap();
 
         // Receive events
         let msg1 = stream.recv().await.unwrap();
@@ -535,13 +567,16 @@ mod tests {
 
         let (_sub_id, mut stream) = adapter.subscribe_http().await.unwrap();
 
-        adapter.publish_http_request(
-            "req-456",
-            "POST",
-            "/api/agents",
-            "10.0.0.1:56789",
-            json!({"content-type": "application/json"}),
-        ).await.unwrap();
+        adapter
+            .publish_http_request(
+                "req-456",
+                "POST",
+                "/api/agents",
+                "10.0.0.1:56789",
+                json!({"content-type": "application/json"}),
+            )
+            .await
+            .unwrap();
 
         let msg = stream.recv().await.unwrap();
         assert!(msg.metadata.topic.contains("http/request"));
@@ -558,8 +593,17 @@ mod tests {
         ));
         let adapter = GatewayEventAdapter::new(bus);
 
-        adapter.publish_auth_success("user-789", "client-abc", "jwt").await.unwrap();
-        adapter.publish_auth_failed("client-def", "api_key", "invalid_key").await.unwrap();
-        adapter.publish_rate_limit_exceeded("client-ghi", "/api/expensive", 100, 60).await.unwrap();
+        adapter
+            .publish_auth_success("user-789", "client-abc", "jwt")
+            .await
+            .unwrap();
+        adapter
+            .publish_auth_failed("client-def", "api_key", "invalid_key")
+            .await
+            .unwrap();
+        adapter
+            .publish_rate_limit_exceeded("client-ghi", "/api/expensive", 100, 60)
+            .await
+            .unwrap();
     }
 }

@@ -11,6 +11,7 @@ pub mod browser;
 pub mod chain;
 pub mod chain_v2;
 pub mod channels;
+pub mod llm_admin;
 pub mod llm_config;
 pub mod llm_metrics;
 pub mod skills;

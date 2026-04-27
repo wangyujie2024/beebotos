@@ -1,7 +1,8 @@
-use crate::api::Theme;
 use gloo_storage::Storage;
 use leptos::prelude::*;
 use wasm_bindgen::JsCast;
+
+use crate::api::Theme;
 
 /// Theme manager
 #[derive(Clone)]

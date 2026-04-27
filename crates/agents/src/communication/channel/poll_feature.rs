@@ -1,7 +1,8 @@
 //! Cross-Platform Poll/Voting Feature
 //!
-//! Provides a unified polling mechanism across multiple communication platforms.
-//! Supports WhatsApp, Discord, Teams, and other platforms with interactive messages.
+//! Provides a unified polling mechanism across multiple communication
+//! platforms. Supports WhatsApp, Discord, Teams, and other platforms with
+//! interactive messages.
 //!
 //! # Features
 //! - Multi-option polls
@@ -10,15 +11,16 @@
 //! - Real-time results
 //! - Cross-platform compatibility
 
-
-use crate::communication::{Message, PlatformType};
-use crate::error::{AgentError, Result};
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
+
+use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 use tracing::{debug, info};
 use uuid::Uuid;
+
+use crate::communication::{Message, PlatformType};
+use crate::error::{AgentError, Result};
 
 /// Poll/Vote manager for cross-platform polling
 pub struct PollManager {
@@ -215,11 +217,8 @@ impl PollManager {
         // Initialize empty results
         {
             let mut results = self.results.write().await;
-            let option_votes: HashMap<String, u32> = poll
-                .options
-                .iter()
-                .map(|o| (o.id.clone(), 0))
-                .collect();
+            let option_votes: HashMap<String, u32> =
+                poll.options.iter().map(|o| (o.id.clone(), 0)).collect();
 
             results.insert(
                 poll_id,
@@ -266,11 +265,8 @@ impl PollManager {
             }
 
             // Validate options
-            let valid_option_ids: std::collections::HashSet<String> = poll
-                .options
-                .iter()
-                .map(|o| o.id.clone())
-                .collect();
+            let valid_option_ids: std::collections::HashSet<String> =
+                poll.options.iter().map(|o| o.id.clone()).collect();
 
             for option_id in &option_ids {
                 if !valid_option_ids.contains(option_id) {
@@ -587,7 +583,10 @@ impl PollFormatter for WhatsAppPollFormatter {
         for option in &poll.options {
             if let Some(result) = results {
                 let votes = result.option_votes.get(&option.id).copied().unwrap_or(0);
-                output.push_str(&format!("{} {} - {} votes\n", option.id, option.text, votes));
+                output.push_str(&format!(
+                    "{} {} - {} votes\n",
+                    option.id, option.text, votes
+                ));
             } else {
                 output.push_str(&format!("{} {}\n", option.id, option.text));
             }

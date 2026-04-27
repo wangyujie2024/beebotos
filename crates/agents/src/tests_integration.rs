@@ -26,7 +26,7 @@ mod tests {
 
         // Verify serialization
         let json = serde_json::to_string(&_config).expect("Should serialize");
-        let _deserialized: crate::state_manager::PersistedAgentConfig = 
+        let _deserialized: crate::state_manager::PersistedAgentConfig =
             serde_json::from_str(&json).expect("Should deserialize");
     }
 
@@ -34,6 +34,7 @@ mod tests {
     #[test]
     fn test_error_conversion() {
         use beebotos_core::{BeeBotOSError, ErrorCode};
+
         use crate::error::AgentError;
         use crate::error_integration::AgentErrorExt;
 
@@ -63,7 +64,7 @@ mod tests {
         use crate::metrics::MetricsCollector;
 
         let metrics = MetricsCollector::new();
-        
+
         // Record task metrics
         metrics.record_task_started("agent-1", "llm_chat");
         metrics.record_task_completed("agent-1", "llm_chat", 150);
@@ -119,36 +120,86 @@ mod tests {
     // Test state transitions
     #[tokio::test]
     async fn test_state_transitions() {
-        use crate::state_manager::{AgentStateManager, StateTransition, AgentState};
+        use crate::state_manager::{AgentState, AgentStateManager, StateTransition};
 
         let manager = AgentStateManager::new(None);
 
         // Register agent
-        manager.register_agent("test-agent", HashMap::new()).await.unwrap();
-        assert_eq!(manager.get_state("test-agent").await.unwrap(), AgentState::Registered);
+        manager
+            .register_agent("test-agent", HashMap::new())
+            .await
+            .unwrap();
+        assert_eq!(
+            manager.get_state("test-agent").await.unwrap(),
+            AgentState::Registered
+        );
 
         // Start -> Initializing
-        manager.transition("test-agent", StateTransition::Start).await.unwrap();
-        assert_eq!(manager.get_state("test-agent").await.unwrap(), AgentState::Initializing);
+        manager
+            .transition("test-agent", StateTransition::Start)
+            .await
+            .unwrap();
+        assert_eq!(
+            manager.get_state("test-agent").await.unwrap(),
+            AgentState::Initializing
+        );
 
         // InitializationComplete -> Idle
-        manager.transition("test-agent", StateTransition::InitializationComplete).await.unwrap();
-        assert_eq!(manager.get_state("test-agent").await.unwrap(), AgentState::Idle);
+        manager
+            .transition("test-agent", StateTransition::InitializationComplete)
+            .await
+            .unwrap();
+        assert_eq!(
+            manager.get_state("test-agent").await.unwrap(),
+            AgentState::Idle
+        );
 
         // BeginTask -> Working
-        manager.transition("test-agent", StateTransition::BeginTask { task_id: "task-1".to_string() }).await.unwrap();
-        assert!(matches!(manager.get_state("test-agent").await.unwrap(), AgentState::Working { .. }));
+        manager
+            .transition(
+                "test-agent",
+                StateTransition::BeginTask {
+                    task_id: "task-1".to_string(),
+                },
+            )
+            .await
+            .unwrap();
+        assert!(matches!(
+            manager.get_state("test-agent").await.unwrap(),
+            AgentState::Working { .. }
+        ));
 
         // CompleteTask -> Idle
-        manager.transition("test-agent", StateTransition::CompleteTask { success: true }).await.unwrap();
-        assert_eq!(manager.get_state("test-agent").await.unwrap(), AgentState::Idle);
+        manager
+            .transition(
+                "test-agent",
+                StateTransition::CompleteTask { success: true },
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            manager.get_state("test-agent").await.unwrap(),
+            AgentState::Idle
+        );
 
         // Shutdown -> Stopped
-        manager.transition("test-agent", StateTransition::Shutdown).await.unwrap();
-        assert_eq!(manager.get_state("test-agent").await.unwrap(), AgentState::ShuttingDown);
+        manager
+            .transition("test-agent", StateTransition::Shutdown)
+            .await
+            .unwrap();
+        assert_eq!(
+            manager.get_state("test-agent").await.unwrap(),
+            AgentState::ShuttingDown
+        );
 
-        manager.transition("test-agent", StateTransition::Stopped).await.unwrap();
-        assert_eq!(manager.get_state("test-agent").await.unwrap(), AgentState::Stopped);
+        manager
+            .transition("test-agent", StateTransition::Stopped)
+            .await
+            .unwrap();
+        assert_eq!(
+            manager.get_state("test-agent").await.unwrap(),
+            AgentState::Stopped
+        );
     }
 
     // Test invalid state transitions
@@ -157,13 +208,20 @@ mod tests {
         use crate::state_manager::{AgentStateManager, StateTransition};
 
         let manager = AgentStateManager::new(None);
-        manager.register_agent("test-agent", HashMap::new()).await.unwrap();
+        manager
+            .register_agent("test-agent", HashMap::new())
+            .await
+            .unwrap();
 
         // Cannot go from Registered directly to Working
-        let result = manager.transition(
-            "test-agent",
-            StateTransition::BeginTask { task_id: "task-1".to_string() }
-        ).await;
+        let result = manager
+            .transition(
+                "test-agent",
+                StateTransition::BeginTask {
+                    task_id: "task-1".to_string(),
+                },
+            )
+            .await;
         assert!(result.is_err());
     }
 
@@ -176,14 +234,34 @@ mod tests {
 
         // Register multiple agents
         for i in 0..3 {
-            manager.register_agent(format!("agent-{}", i), HashMap::new()).await.unwrap();
+            manager
+                .register_agent(format!("agent-{}", i), HashMap::new())
+                .await
+                .unwrap();
         }
 
         // Complete workflow for first agent
-        manager.transition("agent-0", StateTransition::Start).await.unwrap();
-        manager.transition("agent-0", StateTransition::InitializationComplete).await.unwrap();
-        manager.transition("agent-0", StateTransition::BeginTask { task_id: "t1".to_string() }).await.unwrap();
-        manager.transition("agent-0", StateTransition::CompleteTask { success: true }).await.unwrap();
+        manager
+            .transition("agent-0", StateTransition::Start)
+            .await
+            .unwrap();
+        manager
+            .transition("agent-0", StateTransition::InitializationComplete)
+            .await
+            .unwrap();
+        manager
+            .transition(
+                "agent-0",
+                StateTransition::BeginTask {
+                    task_id: "t1".to_string(),
+                },
+            )
+            .await
+            .unwrap();
+        manager
+            .transition("agent-0", StateTransition::CompleteTask { success: true })
+            .await
+            .unwrap();
 
         // Get stats
         let stats = manager.get_system_stats().await;
@@ -197,8 +275,9 @@ mod tests {
     // Test message bus creation
     #[tokio::test]
     async fn test_message_bus_creation() {
-        use beebotos_message_bus::{DefaultMessageBus, MemoryTransport, JsonCodec};
         use std::sync::Arc;
+
+        use beebotos_message_bus::{DefaultMessageBus, JsonCodec, MemoryTransport};
 
         // Create message bus - this just verifies the types are compatible
         let _bus: Arc<DefaultMessageBus<MemoryTransport>> = Arc::new(DefaultMessageBus::new(
@@ -211,22 +290,45 @@ mod tests {
     // Test agent health calculation
     #[tokio::test]
     async fn test_agent_health() {
-        use crate::state_manager::{AgentStateManager, AgentHealth, StateTransition};
+        use crate::state_manager::{AgentHealth, AgentStateManager, StateTransition};
 
         let manager = AgentStateManager::new(None);
-        manager.register_agent("healthy-agent", HashMap::new()).await.unwrap();
+        manager
+            .register_agent("healthy-agent", HashMap::new())
+            .await
+            .unwrap();
 
         // Start and complete initialization
-        manager.transition("healthy-agent", StateTransition::Start).await.unwrap();
-        manager.transition("healthy-agent", StateTransition::InitializationComplete).await.unwrap();
+        manager
+            .transition("healthy-agent", StateTransition::Start)
+            .await
+            .unwrap();
+        manager
+            .transition("healthy-agent", StateTransition::InitializationComplete)
+            .await
+            .unwrap();
 
         let health = manager.get_agent_health("healthy-agent").await.unwrap();
         assert!(matches!(health, AgentHealth::Healthy));
 
         // Register agent and transition to error state
-        manager.register_agent("error-agent", HashMap::new()).await.unwrap();
-        manager.transition("error-agent", StateTransition::Start).await.unwrap();
-        manager.transition("error-agent", StateTransition::Error { message: "test error".to_string() }).await.unwrap();
+        manager
+            .register_agent("error-agent", HashMap::new())
+            .await
+            .unwrap();
+        manager
+            .transition("error-agent", StateTransition::Start)
+            .await
+            .unwrap();
+        manager
+            .transition(
+                "error-agent",
+                StateTransition::Error {
+                    message: "test error".to_string(),
+                },
+            )
+            .await
+            .unwrap();
 
         let health = manager.get_agent_health("error-agent").await.unwrap();
         assert!(matches!(health, AgentHealth::Unhealthy { .. }));
@@ -241,12 +343,17 @@ mod tests {
 
         // Register agents
         for i in 0..3 {
-            manager.register_agent(format!("agent-{}", i), HashMap::new()).await.unwrap();
+            manager
+                .register_agent(format!("agent-{}", i), HashMap::new())
+                .await
+                .unwrap();
         }
 
         // Batch start all agents
         let agent_ids: Vec<String> = (0..3).map(|i| format!("agent-{}", i)).collect();
-        let results = manager.batch_transition(&agent_ids, StateTransition::Start).await;
+        let results = manager
+            .batch_transition(&agent_ids, StateTransition::Start)
+            .await;
 
         assert_eq!(results.len(), 3);
         for (id, result) in results {
@@ -258,7 +365,8 @@ mod tests {
     #[test]
     fn test_unified_error_macros() {
         use beebotos_core::{BeeBotOSError, ErrorCode};
-        use crate::{unified_err, unified_bail};
+
+        use crate::{unified_bail, unified_err};
 
         // Test unified_err macro
         let err = unified_err!(ErrorCode::Database, "test error");
@@ -279,8 +387,9 @@ mod tests {
     // Test transaction receipt
     #[test]
     fn test_transaction_receipt() {
-        use crate::wallet::TransactionReceipt;
         use beebotos_chain::compat::B256;
+
+        use crate::wallet::TransactionReceipt;
 
         let receipt = TransactionReceipt {
             tx_hash: B256::ZERO,
@@ -297,8 +406,9 @@ mod tests {
     // Test wallet events
     #[test]
     fn test_wallet_events() {
-        use crate::wallet::{WalletEvent, TransactionReceipt, TransferEvent};
         use beebotos_chain::compat::{Address, B256, U256};
+
+        use crate::wallet::{TransactionReceipt, TransferEvent, WalletEvent};
 
         let event = WalletEvent::TransactionConfirmed(TransactionReceipt {
             tx_hash: B256::ZERO,

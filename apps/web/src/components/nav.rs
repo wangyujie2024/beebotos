@@ -1,12 +1,13 @@
-use crate::i18n::{I18nContext, Locale};
-use crate::state::use_app_state;
-use crate::utils::ThemeToggle;
 use gloo_storage::Storage;
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 use leptos::view;
 use leptos_router::components::A;
 use leptos_router::hooks::use_navigate;
+
+use crate::i18n::{I18nContext, Locale};
+use crate::state::use_app_state;
+use crate::utils::ThemeToggle;
 
 #[component]
 pub fn Nav() -> impl IntoView {
@@ -70,11 +71,9 @@ pub fn Nav() -> impl IntoView {
 #[component]
 fn LanguageToggle(i18n: I18nContext) -> impl IntoView {
     let i18n_for_label = i18n.clone();
-    let locale_label = move || {
-        match i18n_for_label.get_locale() {
-            Locale::ZhCN => "🇨🇳 中文",
-            _ => "🇺🇸 EN",
-        }
+    let locale_label = move || match i18n_for_label.get_locale() {
+        Locale::ZhCN => "🇨🇳 中文",
+        _ => "🇺🇸 EN",
     };
 
     view! {
@@ -151,7 +150,10 @@ fn NavAuthSection() -> impl IntoView {
 }
 
 #[component]
-fn LogoutButton(app_state: StoredValue<crate::state::AppState>, i18n: I18nContext) -> impl IntoView {
+fn LogoutButton(
+    app_state: StoredValue<crate::state::AppState>,
+    i18n: I18nContext,
+) -> impl IntoView {
     // Get navigate inside the component to avoid Send issues
     let navigate = use_navigate();
     let i18n_label = i18n.clone();

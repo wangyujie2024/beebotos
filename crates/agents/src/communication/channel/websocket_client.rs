@@ -1,16 +1,18 @@
 //! Generic WebSocket Client
 //!
-//! Provides a reusable WebSocket client component for all channel implementations.
-//! Handles connection, reconnection, heartbeat, and message routing.
+//! Provides a reusable WebSocket client component for all channel
+//! implementations. Handles connection, reconnection, heartbeat, and message
+//! routing.
+
+use std::sync::Arc;
+use std::time::Duration;
 
 use async_trait::async_trait;
 use futures::{SinkExt, StreamExt};
-use std::sync::Arc;
-use std::time::Duration;
 use tokio::sync::{mpsc, RwLock};
 use tokio::time::{interval, timeout};
-use tokio_tungstenite::tungstenite::Message as WsMessage;
 use tokio_tungstenite::connect_async;
+use tokio_tungstenite::tungstenite::Message as WsMessage;
 use tracing::{debug, error, info, warn};
 
 use crate::communication::channel::ChannelEvent;
@@ -119,10 +121,7 @@ pub struct WebSocketClient {
 
 impl WebSocketClient {
     /// Create a new WebSocket client
-    pub fn new(
-        config: WebSocketConfig,
-        event_sender: mpsc::Sender<ChannelEvent>,
-    ) -> Self {
+    pub fn new(config: WebSocketConfig, event_sender: mpsc::Sender<ChannelEvent>) -> Self {
         Self {
             config,
             state: Arc::new(RwLock::new(WsConnectionState::Disconnected)),
@@ -152,9 +151,10 @@ impl WebSocketClient {
             if let Some(max) = self.config.max_reconnect_attempts {
                 if reconnect_attempts >= max {
                     error!("Max reconnect attempts ({}) reached", max);
-                    return Err(AgentError::platform(
-                        format!("WebSocket max reconnect attempts ({}) reached", max)
-                    ));
+                    return Err(AgentError::platform(format!(
+                        "WebSocket max reconnect attempts ({}) reached",
+                        max
+                    )));
                 }
             }
 
@@ -180,10 +180,10 @@ impl WebSocketClient {
                 Err(e) => {
                     warn!("WebSocket connection error: {}", e);
                     handler.on_error(e.to_string()).await.ok();
-                    
+
                     // Update state
                     *self.state.write().await = WsConnectionState::Disconnected;
-                    
+
                     // Wait before reconnecting
                     tokio::time::sleep(self.config.reconnect_interval).await;
                     reconnect_attempts += 1;
@@ -273,7 +273,7 @@ impl WebSocketClient {
 
         // Update state
         *self.state.write().await = WsConnectionState::Disconnected;
-        
+
         Ok(())
     }
 
@@ -292,10 +292,7 @@ pub mod utils {
             return base.to_string();
         }
 
-        let query: Vec<String> = params
-            .iter()
-            .map(|(k, v)| format!("{}={}", k, v))
-            .collect();
+        let query: Vec<String> = params.iter().map(|(k, v)| format!("{}={}", k, v)).collect();
 
         format!("{}?{}", base, query.join("&"))
     }

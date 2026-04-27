@@ -14,11 +14,12 @@
 //! cargo run -p beebotos-agents --example douyin_automation
 //! ```
 
+use std::time::Duration;
+
 use beebotos_agents::device::{
     AndroidController, AndroidDevice, AppLifecycle, DeviceAutomation, ElementLocator,
     HardwareButton, LocatorType,
 };
-use std::time::Duration;
 use tokio::time::sleep;
 
 // ===================== 配置区 =====================
@@ -50,18 +51,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 2. 对每台设备顺序执行测试
     let total = devices.len();
     for (idx, serial) in devices.iter().enumerate() {
-        println!(
-            "\n╔════════════════════════════════════════════════════════╗"
-        );
-        println!(
-            "║  开始测试设备 [{}/{}]: {}  ║",
-            idx + 1,
-            total,
-            serial
-        );
-        println!(
-            "╚════════════════════════════════════════════════════════╝\n"
-        );
+        println!("\n╔════════════════════════════════════════════════════════╗");
+        println!("║  开始测试设备 [{}/{}]: {}  ║", idx + 1, total, serial);
+        println!("╚════════════════════════════════════════════════════════╝\n");
 
         if let Err(e) = run_test_for_device(serial).await {
             eprintln!("\n❌ 设备 {} 测试失败: {}", serial, e);
@@ -172,9 +164,18 @@ async fn handle_startup_popups(device: &AndroidDevice) -> Result<(), Box<dyn std
     println!("   处理启动弹窗...");
 
     let popup_handlers = vec![
-        ("允许", vec!["允许", "同意", "确定", "好的", "我知道了", "进入"]),
-        ("协议", vec!["同意并继续", "同意协议", "已阅读并同意", "同意"]),
-        ("权限-位置", vec!["仅使用期间允许", "仅此次允许", "允许一次", "允许"]),
+        (
+            "允许",
+            vec!["允许", "同意", "确定", "好的", "我知道了", "进入"],
+        ),
+        (
+            "协议",
+            vec!["同意并继续", "同意协议", "已阅读并同意", "同意"],
+        ),
+        (
+            "权限-位置",
+            vec!["仅使用期间允许", "仅此次允许", "允许一次", "允许"],
+        ),
         ("权限-存储", vec!["允许访问", "允许"]),
         ("权限-通知", vec!["允许", "开启", "确定"]),
         ("权限-相机", vec!["仅使用期间允许", "允许"]),
@@ -190,8 +191,8 @@ async fn handle_startup_popups(device: &AndroidDevice) -> Result<(), Box<dyn std
 
         for (_popup_type, texts) in &popup_handlers {
             for text in texts {
-                let locator = ElementLocator::new(LocatorType::PartialText, *text)
-                    .with_timeout(2000);
+                let locator =
+                    ElementLocator::new(LocatorType::PartialText, *text).with_timeout(2000);
                 if device.element_exists(&locator).await.unwrap_or(false) {
                     println!("     检测到按钮 \"{}\"，尝试点击...", text);
                     if let Err(e) = device.tap_element(&locator).await {
@@ -259,7 +260,9 @@ async fn run_browse_test(
         }
 
         println!("   👆 上滑切换下一个视频");
-        device.swipe(center_x, start_y, center_x, end_y, 300).await?;
+        device
+            .swipe(center_x, start_y, center_x, end_y, 300)
+            .await?;
 
         let watch_time = 3000 + i * 500;
         sleep(Duration::from_millis(watch_time)).await;
@@ -297,7 +300,10 @@ async fn export_debug_info(
                 .join("\n");
 
             let log_content = if douyin_logs.is_empty() {
-                format!("// 未过滤到抖音专属日志，以下是完整最近 200 行日志:\n{}", logs)
+                format!(
+                    "// 未过滤到抖音专属日志，以下是完整最近 200 行日志:\n{}",
+                    logs
+                )
             } else {
                 douyin_logs
             };

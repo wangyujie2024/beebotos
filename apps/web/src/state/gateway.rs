@@ -1,7 +1,8 @@
 //! Gateway 连接状态管理
 
-use crate::gateway::{GatewayConfig, GatewayError, GatewayScope, GatewayStatus};
 use leptos::prelude::*;
+
+use crate::gateway::{GatewayConfig, GatewayError, GatewayScope, GatewayStatus};
 
 /// Gateway 连接状态
 #[derive(Clone, Debug)]
@@ -149,8 +150,10 @@ impl GatewayUIState {
     }
 
     pub fn open_connection_settings(&self, current_config: &GatewayConfig) {
-        self.editing_api_url.set(current_config.api_base_url.clone());
-        self.editing_ws_url.set(current_config.websocket_url.clone());
+        self.editing_api_url
+            .set(current_config.api_base_url.clone());
+        self.editing_ws_url
+            .set(current_config.websocket_url.clone());
         self.show_connection_settings.set(true);
     }
 
@@ -167,7 +170,11 @@ impl GatewayUIState {
     }
 
     pub fn add_log(&self, message: impl Into<String>) {
-        let msg = format!("[{}] {}", chrono::Local::now().format("%H:%M:%S"), message.into());
+        let msg = format!(
+            "[{}] {}",
+            chrono::Local::now().format("%H:%M:%S"),
+            message.into()
+        );
         self.connection_logs.update(|logs| {
             logs.push(msg);
             if logs.len() > 100 {

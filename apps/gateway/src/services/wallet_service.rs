@@ -5,10 +5,8 @@
 
 use std::sync::Arc;
 
-use beebotos_chain::{
-    compat::{Address, ChainClientTrait, U256, TxHash, Bytes},
-    wallet::{Wallet as ChainWallet},
-};
+use beebotos_chain::compat::{Address, Bytes, ChainClientTrait, TxHash, U256};
+use beebotos_chain::wallet::Wallet as ChainWallet;
 use tracing::{info, warn};
 
 use crate::config::BlockchainConfig;
@@ -152,19 +150,24 @@ impl WalletService {
 
     /// Get wallet info including balance
     pub async fn get_wallet_info(&self) -> Result<WalletInfo, AppError> {
-        let client = self.client.as_ref()
+        let client = self
+            .client
+            .as_ref()
             .ok_or_else(|| AppError::Configuration("Chain client not initialized".into()))?;
-        
-        let wallet = self.wallet.as_ref()
+
+        let wallet = self
+            .wallet
+            .as_ref()
             .ok_or_else(|| AppError::Configuration("Wallet not initialized".into()))?;
 
         let address = wallet.address();
-        
+
         // Get balance and nonce from chain
         let (balance, nonce) = tokio::try_join!(
             client.get_balance(address),
             client.get_transaction_count(address)
-        ).map_err(|e| AppError::Chain(format!("Failed to fetch wallet info: {}", e)))?;
+        )
+        .map_err(|e| AppError::Chain(format!("Failed to fetch wallet info: {}", e)))?;
 
         Ok(WalletInfo {
             address,
@@ -176,20 +179,27 @@ impl WalletService {
 
     /// Get balance for any address
     pub async fn get_balance(&self, address: Address) -> Result<U256, AppError> {
-        let client = self.client.as_ref()
+        let client = self
+            .client
+            .as_ref()
             .ok_or_else(|| AppError::Configuration("Chain client not initialized".into()))?;
 
-        client.get_balance(address)
+        client
+            .get_balance(address)
             .await
             .map_err(|e| AppError::Chain(format!("Failed to get balance: {}", e)))
     }
 
     /// Send transaction
     pub async fn send_transaction(&self, _request: TransactionRequest) -> Result<TxHash, AppError> {
-        let _client = self.client.as_ref()
+        let _client = self
+            .client
+            .as_ref()
             .ok_or_else(|| AppError::Configuration("Chain client not initialized".into()))?;
-        
-        let _wallet = self.wallet.as_ref()
+
+        let _wallet = self
+            .wallet
+            .as_ref()
             .ok_or_else(|| AppError::Configuration("Wallet not initialized for signing".into()))?;
 
         // TODO: Implement proper transaction sending
@@ -209,21 +219,19 @@ impl WalletService {
             data,
             value,
             gas_limit: None,
-        }).await
+        })
+        .await
     }
 
     /// Transfer native tokens
-    pub async fn transfer(
-        &self,
-        to: Address,
-        amount: U256,
-    ) -> Result<TxHash, AppError> {
+    pub async fn transfer(&self, to: Address, amount: U256) -> Result<TxHash, AppError> {
         self.send_transaction(TransactionRequest {
             to,
             data: Bytes::new(),
             value: amount,
             gas_limit: None,
-        }).await
+        })
+        .await
     }
 
     /// Estimate gas for transaction
@@ -250,10 +258,7 @@ impl WalletService {
 }
 
 /// Initialize wallet from mnemonic
-async fn initialize_wallet(
-    _mnemonic: &str,
-    _chain_id: u64,
-) -> anyhow::Result<ChainWallet> {
+async fn initialize_wallet(_mnemonic: &str, _chain_id: u64) -> anyhow::Result<ChainWallet> {
     // TODO: Implement proper wallet initialization
     // For now, create a random wallet
     Ok(ChainWallet::random())
@@ -274,9 +279,12 @@ mod tests {
         };
 
         let wallet_config = WalletServiceConfig::from(&blockchain_config);
-        
+
         assert_eq!(wallet_config.rpc_url, "https://rpc.example.com");
         assert_eq!(wallet_config.chain_id, 1);
-        assert_eq!(wallet_config.wallet_mnemonic, Some("test mnemonic".to_string()));
+        assert_eq!(
+            wallet_config.wallet_mnemonic,
+            Some("test mnemonic".to_string())
+        );
     }
 }

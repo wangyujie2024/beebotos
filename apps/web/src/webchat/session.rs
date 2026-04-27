@@ -2,10 +2,12 @@
 //!
 //! 提供会话创建、持久化、历史记录管理等功能
 
-use super::{ChatSession, SessionContext, SessionFilter, TokenUsage};
+use std::collections::HashMap;
+
 use gloo_storage::{LocalStorage, Storage};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+
+use super::{ChatSession, SessionContext, SessionFilter, TokenUsage};
 
 /// 会话存储键
 const SESSION_STORAGE_KEY: &str = "beebotos_webchat_sessions";
@@ -310,7 +312,7 @@ impl SessionManager {
             // In non-wasm environment, just return Ok (no persistent storage)
             return Ok(());
         }
-        
+
         #[cfg(target_arch = "wasm32")]
         {
             let storage_data = SessionStorage {
@@ -337,7 +339,7 @@ impl SessionManager {
             // In non-wasm environment, just return Ok (no persistent storage)
             return Ok(());
         }
-        
+
         #[cfg(target_arch = "wasm32")]
         {
             let json: String = LocalStorage::get(SESSION_STORAGE_KEY)
@@ -372,8 +374,8 @@ impl SessionManager {
 
     /// 导入会话
     pub fn import_sessions(&mut self, json: &str) -> Result<usize, SessionError> {
-        let storage_data: SessionStorage = serde_json::from_str(json)
-            .map_err(|e| SessionError::Serialization(e.to_string()))?;
+        let storage_data: SessionStorage =
+            serde_json::from_str(json).map_err(|e| SessionError::Serialization(e.to_string()))?;
 
         let count = storage_data.sessions.len();
 
@@ -456,8 +458,7 @@ impl SessionPersistence for LocalStoragePersistence {
         let json = serde_json::to_string(session)
             .map_err(|e| SessionError::Serialization(e.to_string()))?;
 
-        LocalStorage::set(&key, json)
-            .map_err(|e| SessionError::Storage(e.to_string()))?;
+        LocalStorage::set(&key, json).map_err(|e| SessionError::Storage(e.to_string()))?;
 
         Ok(())
     }

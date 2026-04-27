@@ -2,12 +2,14 @@
 //!
 //! Routes messages between agents with rate limiting and delivery guarantees.
 
-use crate::error::{KernelError, Result};
-use parking_lot::Mutex;
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
+
+use parking_lot::Mutex;
 use tokio::sync::mpsc;
 use tracing::{debug, trace, warn};
+
+use crate::error::{KernelError, Result};
 
 /// Message envelope for inter-agent communication
 #[derive(Debug, Clone)]
@@ -171,7 +173,8 @@ pub struct MessageRouter {
     mailboxes: Mutex<HashMap<String, AgentMailbox>>,
     /// Global message statistics
     global_stats: Mutex<RouterStats>,
-    /// Default rate limit settings - reserved for future rate limiting implementation
+    /// Default rate limit settings - reserved for future rate limiting
+    /// implementation
     #[allow(dead_code)]
     _default_rate_limit: (u32, u64), // (max_messages, window_ms)
 }

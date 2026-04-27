@@ -2,10 +2,11 @@
 //!
 //! Supports runtime configuration updates with change detection.
 
-use super::{BrainConfig, ConfigBuilder, ConfigError};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, SystemTime};
+
+use super::{BrainConfig, ConfigBuilder, ConfigError};
 
 /// Hot-reloadable configuration manager
 #[derive(Debug)]

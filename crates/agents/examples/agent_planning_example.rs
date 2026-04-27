@@ -1,13 +1,14 @@
 //! Agent with Planning Integration Example
 //!
-//! 🆕 PLANNING FIX: This example demonstrates how to use the integrated planning module
-//! with the Agent for autonomous task planning and execution.
+//! 🆕 PLANNING FIX: This example demonstrates how to use the integrated
+//! planning module with the Agent for autonomous task planning and execution.
+
+use std::sync::Arc;
 
 use beebotos_agents::{
     Agent, AgentConfig, ExecutionConfig, ExecutionStrategy, PlanExecutor, PlanStrategy,
     PlanningEngine, PlanningResult,
 };
-use std::sync::Arc;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -34,9 +35,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Example 1: Direct plan creation and execution
     println!("📋 Example 1: Direct Plan Creation");
     let plan = agent
-        .create_plan("Analyze system logs and generate report", PlanStrategy::ReAct)
+        .create_plan(
+            "Analyze system logs and generate report",
+            PlanStrategy::ReAct,
+        )
         .await?;
-    println!("Created plan: {} with {} steps", plan.name, plan.steps.len());
+    println!(
+        "Created plan: {} with {} steps",
+        plan.name,
+        plan.steps.len()
+    );
 
     // Example 2: Execute plan
     println!("\n📋 Example 2: Execute Plan");
@@ -50,17 +58,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Example 4: Execute task with automatic planning (complex task)
     println!("\n📋 Example 4: Automatic Planning for Complex Task");
-    use beebotos_agents::{Task, TaskType};
     use std::collections::HashMap;
+
+    use beebotos_agents::{Task, TaskType};
 
     let complex_task = Task {
         id: "task-001".to_string(),
         task_type: TaskType::Custom("complex_analysis".to_string()),
-        input: "Design and implement a user authentication system with the following requirements:\n\
-                1. Support OAuth2 and SAML\n\
-                2. Implement JWT token management\n\
-                3. Add rate limiting\n\
-                4. Create audit logs".to_string(),
+        input: "Design and implement a user authentication system with the following \
+                requirements:\n1. Support OAuth2 and SAML\n2. Implement JWT token management\n3. \
+                Add rate limiting\n4. Create audit logs"
+            .to_string(),
         parameters: {
             let mut params = HashMap::new();
             params.insert("use_planning".to_string(), "true".to_string());

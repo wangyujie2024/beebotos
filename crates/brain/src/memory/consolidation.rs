@@ -2,8 +2,9 @@
 //!
 //! Sleep mode: transfers memories from STM to LTM.
 
-use super::{EpisodicMemory, SemanticMemory, ShortTermMemory};
 use serde::{Deserialize, Serialize};
+
+use super::{EpisodicMemory, SemanticMemory, ShortTermMemory};
 
 /// Configuration for memory consolidation
 #[derive(Debug, Clone, Serialize, Deserialize)]

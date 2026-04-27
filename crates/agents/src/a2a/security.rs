@@ -1,14 +1,12 @@
+use aes_gcm::aead::{Aead, KeyInit};
+use aes_gcm::{Aes256Gcm, Key, Nonce};
+use hkdf::Hkdf;
 use p256::ecdsa::signature::{Signer, Verifier};
 use p256::ecdsa::{Signature, SigningKey, VerifyingKey};
 use p256::elliptic_curve::sec1::{FromEncodedPoint, ToEncodedPoint};
 use p256::{EncodedPoint, PublicKey};
 use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
-use aes_gcm::{
-    aead::{Aead, KeyInit},
-    Aes256Gcm, Key, Nonce,
-};
-use hkdf::Hkdf;
 use sha2::Sha256;
 
 pub struct A2ASecurity {
@@ -102,13 +100,12 @@ impl A2ASecurity {
         signature: &[u8],
         public_key: &[u8],
     ) -> Result<(), SecurityError> {
-        let encoded_point = EncodedPoint::from_bytes(public_key)
-            .map_err(|_e| SecurityError::InvalidPublicKey)?;
+        let encoded_point =
+            EncodedPoint::from_bytes(public_key).map_err(|_e| SecurityError::InvalidPublicKey)?;
         let verifying_key = VerifyingKey::from_encoded_point(&encoded_point)
             .map_err(|_| SecurityError::InvalidPublicKey)?;
 
-        let sig = Signature::from_slice(signature)
-            .map_err(|_| SecurityError::InvalidSignature)?;
+        let sig = Signature::from_slice(signature).map_err(|_| SecurityError::InvalidSignature)?;
 
         verifying_key
             .verify(data, &sig)
@@ -149,7 +146,7 @@ impl A2ASecurity {
     }
 
     /// Encrypt data for a specific recipient using their public key
-    /// 
+    ///
     /// Uses an ECIES-like scheme:
     /// 1. Generate ephemeral key pair
     /// 2. Derive shared secret using ECDH
@@ -192,27 +189,22 @@ impl A2ASecurity {
             .map_err(|e| SecurityError::EncryptionFailed(e.to_string()))?;
 
         Ok(EncryptedMessage {
-            ephemeral_public_key: ephemeral_public
-                .to_encoded_point(false)
-                .as_bytes()
-                .to_vec(),
+            ephemeral_public_key: ephemeral_public.to_encoded_point(false).as_bytes().to_vec(),
             ciphertext,
             nonce: nonce_bytes.to_vec(),
         })
     }
 
     /// Decrypt data encrypted for us
-    /// 
+    ///
     /// Uses our private key to derive the shared secret and decrypt
-    pub fn decrypt(
-        &self,
-        encrypted: &EncryptedMessage,
-    ) -> Result<Vec<u8>, SecurityError> {
+    pub fn decrypt(&self, encrypted: &EncryptedMessage) -> Result<Vec<u8>, SecurityError> {
         // Parse ephemeral public key
         let encoded_point = EncodedPoint::from_bytes(&encrypted.ephemeral_public_key)
             .map_err(|_| SecurityError::InvalidPublicKey)?;
-        let ephemeral_public: PublicKey = Option::from(PublicKey::from_encoded_point(&encoded_point))
-            .ok_or(SecurityError::InvalidPublicKey)?;
+        let ephemeral_public: PublicKey =
+            Option::from(PublicKey::from_encoded_point(&encoded_point))
+                .ok_or(SecurityError::InvalidPublicKey)?;
 
         // Derive shared secret using our private key
         let shared_secret = p256::ecdh::diffie_hellman(
@@ -272,9 +264,13 @@ mod tests {
         let public_key = security.public_key();
 
         // Verify with correct key
-        assert!(security.verify_signature(data, &signature, &public_key).is_ok());
+        assert!(security
+            .verify_signature(data, &signature, &public_key)
+            .is_ok());
 
         // Verify with wrong data should fail
-        assert!(security.verify_signature(b"Wrong data", &signature, &public_key).is_err());
+        assert!(security
+            .verify_signature(b"Wrong data", &signature, &public_key)
+            .is_err());
     }
 }

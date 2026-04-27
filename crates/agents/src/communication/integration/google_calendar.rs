@@ -10,11 +10,13 @@
 //! - Manage recurring events
 //! - OAuth2 authentication
 
-use crate::error::{AgentError, Result};
+use std::collections::HashMap;
+
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use tracing::{debug, info};
+
+use crate::error::{AgentError, Result};
 
 /// Google Calendar API client
 pub struct GoogleCalendarClient {
@@ -464,13 +466,20 @@ impl GoogleCalendarClient {
             .and_then(|v| serde_json::from_value(v.clone()).ok())
             .unwrap_or_default();
 
-        debug!("Listed {} events from calendar {}", events.len(), calendar_id);
+        debug!(
+            "Listed {} events from calendar {}",
+            events.len(),
+            calendar_id
+        );
         Ok(events)
     }
 
     /// Get a single event
     pub async fn get_event(&self, calendar_id: &str, event_id: &str) -> Result<CalendarEvent> {
-        let url = format!("{}/calendars/{}/events/{}", self.base_url, calendar_id, event_id);
+        let url = format!(
+            "{}/calendars/{}/events/{}",
+            self.base_url, calendar_id, event_id
+        );
 
         let response = self
             .http_client
@@ -537,7 +546,10 @@ impl GoogleCalendarClient {
         event_id: &str,
         event: CalendarEvent,
     ) -> Result<CalendarEvent> {
-        let url = format!("{}/calendars/{}/events/{}", self.base_url, calendar_id, event_id);
+        let url = format!(
+            "{}/calendars/{}/events/{}",
+            self.base_url, calendar_id, event_id
+        );
 
         let response = self
             .http_client
@@ -567,7 +579,10 @@ impl GoogleCalendarClient {
 
     /// Delete an event
     pub async fn delete_event(&self, calendar_id: &str, event_id: &str) -> Result<()> {
-        let url = format!("{}/calendars/{}/events/{}", self.base_url, calendar_id, event_id);
+        let url = format!(
+            "{}/calendars/{}/events/{}",
+            self.base_url, calendar_id, event_id
+        );
 
         let response = self
             .http_client
@@ -797,11 +812,7 @@ impl CalendarEventBuilder {
     }
 
     /// Add attendee
-    pub fn add_attendee(
-        mut self,
-        email: impl Into<String>,
-        display_name: Option<String>,
-    ) -> Self {
+    pub fn add_attendee(mut self, email: impl Into<String>, display_name: Option<String>) -> Self {
         self.event.attendees.push(Attendee {
             email: email.into(),
             display_name,

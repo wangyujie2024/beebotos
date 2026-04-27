@@ -1,7 +1,8 @@
 //! 沙箱卡片组件
 
-use crate::browser::sandbox::{BrowserSandbox, SandboxStatus};
 use leptos::prelude::*;
+
+use crate::browser::sandbox::{BrowserSandbox, SandboxStatus};
 
 /// 沙箱卡片组件
 #[component]

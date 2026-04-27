@@ -2,11 +2,12 @@
 
 #![allow(dead_code)]
 
+use std::pin::Pin;
+use std::time::Duration;
+
 use anyhow::{anyhow, Result};
 use futures::Stream;
 use reqwest::{header, Client};
-use std::pin::Pin;
-use std::time::Duration;
 
 use crate::logging::logger;
 use crate::network::{DefaultRequestInterceptor, LoggingInterceptor, NetworkClient, NetworkConfig};
@@ -18,7 +19,8 @@ pub struct ApiClient {
 }
 
 impl ApiClient {
-    /// Create HTTP client using NetworkClient with production-ready configuration
+    /// Create HTTP client using NetworkClient with production-ready
+    /// configuration
     fn create_http_client(api_key: &str) -> Result<Client> {
         let config = NetworkConfig::default();
         let mut network_client = NetworkClient::new(config)?;
@@ -54,9 +56,8 @@ impl ApiClient {
         // Enforce HTTPS in production
         if !base_url.starts_with("https://") && !Self::is_local_development(&base_url) {
             return Err(anyhow!(
-                "HTTPS is required for production API endpoints. \
-                 Current URL: {}. \
-                 For local development only, use localhost or 127.0.0.1",
+                "HTTPS is required for production API endpoints. Current URL: {}. For local \
+                 development only, use localhost or 127.0.0.1",
                 base_url
             ));
         }
@@ -114,18 +115,18 @@ impl ApiClient {
     pub(crate) fn build_url(&self, path: &str) -> String {
         format!("{}{}", self.base_url, path)
     }
-    
+
     pub(crate) fn base_url(&self) -> &str {
         &self.base_url
     }
-    
+
     pub(crate) fn http(&self) -> &reqwest::Client {
         &self.http
     }
 
     /// Check if URL is for local development (allows HTTP)
     fn is_local_development(url: &str) -> bool {
-        url.contains("localhost") 
+        url.contains("localhost")
             || url.contains("127.0.0.1")
             || url.contains("::1")
             || url.contains("192.168.")
@@ -976,31 +977,47 @@ impl ChainClient {
 
     pub async fn get_status(&self) -> Result<ChainStatus> {
         let url = self.client.build_url("/chain/status");
-        let resp = self.client.http().get(&url).headers(self.client.headers()?).send().await?;
-        
+        let resp = self
+            .client
+            .http()
+            .get(&url)
+            .headers(self.client.headers()?)
+            .send()
+            .await?;
+
         if !resp.status().is_success() {
             let status = resp.status();
             let text = resp.text().await.unwrap_or_default();
             return Err(anyhow!("Failed to get chain status ({}): {}", status, text));
         }
-        
+
         Ok(resp.json().await?)
     }
 
     pub async fn get_balance(&self, address: &str, token: Option<&str>) -> Result<String> {
-        let mut url = format!("{}/chain/balance?address={}", self.client.build_url("").trim_end_matches('/'), address);
+        let mut url = format!(
+            "{}/chain/balance?address={}",
+            self.client.build_url("").trim_end_matches('/'),
+            address
+        );
         if let Some(t) = token {
             url.push_str(&format!("&token={}", t));
         }
-        
-        let resp = self.client.http().get(&url).headers(self.client.headers()?).send().await?;
-        
+
+        let resp = self
+            .client
+            .http()
+            .get(&url)
+            .headers(self.client.headers()?)
+            .send()
+            .await?;
+
         if !resp.status().is_success() {
             let status = resp.status();
             let text = resp.text().await.unwrap_or_default();
             return Err(anyhow!("Failed to get balance ({}): {}", status, text));
         }
-        
+
         let result: serde_json::Value = resp.json().await?;
         Ok(result["balance"].as_str().unwrap_or("0").to_string())
     }
@@ -1012,20 +1029,22 @@ impl ChainClient {
             "amount": amount,
             "token": token,
         });
-        
-        let resp = self.client.http()
+
+        let resp = self
+            .client
+            .http()
             .post(&url)
             .headers(self.client.headers()?)
             .json(&body)
             .send()
             .await?;
-        
+
         if !resp.status().is_success() {
             let status = resp.status();
             let text = resp.text().await.unwrap_or_default();
             return Err(anyhow!("Transfer failed ({}): {}", status, text));
         }
-        
+
         let result: serde_json::Value = resp.json().await?;
         Ok(result["tx_hash"].as_str().unwrap_or("").to_string())
     }
@@ -1034,15 +1053,21 @@ impl ChainClient {
         let url = self.client.build_url("/chain/chain");
         let start = std::time::Instant::now();
         let timeout = Duration::from_secs(120);
-        
+
         loop {
             if start.elapsed() > timeout {
                 return Err(anyhow!("Timeout waiting for confirmation"));
             }
-            
+
             let check_url = format!("{}/tx/{}", url.trim_end_matches("/chain"), tx_hash);
-            let resp = self.client.http().get(&check_url).headers(self.client.headers()?).send().await?;
-            
+            let resp = self
+                .client
+                .http()
+                .get(&check_url)
+                .headers(self.client.headers()?)
+                .send()
+                .await?;
+
             if resp.status().is_success() {
                 let result: serde_json::Value = resp.json().await?;
                 if result["confirmed"].as_bool().unwrap_or(false) {
@@ -1051,7 +1076,7 @@ impl ChainClient {
                     });
                 }
             }
-            
+
             tokio::time::sleep(Duration::from_secs(2)).await;
         }
     }
@@ -1062,20 +1087,22 @@ impl ChainClient {
             "artifact": artifact,
             "args": args,
         });
-        
-        let resp = self.client.http()
+
+        let resp = self
+            .client
+            .http()
             .post(&url)
             .headers(self.client.headers()?)
             .json(&body)
             .send()
             .await?;
-        
+
         if !resp.status().is_success() {
             let status = resp.status();
             let text = resp.text().await.unwrap_or_default();
             return Err(anyhow!("Deploy failed ({}): {}", status, text));
         }
-        
+
         let result: serde_json::Value = resp.json().await?;
         Ok(result["address"].as_str().unwrap_or("").to_string())
     }
@@ -1086,20 +1113,22 @@ impl ChainClient {
             "address": address,
             "artifact": artifact,
         });
-        
-        let resp = self.client.http()
+
+        let resp = self
+            .client
+            .http()
             .post(&url)
             .headers(self.client.headers()?)
             .json(&body)
             .send()
             .await?;
-        
+
         if !resp.status().is_success() {
             let status = resp.status();
             let text = resp.text().await.unwrap_or_default();
             return Err(anyhow!("Verification failed ({}): {}", status, text));
         }
-        
+
         Ok(())
     }
 
@@ -1110,20 +1139,22 @@ impl ChainClient {
             "function": function,
             "args": args,
         });
-        
-        let resp = self.client.http()
+
+        let resp = self
+            .client
+            .http()
             .post(&url)
             .headers(self.client.headers()?)
             .json(&body)
             .send()
             .await?;
-        
+
         if !resp.status().is_success() {
             let status = resp.status();
             let text = resp.text().await.unwrap_or_default();
             return Err(anyhow!("Call failed ({}): {}", status, text));
         }
-        
+
         let result: serde_json::Value = resp.json().await?;
         Ok(result["result"].as_str().unwrap_or("").to_string())
     }
@@ -1140,20 +1171,22 @@ impl ChainClient {
             "function": function,
             "args": args,
         });
-        
-        let resp = self.client.http()
+
+        let resp = self
+            .client
+            .http()
             .post(&url)
             .headers(self.client.headers()?)
             .json(&body)
             .send()
             .await?;
-        
+
         if !resp.status().is_success() {
             let status = resp.status();
             let text = resp.text().await.unwrap_or_default();
             return Err(anyhow!("Transaction failed ({}): {}", status, text));
         }
-        
+
         let result: serde_json::Value = resp.json().await?;
         Ok(result["tx_hash"].as_str().unwrap_or("").to_string())
     }
@@ -1164,9 +1197,12 @@ impl ChainClient {
         event: Option<&str>,
         from_block: Option<u64>,
     ) -> Result<Pin<Box<dyn Stream<Item = EventInfo> + Send>>> {
-        let mut url = format!("{}/chain/events/stream", self.client.build_url("").trim_end_matches('/'));
+        let mut url = format!(
+            "{}/chain/events/stream",
+            self.client.build_url("").trim_end_matches('/')
+        );
         let mut params = Vec::new();
-        
+
         if let Some(c) = contract {
             params.push(format!("contract={}", c));
         }
@@ -1176,24 +1212,26 @@ impl ChainClient {
         if let Some(b) = from_block {
             params.push(format!("from_block={}", b));
         }
-        
+
         if !params.is_empty() {
             url.push('?');
             url.push_str(&params.join("&"));
         }
-        
-        let resp = self.client.http()
+
+        let resp = self
+            .client
+            .http()
             .get(&url)
             .headers(self.client.headers()?)
             .send()
             .await?;
-        
+
         if !resp.status().is_success() {
             let status = resp.status();
             let text = resp.text().await.unwrap_or_default();
             return Err(anyhow!("Event subscription failed ({}): {}", status, text));
         }
-        
+
         // Return a stream that yields events
         use futures::StreamExt;
         let stream = resp.bytes_stream().filter_map(|chunk| async move {
@@ -1206,26 +1244,28 @@ impl ChainClient {
                 Err(_) => None,
             }
         });
-        
+
         Ok(Box::pin(stream))
     }
 
     #[allow(dead_code)]
     pub async fn watch_blocks(&self) -> Result<Pin<Box<dyn Stream<Item = BlockInfo> + Send>>> {
         let url = self.client.build_url("/chain/blocks/stream");
-        
-        let resp = self.client.http()
+
+        let resp = self
+            .client
+            .http()
             .get(&url)
             .headers(self.client.headers()?)
             .send()
             .await?;
-        
+
         if !resp.status().is_success() {
             let status = resp.status();
             let text = resp.text().await.unwrap_or_default();
             return Err(anyhow!("Block subscription failed ({}): {}", status, text));
         }
-        
+
         use futures::StreamExt;
         let stream = resp.bytes_stream().filter_map(|chunk| async move {
             match chunk {
@@ -1237,7 +1277,7 @@ impl ChainClient {
                 Err(_) => None,
             }
         });
-        
+
         Ok(Box::pin(stream))
     }
 
@@ -1248,20 +1288,22 @@ impl ChainClient {
             "tx_hash": tx_hash,
             "description": desc,
         });
-        
-        let resp = self.client.http()
+
+        let resp = self
+            .client
+            .http()
             .post(&url)
             .headers(self.client.headers()?)
             .json(&body)
             .send()
             .await?;
-        
+
         if !resp.status().is_success() {
             let status = resp.status();
             let text = resp.text().await.unwrap_or_default();
             return Err(anyhow!("Failed to store metadata ({}): {}", status, text));
         }
-        
+
         Ok(())
     }
 
@@ -1279,79 +1321,101 @@ impl ChainClient {
             "token": token,
             "duration": duration,
         });
-        
-        let resp = self.client.http()
+
+        let resp = self
+            .client
+            .http()
             .post(&url)
             .headers(self.client.headers()?)
             .json(&body)
             .send()
             .await?;
-        
+
         if !resp.status().is_success() {
             let status = resp.status();
             let text = resp.text().await.unwrap_or_default();
             return Err(anyhow!("Failed to create mandate ({}): {}", status, text));
         }
-        
+
         Ok(resp.json().await?)
     }
 
     pub async fn list_mandates_as_grantor(&self) -> Result<Vec<MandateInfo>> {
         let url = self.client.build_url("/chain/mandates?role=grantor");
-        let resp = self.client.http().get(&url).headers(self.client.headers()?).send().await?;
-        
+        let resp = self
+            .client
+            .http()
+            .get(&url)
+            .headers(self.client.headers()?)
+            .send()
+            .await?;
+
         if !resp.status().is_success() {
             let status = resp.status();
             let text = resp.text().await.unwrap_or_default();
             return Err(anyhow!("Failed to list mandates ({}): {}", status, text));
         }
-        
+
         let result: serde_json::Value = resp.json().await?;
         Ok(serde_json::from_value(result["mandates"].clone())?)
     }
 
     pub async fn list_mandates_as_grantee(&self) -> Result<Vec<MandateInfo>> {
         let url = self.client.build_url("/chain/mandates?role=grantee");
-        let resp = self.client.http().get(&url).headers(self.client.headers()?).send().await?;
-        
+        let resp = self
+            .client
+            .http()
+            .get(&url)
+            .headers(self.client.headers()?)
+            .send()
+            .await?;
+
         if !resp.status().is_success() {
             let status = resp.status();
             let text = resp.text().await.unwrap_or_default();
             return Err(anyhow!("Failed to list mandates ({}): {}", status, text));
         }
-        
+
         let result: serde_json::Value = resp.json().await?;
         Ok(serde_json::from_value(result["mandates"].clone())?)
     }
 
     pub async fn list_all_mandates(&self) -> Result<Vec<MandateInfo>> {
         let url = self.client.build_url("/chain/mandates");
-        let resp = self.client.http().get(&url).headers(self.client.headers()?).send().await?;
-        
+        let resp = self
+            .client
+            .http()
+            .get(&url)
+            .headers(self.client.headers()?)
+            .send()
+            .await?;
+
         if !resp.status().is_success() {
             let status = resp.status();
             let text = resp.text().await.unwrap_or_default();
             return Err(anyhow!("Failed to list mandates ({}): {}", status, text));
         }
-        
+
         let result: serde_json::Value = resp.json().await?;
         Ok(serde_json::from_value(result["mandates"].clone())?)
     }
 
     pub async fn revoke_mandate(&self, id: &str) -> Result<()> {
         let url = format!("{}/{}", self.client.build_url("/chain/mandates"), id);
-        let resp = self.client.http()
+        let resp = self
+            .client
+            .http()
             .delete(&url)
             .headers(self.client.headers()?)
             .send()
             .await?;
-        
+
         if !resp.status().is_success() {
             let status = resp.status();
             let text = resp.text().await.unwrap_or_default();
             return Err(anyhow!("Failed to revoke mandate ({}): {}", status, text));
         }
-        
+
         Ok(())
     }
 
@@ -1360,20 +1424,29 @@ impl ChainClient {
         token: Option<&str>,
         limit: usize,
     ) -> Result<Vec<TransactionInfo>> {
-        let mut url = format!("{}/chain/transactions?limit={}", 
-            self.client.build_url("").trim_end_matches('/'), limit);
+        let mut url = format!(
+            "{}/chain/transactions?limit={}",
+            self.client.build_url("").trim_end_matches('/'),
+            limit
+        );
         if let Some(t) = token {
             url.push_str(&format!("&token={}", t));
         }
-        
-        let resp = self.client.http().get(&url).headers(self.client.headers()?).send().await?;
-        
+
+        let resp = self
+            .client
+            .http()
+            .get(&url)
+            .headers(self.client.headers()?)
+            .send()
+            .await?;
+
         if !resp.status().is_success() {
             let status = resp.status();
             let text = resp.text().await.unwrap_or_default();
             return Err(anyhow!("Failed to get transactions ({}): {}", status, text));
         }
-        
+
         let result: serde_json::Value = resp.json().await?;
         Ok(serde_json::from_value(result["transactions"].clone())?)
     }
@@ -1734,7 +1807,8 @@ mod tests {
 }
 // ============================================================================
 // Extended API client implementations for new CLI command modules
-// This module provides client implementations for Channel, Memory, Model, and Infer operations
+// This module provides client implementations for Channel, Memory, Model, and
+// Infer operations
 // ============================================================================
 
 use std::path::PathBuf;
@@ -1839,15 +1913,32 @@ pub trait ChannelClient {
     async fn get_all_channel_status(&self, probe: bool) -> Result<Vec<ChannelStatus>>;
     async fn get_channel_capabilities(&self, id: &str) -> Result<ChannelCapabilities>;
     async fn resolve_channel_name(&self, channel: &str, name: &str) -> Result<ResolvedName>;
-    async fn get_channel_logs(&self, id: &str, lines: usize, level: Option<&str>) -> Result<Vec<LogEntry>>;
+    async fn get_channel_logs(
+        &self,
+        id: &str,
+        lines: usize,
+        level: Option<&str>,
+    ) -> Result<Vec<LogEntry>>;
     async fn follow_channel_logs(&self, id: &str, level: Option<&str>) -> Result<()>;
     async fn add_channel(&self, channel_type: &str, config: &str) -> Result<NewChannel>;
     async fn remove_channel(&self, id: &str, delete_data: bool) -> Result<()>;
     async fn login_channel(&self, id: &str, method: Option<String>) -> Result<Option<String>>;
     async fn wait_for_channel_auth(&self, id: &str) -> Result<()>;
     async fn logout_channel(&self, id: &str, revoke: bool) -> Result<()>;
-    async fn send_channel_message(&self, channel: &str, target: &str, message: &str, template: Option<&str>, attachments: &[PathBuf]) -> Result<Message>;
-    async fn generate_webhook(&self, channel: &str, path: Option<&str>, secret: Option<&str>) -> Result<Webhook>;
+    async fn send_channel_message(
+        &self,
+        channel: &str,
+        target: &str,
+        message: &str,
+        template: Option<&str>,
+        attachments: &[PathBuf],
+    ) -> Result<Message>;
+    async fn generate_webhook(
+        &self,
+        channel: &str,
+        path: Option<&str>,
+        secret: Option<&str>,
+    ) -> Result<Webhook>;
     async fn list_webhooks(&self, channel: &str) -> Result<Vec<Webhook>>;
     async fn delete_webhook(&self, id: &str) -> Result<()>;
     async fn test_webhook(&self, id: &str, payload: Option<&str>) -> Result<WebhookTestResult>;
@@ -1860,71 +1951,88 @@ impl ChannelClient for ApiClient {
         // TODO: Implement actual API call to /channels
         Ok(vec![])
     }
-    
+
     async fn get_channel_status(&self, _id: &str, _probe: bool) -> Result<ChannelStatus> {
         anyhow::bail!("Channel status check not yet implemented")
     }
-    
+
     async fn get_all_channel_status(&self, _probe: bool) -> Result<Vec<ChannelStatus>> {
         Ok(vec![])
     }
-    
+
     async fn get_channel_capabilities(&self, _id: &str) -> Result<ChannelCapabilities> {
         anyhow::bail!("Channel capabilities not yet implemented")
     }
-    
+
     async fn resolve_channel_name(&self, _channel: &str, _name: &str) -> Result<ResolvedName> {
         anyhow::bail!("Channel name resolution not yet implemented")
     }
-    
-    async fn get_channel_logs(&self, _id: &str, _lines: usize, _level: Option<&str>) -> Result<Vec<LogEntry>> {
+
+    async fn get_channel_logs(
+        &self,
+        _id: &str,
+        _lines: usize,
+        _level: Option<&str>,
+    ) -> Result<Vec<LogEntry>> {
         Ok(vec![])
     }
-    
+
     async fn follow_channel_logs(&self, _id: &str, _level: Option<&str>) -> Result<()> {
         Ok(())
     }
-    
+
     async fn add_channel(&self, _channel_type: &str, _config: &str) -> Result<NewChannel> {
         anyhow::bail!("Channel addition not yet implemented")
     }
-    
+
     async fn remove_channel(&self, _id: &str, _delete_data: bool) -> Result<()> {
         Ok(())
     }
-    
+
     async fn login_channel(&self, _id: &str, _method: Option<String>) -> Result<Option<String>> {
         Ok(None)
     }
-    
+
     async fn wait_for_channel_auth(&self, _id: &str) -> Result<()> {
         Ok(())
     }
-    
+
     async fn logout_channel(&self, _id: &str, _revoke: bool) -> Result<()> {
         Ok(())
     }
-    
-    async fn send_channel_message(&self, _channel: &str, _target: &str, _message: &str, _template: Option<&str>, _attachments: &[PathBuf]) -> Result<Message> {
+
+    async fn send_channel_message(
+        &self,
+        _channel: &str,
+        _target: &str,
+        _message: &str,
+        _template: Option<&str>,
+        _attachments: &[PathBuf],
+    ) -> Result<Message> {
         anyhow::bail!("Channel message sending not yet implemented")
     }
-    
-    async fn generate_webhook(&self, _channel: &str, _path: Option<&str>, _secret: Option<&str>) -> Result<Webhook> {
+
+    async fn generate_webhook(
+        &self,
+        _channel: &str,
+        _path: Option<&str>,
+        _secret: Option<&str>,
+    ) -> Result<Webhook> {
         anyhow::bail!("Webhook generation not yet implemented")
     }
-    
+
     async fn list_webhooks(&self, _channel: &str) -> Result<Vec<Webhook>> {
         Ok(vec![])
     }
-    
+
     async fn delete_webhook(&self, _id: &str) -> Result<()> {
         Ok(())
     }
-    
+
     async fn test_webhook(&self, _id: &str, _payload: Option<&str>) -> Result<WebhookTestResult> {
         anyhow::bail!("Webhook testing not yet implemented")
     }
-    
+
     async fn test_channel(&self, _id: &str, _message: &str) -> Result<ChannelTestResult> {
         anyhow::bail!("Channel testing not yet implemented")
     }
@@ -2161,17 +2269,32 @@ pub trait MemoryClient {
     async fn permanently_delete_memory(&self, id: &str) -> Result<()>;
     async fn export_memories(&self, request: &ExportRequest) -> Result<ExportResult>;
     async fn import_memories(&self, request: &ImportRequest) -> Result<ImportResult>;
-    async fn consolidate_memories_ext(&self, options: &ConsolidateOptions) -> Result<ConsolidateResult>;
+    async fn consolidate_memories_ext(
+        &self,
+        options: &ConsolidateOptions,
+    ) -> Result<ConsolidateResult>;
     async fn apply_forgetting(&self, options: &ForgetOptions) -> Result<ForgetResult>;
     async fn get_agent_memory_stats(&self, agent_id: &str, range: &str) -> Result<MemoryStats>;
     async fn get_global_memory_stats(&self, range: &str) -> Result<MemoryStats>;
-    async fn list_trashed_memories(&self, agent_id: Option<&str>, limit: usize) -> Result<Vec<TrashedMemory>>;
+    async fn list_trashed_memories(
+        &self,
+        agent_id: Option<&str>,
+        limit: usize,
+    ) -> Result<Vec<TrashedMemory>>;
     async fn restore_memory(&self, id: &str) -> Result<()>;
     async fn empty_trash(&self) -> Result<()>;
     async fn purge_memory(&self, id: &str) -> Result<()>;
-    async fn get_memory_graph_structure(&self, agent_id: Option<&str>, depth: usize) -> Result<GraphStructure>;
+    async fn get_memory_graph_structure(
+        &self,
+        agent_id: Option<&str>,
+        depth: usize,
+    ) -> Result<GraphStructure>;
     async fn get_related_memories(&self, id: &str, limit: usize) -> Result<Vec<RelatedMemory>>;
-    async fn get_memory_clusters(&self, agent_id: Option<&str>, n_clusters: usize) -> Result<Vec<Cluster>>;
+    async fn get_memory_clusters(
+        &self,
+        agent_id: Option<&str>,
+        n_clusters: usize,
+    ) -> Result<Vec<Cluster>>;
 }
 
 #[async_trait::async_trait]
@@ -2179,92 +2302,107 @@ impl MemoryClient for ApiClient {
     async fn get_memory_status_for_agent(&self, _agent_id: &str) -> Result<MemoryStatus> {
         anyhow::bail!("Memory status not yet implemented")
     }
-    
+
     async fn get_global_memory_status(&self) -> Result<MemoryStatus> {
         anyhow::bail!("Global memory status not yet implemented")
     }
-    
+
     async fn rebuild_memory_index(&self, _options: &IndexOptions) -> Result<IndexResult> {
         anyhow::bail!("Memory index rebuild not yet implemented")
     }
-    
+
     async fn search_memories(&self, _request: &SearchRequest) -> Result<Vec<SearchResult>> {
         Ok(vec![])
     }
-    
+
     async fn create_memory(&self, _request: &CreateMemoryRequest) -> Result<Memory> {
         anyhow::bail!("Memory creation not yet implemented")
     }
-    
+
     async fn get_memory(&self, _id: &str) -> Result<Memory> {
         anyhow::bail!("Memory retrieval not yet implemented")
     }
-    
+
     async fn update_memory(&self, _id: &str, _request: &UpdateMemoryRequest) -> Result<Memory> {
         anyhow::bail!("Memory update not yet implemented")
     }
-    
+
     async fn list_memories(&self, _filter: &MemoryFilter) -> Result<Vec<MemorySummary>> {
         Ok(vec![])
     }
-    
+
     async fn move_memory_to_trash(&self, _id: &str) -> Result<()> {
         Ok(())
     }
-    
+
     async fn permanently_delete_memory(&self, _id: &str) -> Result<()> {
         Ok(())
     }
-    
+
     async fn export_memories(&self, _request: &ExportRequest) -> Result<ExportResult> {
         anyhow::bail!("Memory export not yet implemented")
     }
-    
+
     async fn import_memories(&self, _request: &ImportRequest) -> Result<ImportResult> {
         anyhow::bail!("Memory import not yet implemented")
     }
-    
-    async fn consolidate_memories_ext(&self, _options: &ConsolidateOptions) -> Result<ConsolidateResult> {
+
+    async fn consolidate_memories_ext(
+        &self,
+        _options: &ConsolidateOptions,
+    ) -> Result<ConsolidateResult> {
         anyhow::bail!("Memory consolidation not yet implemented")
     }
-    
+
     async fn apply_forgetting(&self, _options: &ForgetOptions) -> Result<ForgetResult> {
         anyhow::bail!("Memory forgetting not yet implemented")
     }
-    
+
     async fn get_agent_memory_stats(&self, _agent_id: &str, _range: &str) -> Result<MemoryStats> {
         anyhow::bail!("Memory stats not yet implemented")
     }
-    
+
     async fn get_global_memory_stats(&self, _range: &str) -> Result<MemoryStats> {
         anyhow::bail!("Global memory stats not yet implemented")
     }
-    
-    async fn list_trashed_memories(&self, _agent_id: Option<&str>, _limit: usize) -> Result<Vec<TrashedMemory>> {
+
+    async fn list_trashed_memories(
+        &self,
+        _agent_id: Option<&str>,
+        _limit: usize,
+    ) -> Result<Vec<TrashedMemory>> {
         Ok(vec![])
     }
-    
+
     async fn restore_memory(&self, _id: &str) -> Result<()> {
         Ok(())
     }
-    
+
     async fn empty_trash(&self) -> Result<()> {
         Ok(())
     }
-    
+
     async fn purge_memory(&self, _id: &str) -> Result<()> {
         Ok(())
     }
-    
-    async fn get_memory_graph_structure(&self, _agent_id: Option<&str>, _depth: usize) -> Result<GraphStructure> {
+
+    async fn get_memory_graph_structure(
+        &self,
+        _agent_id: Option<&str>,
+        _depth: usize,
+    ) -> Result<GraphStructure> {
         anyhow::bail!("Memory graph structure not yet implemented")
     }
-    
+
     async fn get_related_memories(&self, _id: &str, _limit: usize) -> Result<Vec<RelatedMemory>> {
         Ok(vec![])
     }
-    
-    async fn get_memory_clusters(&self, _agent_id: Option<&str>, _n_clusters: usize) -> Result<Vec<Cluster>> {
+
+    async fn get_memory_clusters(
+        &self,
+        _agent_id: Option<&str>,
+        _n_clusters: usize,
+    ) -> Result<Vec<Cluster>> {
         Ok(vec![])
     }
 }
@@ -2422,8 +2560,17 @@ pub trait ModelClient {
     async fn set_default_image_model(&self, id: &str) -> Result<()>;
     async fn scan_models(&self, options: &ScanOptions) -> Result<Vec<ScannedModel>>;
     async fn get_model_info(&self, id: &str) -> Result<ModelInfo>;
-    async fn compare_models(&self, models: &[String], dimensions: &[CompareDimension]) -> Result<Vec<ComparisonResult>>;
-    async fn test_model(&self, model: Option<&str>, prompt: &str, max_tokens: u32) -> Result<TestResult>;
+    async fn compare_models(
+        &self,
+        models: &[String],
+        dimensions: &[CompareDimension],
+    ) -> Result<Vec<ComparisonResult>>;
+    async fn test_model(
+        &self,
+        model: Option<&str>,
+        prompt: &str,
+        max_tokens: u32,
+    ) -> Result<TestResult>;
     async fn add_provider_credentials(&self, provider: &str, key: &str) -> Result<()>;
     async fn get_provider_auth_url(&self, provider: &str) -> Result<String>;
     async fn wait_for_provider_auth(&self, provider: &str) -> Result<()>;
@@ -2441,14 +2588,26 @@ pub trait ModelClient {
     async fn remove_model_alias(&self, name: &str) -> Result<()>;
     async fn get_model_alias(&self, name: &str) -> Result<ModelAlias>;
     async fn get_fallback_chain(&self, task_type: &str) -> Result<Vec<String>>;
-    async fn add_to_fallback_chain(&self, model: &str, position: Option<usize>, task_type: &str) -> Result<()>;
+    async fn add_to_fallback_chain(
+        &self,
+        model: &str,
+        position: Option<usize>,
+        task_type: &str,
+    ) -> Result<()>;
     async fn remove_from_fallback_chain(&self, model: &str, task_type: &str) -> Result<()>;
     async fn clear_fallback_chain(&self, task_type: &str) -> Result<()>;
     async fn test_fallback_chain(&self, task_type: &str) -> Result<Vec<FallbackTestResult>>;
     async fn chat(&self, model: Option<&str>, messages: &[ChatMessage]) -> Result<ChatMessage>;
-    async fn chat_stream(&self, model: Option<&str>, messages: &[ChatMessage]) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>>;
+    async fn chat_stream(
+        &self,
+        model: Option<&str>,
+        messages: &[ChatMessage],
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>>;
     async fn complete(&self, request: &CompletionRequest) -> Result<CompletionResponse>;
-    async fn complete_stream(&self, request: &CompletionRequest) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>>;
+    async fn complete_stream(
+        &self,
+        request: &CompletionRequest,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>>;
     async fn generate_embeddings(&self, model: Option<&str>, text: &str) -> Result<Embedding>;
     async fn update_model_list(&self) -> Result<ModelUpdateResult>;
 }
@@ -2458,143 +2617,164 @@ impl ModelClient for ApiClient {
     async fn list_models(&self, _provider: Option<&str>) -> Result<Vec<Model>> {
         Ok(vec![])
     }
-    
+
     async fn get_model_status(&self, _id: &str) -> Result<ModelStatus> {
         anyhow::bail!("Model status not yet implemented")
     }
-    
+
     async fn get_all_model_status(&self) -> Result<Vec<ModelStatus>> {
         Ok(vec![])
     }
-    
+
     async fn set_default_model(&self, _id: &str, _task_type: &str) -> Result<()> {
         Ok(())
     }
-    
+
     async fn set_default_image_model(&self, _id: &str) -> Result<()> {
         Ok(())
     }
-    
+
     async fn scan_models(&self, _options: &ScanOptions) -> Result<Vec<ScannedModel>> {
         Ok(vec![])
     }
-    
+
     async fn get_model_info(&self, _id: &str) -> Result<ModelInfo> {
         anyhow::bail!("Model info not yet implemented")
     }
-    
-    async fn compare_models(&self, _models: &[String], _dimensions: &[CompareDimension]) -> Result<Vec<ComparisonResult>> {
+
+    async fn compare_models(
+        &self,
+        _models: &[String],
+        _dimensions: &[CompareDimension],
+    ) -> Result<Vec<ComparisonResult>> {
         Ok(vec![])
     }
-    
-    async fn test_model(&self, _model: Option<&str>, _prompt: &str, _max_tokens: u32) -> Result<TestResult> {
+
+    async fn test_model(
+        &self,
+        _model: Option<&str>,
+        _prompt: &str,
+        _max_tokens: u32,
+    ) -> Result<TestResult> {
         anyhow::bail!("Model testing not yet implemented")
     }
-    
+
     async fn add_provider_credentials(&self, _provider: &str, _key: &str) -> Result<()> {
         Ok(())
     }
-    
+
     async fn get_provider_auth_url(&self, _provider: &str) -> Result<String> {
         anyhow::bail!("Provider auth URL not yet implemented")
     }
-    
+
     async fn wait_for_provider_auth(&self, _provider: &str) -> Result<()> {
         Ok(())
     }
-    
+
     async fn set_provider_token(&self, _provider: &str, _token: &str) -> Result<()> {
         Ok(())
     }
-    
+
     async fn list_provider_auths(&self) -> Result<Vec<ProviderAuth>> {
         Ok(vec![])
     }
-    
+
     async fn remove_provider_credentials(&self, _provider: &str) -> Result<()> {
         Ok(())
     }
-    
+
     async fn test_provider_auth(&self, _provider: &str) -> Result<AuthTestResult> {
         anyhow::bail!("Provider auth test not yet implemented")
     }
-    
+
     async fn get_provider_order(&self) -> Result<Vec<String>> {
         Ok(vec![])
     }
-    
+
     async fn set_provider_order(&self, _providers: &[String]) -> Result<()> {
         Ok(())
     }
-    
+
     async fn add_provider_to_order(&self, _provider: &str, _position: usize) -> Result<()> {
         Ok(())
     }
-    
+
     async fn remove_provider_from_order(&self, _provider: &str) -> Result<()> {
         Ok(())
     }
-    
+
     async fn clear_provider_order(&self) -> Result<()> {
         Ok(())
     }
-    
+
     async fn list_model_aliases(&self) -> Result<Vec<ModelAlias>> {
         Ok(vec![])
     }
-    
+
     async fn add_model_alias(&self, _name: &str, _target: &str) -> Result<()> {
         Ok(())
     }
-    
+
     async fn remove_model_alias(&self, _name: &str) -> Result<()> {
         Ok(())
     }
-    
+
     async fn get_model_alias(&self, _name: &str) -> Result<ModelAlias> {
         anyhow::bail!("Model alias not found")
     }
-    
+
     async fn get_fallback_chain(&self, _task_type: &str) -> Result<Vec<String>> {
         Ok(vec![])
     }
-    
-    async fn add_to_fallback_chain(&self, _model: &str, _position: Option<usize>, _task_type: &str) -> Result<()> {
+
+    async fn add_to_fallback_chain(
+        &self,
+        _model: &str,
+        _position: Option<usize>,
+        _task_type: &str,
+    ) -> Result<()> {
         Ok(())
     }
-    
+
     async fn remove_from_fallback_chain(&self, _model: &str, _task_type: &str) -> Result<()> {
         Ok(())
     }
-    
+
     async fn clear_fallback_chain(&self, _task_type: &str) -> Result<()> {
         Ok(())
     }
-    
+
     async fn test_fallback_chain(&self, _task_type: &str) -> Result<Vec<FallbackTestResult>> {
         Ok(vec![])
     }
-    
+
     async fn chat(&self, _model: Option<&str>, _messages: &[ChatMessage]) -> Result<ChatMessage> {
         anyhow::bail!("Chat not yet implemented")
     }
-    
-    async fn chat_stream(&self, _model: Option<&str>, _messages: &[ChatMessage]) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
+
+    async fn chat_stream(
+        &self,
+        _model: Option<&str>,
+        _messages: &[ChatMessage],
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
         anyhow::bail!("Chat streaming not yet implemented")
     }
-    
+
     async fn complete(&self, _request: &CompletionRequest) -> Result<CompletionResponse> {
         anyhow::bail!("Completion not yet implemented")
     }
-    
-    async fn complete_stream(&self, _request: &CompletionRequest) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
+
+    async fn complete_stream(
+        &self,
+        _request: &CompletionRequest,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
         anyhow::bail!("Completion streaming not yet implemented")
     }
-    
+
     async fn generate_embeddings(&self, _model: Option<&str>, _text: &str) -> Result<Embedding> {
         anyhow::bail!("Embeddings not yet implemented")
     }
-    
+
     async fn update_model_list(&self) -> Result<ModelUpdateResult> {
         anyhow::bail!("Model list update not yet implemented")
     }
@@ -2746,37 +2926,106 @@ pub trait InferClient {
     async fn list_capabilities(&self, category: Option<&str>) -> Result<Vec<Capability>>;
     async fn get_capability(&self, id: &str) -> Result<Capability>;
     async fn generate_text(&self, request: &TextRequest) -> Result<TextResponse>;
-    async fn stream_text(&self, request: &TextRequest) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>>;
+    async fn stream_text(
+        &self,
+        request: &TextRequest,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>>;
     async fn summarize(&self, text: &str, length: &str) -> Result<String>;
     async fn analyze_sentiment(&self, text: &str) -> Result<SentimentResult>;
     async fn extract_entities(&self, text: &str, types: &[String]) -> Result<Vec<Entity>>;
     async fn classify_text(&self, text: &str, categories: &[String]) -> Result<Vec<(String, f32)>>;
     async fn translate(&self, text: &str, to: &str, from: Option<&str>) -> Result<Translation>;
-    async fn answer_question(&self, question: &str, context: Option<&str>, web_search: bool) -> Result<Answer>;
+    async fn answer_question(
+        &self,
+        question: &str,
+        context: Option<&str>,
+        web_search: bool,
+    ) -> Result<Answer>;
     async fn generate_image(&self, request: &ImageGenRequest) -> Result<ImageGenResult>;
-    async fn edit_image(&self, image: &PathBuf, prompt: &str, mask: Option<&PathBuf>, output: Option<&PathBuf>) -> Result<()>;
-    async fn create_image_variations(&self, image: &PathBuf, n: u32, output: Option<&PathBuf>) -> Result<Vec<PathBuf>>;
-    async fn describe_image(&self, image: &str, detail: &str, question: Option<&str>) -> Result<ImageAnalysis>;
+    async fn edit_image(
+        &self,
+        image: &PathBuf,
+        prompt: &str,
+        mask: Option<&PathBuf>,
+        output: Option<&PathBuf>,
+    ) -> Result<()>;
+    async fn create_image_variations(
+        &self,
+        image: &PathBuf,
+        n: u32,
+        output: Option<&PathBuf>,
+    ) -> Result<Vec<PathBuf>>;
+    async fn describe_image(
+        &self,
+        image: &str,
+        detail: &str,
+        question: Option<&str>,
+    ) -> Result<ImageAnalysis>;
     async fn ocr_image(&self, image: &PathBuf) -> Result<String>;
-    async fn transcribe_audio(&self, file: &PathBuf, language: Option<&str>, timestamps: bool) -> Result<Transcription>;
+    async fn transcribe_audio(
+        &self,
+        file: &PathBuf,
+        language: Option<&str>,
+        timestamps: bool,
+    ) -> Result<Transcription>;
     async fn translate_audio(&self, file: &PathBuf) -> Result<Transcription>;
     async fn generate_audio(&self, prompt: &str, duration: Option<f32>) -> Result<Vec<u8>>;
-    async fn text_to_speech(&self, text: &str, voice: Option<&str>, speed: Option<f32>) -> Result<Vec<u8>>;
+    async fn text_to_speech(
+        &self,
+        text: &str,
+        voice: Option<&str>,
+        speed: Option<f32>,
+    ) -> Result<Vec<u8>>;
     async fn list_voices(&self, language: Option<&str>) -> Result<Vec<Voice>>;
-    async fn web_search(&self, query: &str, limit: usize, site: Option<&str>) -> Result<Vec<WebSearchResult>>;
+    async fn web_search(
+        &self,
+        query: &str,
+        limit: usize,
+        site: Option<&str>,
+    ) -> Result<Vec<WebSearchResult>>;
     async fn fetch_webpage(&self, url: &str, extract: bool, format: &str) -> Result<String>;
-    async fn crawl_website(&self, url: &str, max_pages: usize, same_domain: bool) -> Result<Vec<CrawledPage>>;
-    async fn create_embeddings(&self, texts: &[String], model: Option<&str>, batch_size: usize) -> Result<Vec<Vec<f32>>>;
-    async fn calculate_similarity(&self, text1: &str, text2: &str, model: Option<&str>) -> Result<f32>;
+    async fn crawl_website(
+        &self,
+        url: &str,
+        max_pages: usize,
+        same_domain: bool,
+    ) -> Result<Vec<CrawledPage>>;
+    async fn create_embeddings(
+        &self,
+        texts: &[String],
+        model: Option<&str>,
+        batch_size: usize,
+    ) -> Result<Vec<Vec<f32>>>;
+    async fn calculate_similarity(
+        &self,
+        text1: &str,
+        text2: &str,
+        model: Option<&str>,
+    ) -> Result<f32>;
     async fn cluster_texts(&self, texts: &[String], n_clusters: usize) -> Result<Vec<Cluster>>;
-    async fn complete_code(&self, code: &str, language: Option<&str>, context: &[String]) -> Result<String>;
+    async fn complete_code(
+        &self,
+        code: &str,
+        language: Option<&str>,
+        context: &[String],
+    ) -> Result<String>;
     async fn explain_code(&self, code: &str, detail: &str) -> Result<String>;
     async fn review_code(&self, code: &str, focus: &[String]) -> Result<CodeReview>;
     async fn fix_code(&self, code: &str, issue: Option<&str>) -> Result<String>;
     async fn generate_tests(&self, code: &str, framework: Option<&str>) -> Result<String>;
     async fn generate_docs(&self, code: &str, format: &str) -> Result<String>;
-    async fn multimodal_chat(&self, images: &[PathBuf], prompt: &str, model: Option<&str>) -> Result<String>;
-    async fn analyze_document(&self, file: &PathBuf, questions: &[String], structured: bool) -> Result<DocumentAnalysis>;
+    async fn multimodal_chat(
+        &self,
+        images: &[PathBuf],
+        prompt: &str,
+        model: Option<&str>,
+    ) -> Result<String>;
+    async fn analyze_document(
+        &self,
+        file: &PathBuf,
+        questions: &[String],
+        structured: bool,
+    ) -> Result<DocumentAnalysis>;
 }
 
 #[async_trait::async_trait]
@@ -2784,136 +3033,212 @@ impl InferClient for ApiClient {
     async fn list_capabilities(&self, _category: Option<&str>) -> Result<Vec<Capability>> {
         Ok(vec![])
     }
-    
+
     async fn get_capability(&self, _id: &str) -> Result<Capability> {
         anyhow::bail!("Capability not found")
     }
-    
+
     async fn generate_text(&self, _request: &TextRequest) -> Result<TextResponse> {
         anyhow::bail!("Text generation not yet implemented")
     }
-    
-    async fn stream_text(&self, _request: &TextRequest) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
+
+    async fn stream_text(
+        &self,
+        _request: &TextRequest,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
         anyhow::bail!("Text streaming not yet implemented")
     }
-    
+
     async fn summarize(&self, _text: &str, _length: &str) -> Result<String> {
         anyhow::bail!("Summarization not yet implemented")
     }
-    
+
     async fn analyze_sentiment(&self, _text: &str) -> Result<SentimentResult> {
         anyhow::bail!("Sentiment analysis not yet implemented")
     }
-    
+
     async fn extract_entities(&self, _text: &str, _types: &[String]) -> Result<Vec<Entity>> {
         Ok(vec![])
     }
-    
-    async fn classify_text(&self, _text: &str, _categories: &[String]) -> Result<Vec<(String, f32)>> {
+
+    async fn classify_text(
+        &self,
+        _text: &str,
+        _categories: &[String],
+    ) -> Result<Vec<(String, f32)>> {
         Ok(vec![])
     }
-    
+
     async fn translate(&self, _text: &str, _to: &str, _from: Option<&str>) -> Result<Translation> {
         anyhow::bail!("Translation not yet implemented")
     }
-    
-    async fn answer_question(&self, _question: &str, _context: Option<&str>, _web_search: bool) -> Result<Answer> {
+
+    async fn answer_question(
+        &self,
+        _question: &str,
+        _context: Option<&str>,
+        _web_search: bool,
+    ) -> Result<Answer> {
         anyhow::bail!("Question answering not yet implemented")
     }
-    
+
     async fn generate_image(&self, _request: &ImageGenRequest) -> Result<ImageGenResult> {
         anyhow::bail!("Image generation not yet implemented")
     }
-    
-    async fn edit_image(&self, _image: &PathBuf, _prompt: &str, _mask: Option<&PathBuf>, _output: Option<&PathBuf>) -> Result<()> {
+
+    async fn edit_image(
+        &self,
+        _image: &PathBuf,
+        _prompt: &str,
+        _mask: Option<&PathBuf>,
+        _output: Option<&PathBuf>,
+    ) -> Result<()> {
         Ok(())
     }
-    
-    async fn create_image_variations(&self, _image: &PathBuf, _n: u32, _output: Option<&PathBuf>) -> Result<Vec<PathBuf>> {
+
+    async fn create_image_variations(
+        &self,
+        _image: &PathBuf,
+        _n: u32,
+        _output: Option<&PathBuf>,
+    ) -> Result<Vec<PathBuf>> {
         Ok(vec![])
     }
-    
-    async fn describe_image(&self, _image: &str, _detail: &str, _question: Option<&str>) -> Result<ImageAnalysis> {
+
+    async fn describe_image(
+        &self,
+        _image: &str,
+        _detail: &str,
+        _question: Option<&str>,
+    ) -> Result<ImageAnalysis> {
         anyhow::bail!("Image description not yet implemented")
     }
-    
+
     async fn ocr_image(&self, _image: &PathBuf) -> Result<String> {
         anyhow::bail!("OCR not yet implemented")
     }
-    
-    async fn transcribe_audio(&self, _file: &PathBuf, _language: Option<&str>, _timestamps: bool) -> Result<Transcription> {
+
+    async fn transcribe_audio(
+        &self,
+        _file: &PathBuf,
+        _language: Option<&str>,
+        _timestamps: bool,
+    ) -> Result<Transcription> {
         anyhow::bail!("Audio transcription not yet implemented")
     }
-    
+
     async fn translate_audio(&self, _file: &PathBuf) -> Result<Transcription> {
         anyhow::bail!("Audio translation not yet implemented")
     }
-    
+
     async fn generate_audio(&self, _prompt: &str, _duration: Option<f32>) -> Result<Vec<u8>> {
         anyhow::bail!("Audio generation not yet implemented")
     }
-    
-    async fn text_to_speech(&self, _text: &str, _voice: Option<&str>, _speed: Option<f32>) -> Result<Vec<u8>> {
+
+    async fn text_to_speech(
+        &self,
+        _text: &str,
+        _voice: Option<&str>,
+        _speed: Option<f32>,
+    ) -> Result<Vec<u8>> {
         anyhow::bail!("Text-to-speech not yet implemented")
     }
-    
+
     async fn list_voices(&self, _language: Option<&str>) -> Result<Vec<Voice>> {
         Ok(vec![])
     }
-    
-    async fn web_search(&self, _query: &str, _limit: usize, _site: Option<&str>) -> Result<Vec<WebSearchResult>> {
+
+    async fn web_search(
+        &self,
+        _query: &str,
+        _limit: usize,
+        _site: Option<&str>,
+    ) -> Result<Vec<WebSearchResult>> {
         Ok(vec![])
     }
-    
+
     async fn fetch_webpage(&self, _url: &str, _extract: bool, _format: &str) -> Result<String> {
         anyhow::bail!("Webpage fetching not yet implemented")
     }
-    
-    async fn crawl_website(&self, _url: &str, _max_pages: usize, _same_domain: bool) -> Result<Vec<CrawledPage>> {
+
+    async fn crawl_website(
+        &self,
+        _url: &str,
+        _max_pages: usize,
+        _same_domain: bool,
+    ) -> Result<Vec<CrawledPage>> {
         Ok(vec![])
     }
-    
-    async fn create_embeddings(&self, _texts: &[String], _model: Option<&str>, _batch_size: usize) -> Result<Vec<Vec<f32>>> {
+
+    async fn create_embeddings(
+        &self,
+        _texts: &[String],
+        _model: Option<&str>,
+        _batch_size: usize,
+    ) -> Result<Vec<Vec<f32>>> {
         Ok(vec![])
     }
-    
-    async fn calculate_similarity(&self, _text1: &str, _text2: &str, _model: Option<&str>) -> Result<f32> {
+
+    async fn calculate_similarity(
+        &self,
+        _text1: &str,
+        _text2: &str,
+        _model: Option<&str>,
+    ) -> Result<f32> {
         Ok(0.0)
     }
-    
+
     async fn cluster_texts(&self, _texts: &[String], _n_clusters: usize) -> Result<Vec<Cluster>> {
         Ok(vec![])
     }
-    
-    async fn complete_code(&self, _code: &str, _language: Option<&str>, _context: &[String]) -> Result<String> {
+
+    async fn complete_code(
+        &self,
+        _code: &str,
+        _language: Option<&str>,
+        _context: &[String],
+    ) -> Result<String> {
         anyhow::bail!("Code completion not yet implemented")
     }
-    
+
     async fn explain_code(&self, _code: &str, _detail: &str) -> Result<String> {
         anyhow::bail!("Code explanation not yet implemented")
     }
-    
+
     async fn review_code(&self, _code: &str, _focus: &[String]) -> Result<CodeReview> {
-        Ok(CodeReview { summary: String::new(), issues: vec![] })
+        Ok(CodeReview {
+            summary: String::new(),
+            issues: vec![],
+        })
     }
-    
+
     async fn fix_code(&self, _code: &str, _issue: Option<&str>) -> Result<String> {
         anyhow::bail!("Code fixing not yet implemented")
     }
-    
+
     async fn generate_tests(&self, _code: &str, _framework: Option<&str>) -> Result<String> {
         anyhow::bail!("Test generation not yet implemented")
     }
-    
+
     async fn generate_docs(&self, _code: &str, _format: &str) -> Result<String> {
         anyhow::bail!("Documentation generation not yet implemented")
     }
-    
-    async fn multimodal_chat(&self, _images: &[PathBuf], _prompt: &str, _model: Option<&str>) -> Result<String> {
+
+    async fn multimodal_chat(
+        &self,
+        _images: &[PathBuf],
+        _prompt: &str,
+        _model: Option<&str>,
+    ) -> Result<String> {
         anyhow::bail!("Multimodal chat not yet implemented")
     }
-    
-    async fn analyze_document(&self, _file: &PathBuf, _questions: &[String], _structured: bool) -> Result<DocumentAnalysis> {
+
+    async fn analyze_document(
+        &self,
+        _file: &PathBuf,
+        _questions: &[String],
+        _structured: bool,
+    ) -> Result<DocumentAnalysis> {
         anyhow::bail!("Document analysis not yet implemented")
     }
 }

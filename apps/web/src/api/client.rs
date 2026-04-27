@@ -1,10 +1,12 @@
 //! Advanced API Client with retry, caching, and request deduplication
 
-use crate::api::TokenRefreshResponse;
-use gloo_net::http::Response;
-use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::Arc;
+
+use gloo_net::http::Response;
+use parking_lot::RwLock;
+
+use crate::api::TokenRefreshResponse;
 
 const DEFAULT_TIMEOUT_MS: u32 = 30000;
 const DEFAULT_RETRY_ATTEMPTS: u32 = 3;

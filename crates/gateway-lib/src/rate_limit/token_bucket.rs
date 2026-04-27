@@ -1,7 +1,8 @@
 //! Token Bucket Rate Limiter
 //!
 //! Smooth rate limiting algorithm that allows bursts up to bucket capacity.
-//! Production-ready implementation with async support and proper concurrency control.
+//! Production-ready implementation with async support and proper concurrency
+//! control.
 
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -96,7 +97,8 @@ pub struct TokenBucketRateLimiter {
     /// Token cost per request (default: 1.0)
     token_cost: f64,
     /// Bucket states per client - using DashMap for lock-free access
-    /// 🟡 MEDIUM PERFORMANCE FIX: No outer RwLock needed, DashMap is thread-safe
+    /// 🟡 MEDIUM PERFORMANCE FIX: No outer RwLock needed, DashMap is
+    /// thread-safe
     buckets: Arc<dashmap::DashMap<String, BucketState>>,
 }
 
@@ -215,8 +217,9 @@ impl RateLimiter for TokenBucketRateLimiter {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use tokio::time::{sleep, Duration};
+
+    use super::*;
 
     #[tokio::test]
     async fn test_token_bucket_basic() {

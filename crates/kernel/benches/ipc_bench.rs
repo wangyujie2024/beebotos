@@ -1,10 +1,11 @@
 //! IPC Mechanism Benchmarks
 
+use std::sync::mpsc;
+use std::thread;
+
 use beebotos_kernel::ipc::channel::{bounded, unbounded};
 use beebotos_kernel::ipc::MessageQueue;
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
-use std::sync::mpsc;
-use std::thread;
 
 fn bench_channel_throughput(c: &mut Criterion) {
     let mut group = c.benchmark_group("channel_throughput");

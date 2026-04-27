@@ -3,17 +3,19 @@
 //! Generic device abstraction that can wrap any device type.
 //! Provides a unified interface for device management and automation.
 
+use std::collections::HashMap;
+use std::sync::Arc;
+
+use async_trait::async_trait;
+use base64::Engine;
+use tokio::sync::Mutex;
+use tracing::{debug, error, info};
+
 use super::{
     AppInfo, AppLifecycle, DeviceAutomation, DeviceCapability, DeviceInfo, DeviceStatus,
     ElementLocator, HardwareButton, Size, SwipeDirection, UiElement,
 };
 use crate::error::{AgentError, Result};
-use async_trait::async_trait;
-use base64::Engine;
-use std::collections::HashMap;
-use std::sync::Arc;
-use tokio::sync::Mutex;
-use tracing::{debug, error, info};
 
 /// Generic device node that can wrap any device
 ///
@@ -169,26 +171,26 @@ impl DeviceNode {
 impl DeviceAutomation for DeviceNode {
     async fn connect(&self) -> Result<()> {
         info!("Connecting to device node: {}", self.id);
-        
+
         let mut connected = self.connected.lock().await;
         *connected = true;
         drop(connected);
 
         self.update_status(DeviceStatus::Ready).await;
-        
+
         info!("Device node {} connected", self.id);
         Ok(())
     }
 
     async fn disconnect(&self) -> Result<()> {
         info!("Disconnecting from device node: {}", self.id);
-        
+
         let mut connected = self.connected.lock().await;
         *connected = false;
         drop(connected);
 
         self.update_status(DeviceStatus::Disconnected).await;
-        
+
         Ok(())
     }
 
@@ -198,12 +200,14 @@ impl DeviceAutomation for DeviceNode {
 
     async fn get_device_info(&self) -> Result<DeviceInfo> {
         let props = self.properties.lock().await;
-        
-        let width = props.get("screen_width")
+
+        let width = props
+            .get("screen_width")
             .and_then(|s| s.parse().ok())
             .unwrap_or(1080);
-        
-        let height = props.get("screen_height")
+
+        let height = props
+            .get("screen_height")
             .and_then(|s| s.parse().ok())
             .unwrap_or(1920);
 
@@ -227,25 +231,25 @@ impl DeviceAutomation for DeviceNode {
     async fn take_screenshot(&self) -> Result<Vec<u8>> {
         if !self.has_capability(&DeviceCapability::Screenshot) {
             return Err(AgentError::Execution(
-                "Device does not support screenshots".to_string()
+                "Device does not support screenshots".to_string(),
             ));
         }
 
         // This is a placeholder - actual implementation would capture screen
         debug!("Taking screenshot on device node {}", self.id);
-        
+
         // Return empty PNG (1x1 transparent pixel in base64)
         let empty_png = base64::engine::general_purpose::STANDARD
             .decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==")
             .map_err(|e| AgentError::Execution(format!("Failed to decode placeholder: {}", e)))?;
-        
+
         Ok(empty_png)
     }
 
     async fn tap(&self, x: i32, y: i32) -> Result<()> {
         if !self.has_capability(&DeviceCapability::Touchscreen) {
             return Err(AgentError::Execution(
-                "Device does not support touch".to_string()
+                "Device does not support touch".to_string(),
             ));
         }
 
@@ -256,44 +260,69 @@ impl DeviceAutomation for DeviceNode {
     async fn long_press(&self, x: i32, y: i32, duration_ms: u64) -> Result<()> {
         if !self.has_capability(&DeviceCapability::Touchscreen) {
             return Err(AgentError::Execution(
-                "Device does not support touch".to_string()
+                "Device does not support touch".to_string(),
             ));
         }
 
-        self.execute(&format!("long_press {} {} {}", x, y, duration_ms)).await?;
+        self.execute(&format!("long_press {} {} {}", x, y, duration_ms))
+            .await?;
         Ok(())
     }
 
-    async fn swipe(&self, from_x: i32, from_y: i32, to_x: i32, to_y: i32, duration_ms: u64) -> Result<()> {
+    async fn swipe(
+        &self,
+        from_x: i32,
+        from_y: i32,
+        to_x: i32,
+        to_y: i32,
+        duration_ms: u64,
+    ) -> Result<()> {
         if !self.has_capability(&DeviceCapability::Touchscreen) {
             return Err(AgentError::Execution(
-                "Device does not support touch".to_string()
+                "Device does not support touch".to_string(),
             ));
         }
 
         self.execute(&format!(
             "swipe {} {} {} {} {}",
             from_x, from_y, to_x, to_y, duration_ms
-        )).await?;
+        ))
+        .await?;
         Ok(())
     }
 
-    async fn swipe_direction(&self, direction: SwipeDirection, distance: u32, duration_ms: u64) -> Result<()> {
-        self.execute(&format!("swipe_direction {:?} {} {}", direction, distance, duration_ms)).await?;
+    async fn swipe_direction(
+        &self,
+        direction: SwipeDirection,
+        distance: u32,
+        duration_ms: u64,
+    ) -> Result<()> {
+        self.execute(&format!(
+            "swipe_direction {:?} {} {}",
+            direction, distance, duration_ms
+        ))
+        .await?;
         Ok(())
     }
 
-    async fn pinch(&self, center_x: i32, center_y: i32, scale: f64, duration_ms: u64) -> Result<()> {
+    async fn pinch(
+        &self,
+        center_x: i32,
+        center_y: i32,
+        scale: f64,
+        duration_ms: u64,
+    ) -> Result<()> {
         if !self.has_capability(&DeviceCapability::MultiTouch) {
             return Err(AgentError::Execution(
-                "Device does not support multi-touch".to_string()
+                "Device does not support multi-touch".to_string(),
             ));
         }
 
         self.execute(&format!(
             "pinch {} {} {} {}",
             center_x, center_y, scale, duration_ms
-        )).await?;
+        ))
+        .await?;
         Ok(())
     }
 
@@ -301,7 +330,7 @@ impl DeviceAutomation for DeviceNode {
         // This is a generic implementation
         // Specific implementations would override this
         Err(AgentError::Execution(
-            "Element finding not implemented for generic device node".to_string()
+            "Element finding not implemented for generic device node".to_string(),
         ))
     }
 
@@ -324,12 +353,14 @@ impl DeviceAutomation for DeviceNode {
 
     async fn get_element_text(&self, _locator: &ElementLocator) -> Result<String> {
         Err(AgentError::Execution(
-            "Element text retrieval not implemented".to_string()
+            "Element text retrieval not implemented".to_string(),
         ))
     }
 
     async fn set_element_text(&self, _locator: &ElementLocator, text: &str) -> Result<()> {
-        self.execute(&format!("set_text '{}'", text)).await.map(|_| ())
+        self.execute(&format!("set_text '{}'", text))
+            .await
+            .map(|_| ())
     }
 
     async fn clear_element_text(&self, _locator: &ElementLocator) -> Result<()> {
@@ -348,7 +379,9 @@ impl DeviceAutomation for DeviceNode {
     }
 
     async fn press_button(&self, button: HardwareButton) -> Result<()> {
-        self.execute(&format!("press_button {:?}", button)).await.map(|_| ())
+        self.execute(&format!("press_button {:?}", button))
+            .await
+            .map(|_| ())
     }
 
     async fn type_text(&self, text: &str) -> Result<()> {
@@ -357,10 +390,12 @@ impl DeviceAutomation for DeviceNode {
 
     async fn get_screen_size(&self) -> Result<Size> {
         let props = self.properties.lock().await;
-        let width = props.get("screen_width")
+        let width = props
+            .get("screen_width")
             .and_then(|s| s.parse().ok())
             .unwrap_or(1080);
-        let height = props.get("screen_height")
+        let height = props
+            .get("screen_height")
             .and_then(|s| s.parse().ok())
             .unwrap_or(1920);
         Ok(Size::new(width, height))
@@ -382,39 +417,53 @@ impl DeviceAutomation for DeviceNode {
 #[async_trait]
 impl AppLifecycle for DeviceNode {
     async fn install_app(&self, app_path: &str) -> Result<()> {
-        self.execute(&format!("install_app {}", app_path)).await.map(|_| ())
+        self.execute(&format!("install_app {}", app_path))
+            .await
+            .map(|_| ())
     }
 
     async fn uninstall_app(&self, package_name: &str) -> Result<()> {
-        self.execute(&format!("uninstall_app {}", package_name)).await.map(|_| ())
+        self.execute(&format!("uninstall_app {}", package_name))
+            .await
+            .map(|_| ())
     }
 
     async fn launch_app(&self, package_name: &str) -> Result<()> {
-        self.execute(&format!("launch_app {}", package_name)).await.map(|_| ())
+        self.execute(&format!("launch_app {}", package_name))
+            .await
+            .map(|_| ())
     }
 
     async fn launch_app_with_activity(&self, package_name: &str, activity: &str) -> Result<()> {
-        self.execute(&format!("launch_app {} {}", package_name, activity)).await.map(|_| ())
+        self.execute(&format!("launch_app {} {}", package_name, activity))
+            .await
+            .map(|_| ())
     }
 
     async fn close_app(&self, package_name: &str) -> Result<()> {
-        self.execute(&format!("close_app {}", package_name)).await.map(|_| ())
+        self.execute(&format!("close_app {}", package_name))
+            .await
+            .map(|_| ())
     }
 
     async fn is_app_installed(&self, package_name: &str) -> Result<bool> {
-        let result = self.execute(&format!("is_app_installed {}", package_name)).await?;
+        let result = self
+            .execute(&format!("is_app_installed {}", package_name))
+            .await?;
         Ok(result.contains("true"))
     }
 
     async fn is_app_running(&self, package_name: &str) -> Result<bool> {
-        let result = self.execute(&format!("is_app_running {}", package_name)).await?;
+        let result = self
+            .execute(&format!("is_app_running {}", package_name))
+            .await?;
         Ok(result.contains("true"))
     }
 
     async fn get_app_info(&self, package_name: &str) -> Result<AppInfo> {
         let installed = self.is_app_installed(package_name).await?;
         let running = self.is_app_running(package_name).await?;
-        
+
         Ok(AppInfo {
             package_name: package_name.to_string(),
             app_name: package_name.to_string(),
@@ -431,15 +480,24 @@ impl AppLifecycle for DeviceNode {
     }
 
     async fn clear_app_data(&self, package_name: &str) -> Result<()> {
-        self.execute(&format!("clear_app_data {}", package_name)).await.map(|_| ())
+        self.execute(&format!("clear_app_data {}", package_name))
+            .await
+            .map(|_| ())
     }
 
     async fn grant_permission(&self, package_name: &str, permission: &str) -> Result<()> {
-        self.execute(&format!("grant_permission {} {}", package_name, permission)).await.map(|_| ())
+        self.execute(&format!("grant_permission {} {}", package_name, permission))
+            .await
+            .map(|_| ())
     }
 
     async fn revoke_permission(&self, package_name: &str, permission: &str) -> Result<()> {
-        self.execute(&format!("revoke_permission {} {}", package_name, permission)).await.map(|_| ())
+        self.execute(&format!(
+            "revoke_permission {} {}",
+            package_name, permission
+        ))
+        .await
+        .map(|_| ())
     }
 }
 
@@ -526,12 +584,18 @@ mod tests {
     #[tokio::test]
     async fn test_device_node_properties() {
         let node = DeviceNode::new("test");
-        
+
         node.set_property("version", "1.0.0").await;
         node.set_property("platform", "test-platform").await;
 
-        assert_eq!(node.get_property("version").await, Some("1.0.0".to_string()));
-        assert_eq!(node.get_property("platform").await, Some("test-platform".to_string()));
+        assert_eq!(
+            node.get_property("version").await,
+            Some("1.0.0".to_string())
+        );
+        assert_eq!(
+            node.get_property("platform").await,
+            Some("test-platform".to_string())
+        );
         assert_eq!(node.get_property("missing").await, None);
 
         let props = node.get_properties().await;
@@ -541,7 +605,7 @@ mod tests {
     #[tokio::test]
     async fn test_device_node_execute() {
         let node = DeviceNode::new("test");
-        
+
         let result = node.execute("test_command").await;
         assert!(result.is_ok());
         assert!(result.unwrap().contains("Executed"));
@@ -550,13 +614,13 @@ mod tests {
     #[tokio::test]
     async fn test_device_node_connect() {
         let node = DeviceNode::new("test");
-        
+
         assert!(!node.is_connected().await);
-        
+
         node.connect().await.unwrap();
         assert!(node.is_connected().await);
         assert_eq!(node.get_status().await, DeviceStatus::Ready);
-        
+
         node.disconnect().await.unwrap();
         assert!(!node.is_connected().await);
     }

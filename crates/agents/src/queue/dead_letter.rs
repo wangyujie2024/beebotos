@@ -1,15 +1,18 @@
 //! Dead Letter Queue (DLQ) Module
 //!
 //! ARCHITECTURE FIX: Implements a dead letter queue for failed tasks.
-//! Tasks that fail after max retries are moved to DLQ for later inspection and replay.
+//! Tasks that fail after max retries are moved to DLQ for later inspection and
+//! replay.
 
-use super::{QueueError, QueueTask, TaskResult};
-use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::sync::Arc;
+
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 use tracing::{error, info, warn};
+
+use super::{QueueError, QueueTask, TaskResult};
 
 /// Dead letter entry - stores failed task with metadata
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -95,7 +98,8 @@ impl Default for DLQConfig {
 /// Dead letter queue
 ///
 /// ARCHITECTURE FIX: Stores failed tasks for later inspection and replay.
-/// Prevents infinite retry loops and provides visibility into processing failures.
+/// Prevents infinite retry loops and provides visibility into processing
+/// failures.
 pub struct DeadLetterQueue {
     config: DLQConfig,
     entries: Arc<Mutex<VecDeque<DeadLetterEntry>>>,
@@ -200,7 +204,10 @@ impl DeadLetterQueue {
     /// Replay entry - remove from DLQ and return the task
     pub async fn replay(&self, entry_id: &str) -> Option<(QueueTask, String)> {
         let entry = self.remove_entry(entry_id).await?;
-        info!("Replaying task {} from DLQ entry {}", entry.task.id, entry_id);
+        info!(
+            "Replaying task {} from DLQ entry {}",
+            entry.task.id, entry_id
+        );
         Some((entry.task, entry.source_queue))
     }
 
@@ -216,7 +223,10 @@ impl DeadLetterQueue {
         // Remove replayed entries
         entries.retain(|e| e.source_queue != source_queue);
 
-        to_replay.into_iter().map(|e| (e.task, e.source_queue)).collect()
+        to_replay
+            .into_iter()
+            .map(|e| (e.task, e.source_queue))
+            .collect()
     }
 
     /// Get DLQ statistics
@@ -224,12 +234,13 @@ impl DeadLetterQueue {
         let entries = self.entries.lock().await;
         let total = entries.len();
 
-        let by_source: std::collections::HashMap<String, usize> = entries
-            .iter()
-            .fold(std::collections::HashMap::new(), |mut acc, e| {
-                *acc.entry(e.source_queue.clone()).or_insert(0) += 1;
-                acc
-            });
+        let by_source: std::collections::HashMap<String, usize> =
+            entries
+                .iter()
+                .fold(std::collections::HashMap::new(), |mut acc, e| {
+                    *acc.entry(e.source_queue.clone()).or_insert(0) += 1;
+                    acc
+                });
 
         let oldest = entries.front().map(|e| e.moved_at);
         let newest = entries.back().map(|e| e.moved_at);
@@ -282,7 +293,8 @@ impl DeadLetterQueue {
         let retention_secs = self.config.retention_secs;
 
         tokio::spawn(async move {
-            let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(interval_secs));
+            let mut interval =
+                tokio::time::interval(tokio::time::Duration::from_secs(interval_secs));
 
             loop {
                 interval.tick().await;
@@ -357,12 +369,11 @@ impl<T: super::TaskProcessor> super::TaskProcessor for DLQTaskProcessor<T> {
             let retry_count = 0; // Simplified - should be retrieved from task tracking
 
             if retry_count >= self.max_retries {
-                if let Err(e) = self.dlq.move_to_dlq(
-                    task,
-                    retry_count,
-                    &result.output,
-                    "main",
-                ).await {
+                if let Err(e) = self
+                    .dlq
+                    .move_to_dlq(task, retry_count, &result.output, "main")
+                    .await
+                {
                     error!("Failed to move task to DLQ: {:?}", e);
                 }
             }
@@ -393,12 +404,15 @@ mod tests {
         let task = create_test_task();
 
         // Move to DLQ
-        let entry_id = dlq.move_to_dlq(task, 3, "Test error", "main").await.unwrap();
-        
+        let entry_id = dlq
+            .move_to_dlq(task, 3, "Test error", "main")
+            .await
+            .unwrap();
+
         // Verify entry exists
         let entry = dlq.get_entry(&entry_id).await;
         assert!(entry.is_some());
-        
+
         // List entries
         let entries = dlq.list_entries().await;
         assert_eq!(entries.len(), 1);
@@ -406,7 +420,7 @@ mod tests {
         // Replay
         let replayed = dlq.replay(&entry_id).await;
         assert!(replayed.is_some());
-        
+
         // Verify removed
         let entry = dlq.get_entry(&entry_id).await;
         assert!(entry.is_none());
@@ -424,7 +438,9 @@ mod tests {
         for i in 0..10 {
             let mut task = create_test_task();
             task.id = format!("task-{}", i);
-            dlq.move_to_dlq(task, 3, "Test error", "main").await.unwrap();
+            dlq.move_to_dlq(task, 3, "Test error", "main")
+                .await
+                .unwrap();
         }
 
         let entries = dlq.list_entries().await;
@@ -436,7 +452,9 @@ mod tests {
         let dlq = DeadLetterQueue::default();
         let task = create_test_task();
 
-        dlq.move_to_dlq(task, 3, "Test error", "main").await.unwrap();
+        dlq.move_to_dlq(task, 3, "Test error", "main")
+            .await
+            .unwrap();
 
         let stats = dlq.stats().await;
         assert_eq!(stats.total_entries, 1);

@@ -33,13 +33,13 @@ async fn test_skill_rating_lifecycle() {
     let skill_id = "skill-rating-test";
 
     // ========== 提交评分 ==========
-    store.rate(skill_id, "user-a", 5, Some("Excellent skill"))
+    store
+        .rate(skill_id, "user-a", 5, Some("Excellent skill"))
         .await
         .unwrap();
-    store.rate(skill_id, "user-b", 3, None)
-        .await
-        .unwrap();
-    store.rate(skill_id, "user-c", 4, Some("Good but can improve"))
+    store.rate(skill_id, "user-b", 3, None).await.unwrap();
+    store
+        .rate(skill_id, "user-c", 4, Some("Good but can improve"))
         .await
         .unwrap();
 
@@ -59,13 +59,14 @@ async fn test_skill_rating_lifecycle() {
     assert!(!first.skill_id.is_empty());
 
     // ========== 更新评分 ==========
-    store.rate(skill_id, "user-a", 4, Some("Updated review"))
+    store
+        .rate(skill_id, "user-a", 4, Some("Updated review"))
         .await
         .unwrap();
 
     let summary = store.get_summary(skill_id).await.unwrap();
     assert_eq!(summary.total_ratings, 3); // 仍然是 3 个用户
-    // (4 + 3 + 4) / 3 = 11/3 ≈ 3.667
+                                          // (4 + 3 + 4) / 3 = 11/3 ≈ 3.667
     assert!((summary.average_rating - 11.0 / 3.0).abs() < 0.01);
 }
 

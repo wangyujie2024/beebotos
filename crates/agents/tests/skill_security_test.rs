@@ -2,9 +2,7 @@
 //!
 //! 验证 SkillSecurityValidator 对恶意/不合规 WASM 模块的拦截能力。
 
-use beebotos_agents::skills::{
-    SkillSecurityPolicy, SkillSecurityValidator, ValidationError,
-};
+use beebotos_agents::skills::{SkillSecurityPolicy, SkillSecurityValidator, ValidationError};
 
 /// 正常 WASM header（仅 header，不完整但结构合法）
 fn valid_wasm_header() -> Vec<u8> {

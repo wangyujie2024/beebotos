@@ -1,10 +1,12 @@
 //! Event Processor
 
-use crate::chains::common::events::{EventMetrics, EvmEvent, ProcessorConfig};
-use crate::ChainError;
 use std::sync::Arc;
+
 use tokio::sync::{mpsc, RwLock};
 use tokio::task::JoinHandle;
+
+use crate::chains::common::events::{EventMetrics, EvmEvent, ProcessorConfig};
+use crate::ChainError;
 
 /// Event handler trait
 #[async_trait::async_trait]

@@ -2,9 +2,10 @@
 //!
 //! Manages pending transactions before they are mined.
 
-use alloy_rpc_types::Transaction;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
+
+use alloy_rpc_types::Transaction;
 use tokio::sync::RwLock;
 
 /// Transaction entry with metadata
@@ -218,8 +219,9 @@ impl Mempool {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use alloy_consensus::TxEnvelope;
+
+    use super::*;
 
     #[tokio::test]
     async fn test_mempool_add_remove() {

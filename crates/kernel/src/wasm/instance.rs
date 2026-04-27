@@ -2,11 +2,12 @@
 //!
 //! Manages a running WASM instance with wasmtime 34.0
 
+use tracing::trace;
+use wasmtime::{Instance, Memory, Store, Val};
+
 use crate::error::{KernelError, Result};
 use crate::wasm::host_funcs::HostContext;
 use crate::wasm::metering::FuelLimit;
-use tracing::trace;
-use wasmtime::{Instance, Memory, Store, Val};
 
 /// WASM instance wrapper for wasmtime 34.0
 ///

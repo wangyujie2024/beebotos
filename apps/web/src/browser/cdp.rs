@@ -3,10 +3,12 @@
 //! 实现与 Chrome DevTools 的 WebSocket 通信
 //! 支持实时浏览器会话附加和零扩展架构
 
-use super::{ConnectionStatus, ScreenshotFormat, ScreenshotResult};
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::HashMap;
+
+use super::{ConnectionStatus, ScreenshotFormat, ScreenshotResult};
 
 /// CDP 错误类型
 #[derive(Clone, Debug)]
@@ -70,7 +72,10 @@ impl CdpConnectionConfig {
     /// 获取 WebSocket URL
     pub fn ws_url(&self) -> String {
         let protocol = if self.secure { "wss" } else { "ws" };
-        format!("{}://{}:{}/devtools/browser", protocol, self.host, self.port)
+        format!(
+            "{}://{}:{}/devtools/browser",
+            protocol, self.host, self.port
+        )
     }
 
     /// 获取 HTTP 调试信息 URL
@@ -290,8 +295,8 @@ impl CdpClient {
         };
 
         // 序列化命令
-        let _json = serde_json::to_string(&command)
-            .map_err(|e| CdpError::Serialization(e.to_string()))?;
+        let _json =
+            serde_json::to_string(&command).map_err(|e| CdpError::Serialization(e.to_string()))?;
 
         // 这里应该通过 WebSocket 发送
         // 由于 WASM 环境的限制，实际实现可能需要通过 Gateway API 代理
@@ -330,9 +335,7 @@ impl CdpClient {
             "awaitPromise": true
         });
 
-        let result = self
-            .send_command("Runtime.evaluate", Some(params))
-            .await?;
+        let result = self.send_command("Runtime.evaluate", Some(params)).await?;
 
         Ok(EvaluateResult {
             result: result.get("result").cloned(),
@@ -388,14 +391,9 @@ impl CdpClient {
             "selector": selector
         });
 
-        let result = self
-            .send_command("DOM.querySelector", Some(params))
-            .await?;
+        let result = self.send_command("DOM.querySelector", Some(params)).await?;
 
-        let node_id = result
-            .get("nodeId")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0);
+        let node_id = result.get("nodeId").and_then(|v| v.as_u64()).unwrap_or(0);
 
         if node_id == 0 {
             Ok(None)
@@ -517,12 +515,17 @@ impl DomNode {
     }
 
     /// 获取节点属性
-    pub async fn get_attributes(&self, client: &mut CdpClient) -> Result<HashMap<String, String>, CdpError> {
+    pub async fn get_attributes(
+        &self,
+        client: &mut CdpClient,
+    ) -> Result<HashMap<String, String>, CdpError> {
         let params = serde_json::json!({
             "nodeId": self.node_id
         });
 
-        let result = client.send_command("DOM.getAttributes", Some(params)).await?;
+        let result = client
+            .send_command("DOM.getAttributes", Some(params))
+            .await?;
 
         let mut attributes = HashMap::new();
         if let Some(attrs) = result.get("attributes").and_then(|v| v.as_array()) {
@@ -544,7 +547,9 @@ impl DomNode {
             "nodeId": self.node_id
         });
 
-        let result = client.send_command("DOM.querySelector", Some(params)).await?;
+        let result = client
+            .send_command("DOM.querySelector", Some(params))
+            .await?;
 
         // 实际应该通过 DOM.describeNode 获取详细信息
         Ok(result
@@ -567,11 +572,7 @@ pub mod utils {
     }
 
     /// 获取可用端口列表
-    pub async fn find_available_ports(
-        host: &str,
-        start_port: u16,
-        end_port: u16,
-    ) -> Vec<u16> {
+    pub async fn find_available_ports(host: &str, start_port: u16, end_port: u16) -> Vec<u16> {
         let mut available = Vec::new();
 
         for port in start_port..=end_port {
@@ -586,7 +587,9 @@ pub mod utils {
     /// 解析 WebSocket URL
     pub fn parse_ws_url(url: &str) -> Option<(String, u16, String)> {
         // ws://host:port/path
-        let url = url.strip_prefix("ws://").or_else(|| url.strip_prefix("wss://"))?;
+        let url = url
+            .strip_prefix("ws://")
+            .or_else(|| url.strip_prefix("wss://"))?;
         let parts: Vec<&str> = url.splitn(2, '/').collect();
         let host_port = parts[0];
         let path = parts.get(1).map(|s| format!("/{}", s)).unwrap_or_default();
@@ -605,8 +608,7 @@ mod tests {
 
     #[test]
     fn test_cdp_connection_config() {
-        let config = CdpConnectionConfig::new(9222)
-            .with_host("192.168.1.100");
+        let config = CdpConnectionConfig::new(9222).with_host("192.168.1.100");
 
         assert_eq!(config.ws_url(), "ws://192.168.1.100:9222/devtools/browser");
         assert_eq!(config.http_url(), "http://192.168.1.100:9222/json/version");

@@ -9,6 +9,7 @@
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+
 use ::tracing::{debug, info, warn};
 use beebotos_core::event::Event;
 use beebotos_core::types::Timestamp;
@@ -178,7 +179,7 @@ pub fn spawn_cron_worker_task(
 ///
 /// This function can be called both for initial spawn and for restart after
 /// panic.
-/// 
+///
 /// CODE QUALITY FIX: Added queue_depth_counter parameter for accurate
 /// queue depth tracking used by auto-scaling.
 pub fn spawn_subagent_worker_task(
@@ -218,7 +219,7 @@ pub fn spawn_subagent_worker_task(
                             if let Some(ref counter) = queue_depth_counter {
                                 counter.fetch_sub(1, Ordering::SeqCst);
                             }
-                            
+
                             let _permit = match semaphore.acquire().await {
                                 Ok(p) => p,
                                 Err(_) => {

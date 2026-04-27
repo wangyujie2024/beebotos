@@ -1,6 +1,7 @@
 //! Error handling for brain module
 //!
-//! Provides centralized error types and result aliases for the cognitive architecture.
+//! Provides centralized error types and result aliases for the cognitive
+//! architecture.
 
 use std::fmt;
 
@@ -296,8 +297,9 @@ impl<T> ResultExt<T, ReasoningError> for Result<T, ReasoningError> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::error::Error;
+
+    use super::*;
 
     #[test]
     fn test_error_display() {

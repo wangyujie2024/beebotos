@@ -21,10 +21,7 @@ pub enum ChainEvent {
         confirmations: u64,
     },
     /// Transaction failed
-    TransactionFailed {
-        tx_hash: String,
-        error: String,
-    },
+    TransactionFailed { tx_hash: String, error: String },
     /// Identity registered
     IdentityRegistered {
         agent_id: String,
@@ -76,20 +73,11 @@ impl SystemEvent for ChainEvent {
 #[derive(Debug, Clone)]
 pub enum ChainConnectionEvent {
     /// Connected to chain
-    Connected {
-        chain_id: u64,
-        rpc_url: String,
-    },
+    Connected { chain_id: u64, rpc_url: String },
     /// Disconnected from chain
-    Disconnected {
-        chain_id: u64,
-        reason: String,
-    },
+    Disconnected { chain_id: u64, reason: String },
     /// Connection error
-    Error {
-        chain_id: u64,
-        error: String,
-    },
+    Error { chain_id: u64, error: String },
     /// Block received
     NewBlock {
         chain_id: u64,

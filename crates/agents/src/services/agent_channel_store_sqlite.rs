@@ -3,10 +3,9 @@
 use async_trait::async_trait;
 use sqlx::SqlitePool;
 
+use super::agent_channel_store::AgentChannelBindingStore;
 use crate::communication::agent_channel::{AgentChannelBinding, RoutingRules};
 use crate::error::{AgentError, Result};
-
-use super::agent_channel_store::AgentChannelBindingStore;
 
 pub struct SqliteAgentChannelBindingStore {
     pool: SqlitePool,
@@ -78,10 +77,16 @@ impl AgentChannelBindingStore for SqliteAgentChannelBindingStore {
         .await
         .map_err(|e| AgentError::Database(format!("Failed to list agent channels: {}", e)))?;
 
-        Ok(rows.into_iter().filter_map(|r| r.into_binding().ok()).collect())
+        Ok(rows
+            .into_iter()
+            .filter_map(|r| r.into_binding().ok())
+            .collect())
     }
 
-    async fn list_by_user_channel(&self, user_channel_id: &str) -> Result<Vec<AgentChannelBinding>> {
+    async fn list_by_user_channel(
+        &self,
+        user_channel_id: &str,
+    ) -> Result<Vec<AgentChannelBinding>> {
         let rows = sqlx::query_as::<_, AgentChannelBindingRow>(
             r#"
             SELECT id, agent_id, user_channel_id, binding_name, is_default, priority, routing_rules
@@ -95,7 +100,10 @@ impl AgentChannelBindingStore for SqliteAgentChannelBindingStore {
         .await
         .map_err(|e| AgentError::Database(format!("Failed to list agent channels: {}", e)))?;
 
-        Ok(rows.into_iter().filter_map(|r| r.into_binding().ok()).collect())
+        Ok(rows
+            .into_iter()
+            .filter_map(|r| r.into_binding().ok())
+            .collect())
     }
 
     async fn set_default(&self, user_channel_id: &str, agent_id: &str) -> Result<()> {
@@ -164,9 +172,12 @@ impl AgentChannelBindingStore for SqliteAgentChannelBindingStore {
         .bind(platform_channel_id)
         .fetch_optional(&self.pool)
         .await
-        .map_err(|e| AgentError::Database(format!(
-            "Failed to find default agent by platform channel: {}", e
-        )))?;
+        .map_err(|e| {
+            AgentError::Database(format!(
+                "Failed to find default agent by platform channel: {}",
+                e
+            ))
+        })?;
 
         Ok(row.map(|r| r.0))
     }

@@ -11,13 +11,12 @@ use base64::Engine;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, error, info, warn};
 
+use super::common::MetadataBuilder;
 use crate::communication::webhook::{
     SignatureVerification, WebhookConfig, WebhookEvent, WebhookEventType, WebhookHandler,
 };
 use crate::communication::{Message, MessageType, PlatformType};
 use crate::error::{AgentError, Result};
-
-use super::common::MetadataBuilder;
 
 /// Teams webhook payload types
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -327,17 +326,20 @@ impl TeamsWebhookHandler {
                 if let Some(channel_data) = channel_data {
                     if let Some(team) = &channel_data.team {
                         metadata_builder = metadata_builder.add("team_id", team.id.clone());
-                        metadata_builder = metadata_builder.add_optional("team_name", team.name.clone());
+                        metadata_builder =
+                            metadata_builder.add_optional("team_name", team.name.clone());
                     }
                     if let Some(channel) = &channel_data.channel {
                         metadata_builder = metadata_builder.add("channel_id", channel.id.clone());
-                        metadata_builder = metadata_builder.add_optional("channel_name", channel.name.clone());
+                        metadata_builder =
+                            metadata_builder.add_optional("channel_name", channel.name.clone());
                     }
                     if let Some(tenant) = &channel_data.tenant {
                         metadata_builder = metadata_builder.add("tenant_id", tenant.id.clone());
                     }
                     if let Some(event_type) = &channel_data.event_type {
-                        metadata_builder = metadata_builder.add("teams_event_type", event_type.clone());
+                        metadata_builder =
+                            metadata_builder.add("teams_event_type", event_type.clone());
                     }
                 }
 

@@ -231,7 +231,7 @@ impl AlloyClient {
             if iterations > max_polling_iterations {
                 return Err(ChainError::Provider(format!(
                     "Max polling iterations ({}) exceeded while waiting for {} confirmations. \
-                    Transaction may be stuck or network may be congested.",
+                     Transaction may be stuck or network may be congested.",
                     max_polling_iterations, confirmations
                 )));
             }

@@ -536,7 +536,8 @@ pub struct KeyRotationConfig {
     pub enabled: bool,
     /// Rotate after this many days (0 = disable time-based rotation)
     pub rotate_after_days: u64,
-    /// Rotate after this many encryption operations (0 = disable usage-based rotation)
+    /// Rotate after this many encryption operations (0 = disable usage-based
+    /// rotation)
     pub rotate_after_operations: u64,
     /// Minimum key version to maintain (for backward compatibility)
     pub min_key_version: u32,

@@ -8,15 +8,14 @@ pub mod genome;
 pub mod network;
 pub mod species;
 
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+use beebotos_core::AgentId;
 pub use config::NeatConfig;
 pub use genome::Genome;
 pub use network::NeuralNetwork;
+use serde::{Deserialize, Serialize};
 pub use species::Species;
-
-use beebotos_core::AgentId;
 
 /// Innovation tracker for historical markings
 #[derive(Debug, Clone)]

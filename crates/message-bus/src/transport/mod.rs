@@ -4,10 +4,12 @@ pub mod memory;
 
 pub mod grpc;
 
+use std::time::Duration;
+
+use async_trait::async_trait;
+
 use crate::error::Result;
 use crate::{Message, MessageStream, SubscriptionId};
-use async_trait::async_trait;
-use std::time::Duration;
 
 /// Transport trait for message bus backends
 ///

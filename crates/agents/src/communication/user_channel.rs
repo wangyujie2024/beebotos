@@ -1,10 +1,11 @@
 //! User-Channel binding models and multi-instance channel identifiers
 
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-use crate::communication::PlatformType;
+use serde::{Deserialize, Serialize};
+
 use crate::communication::channel::ConnectionMode;
+use crate::communication::PlatformType;
 
 /// Status of a user channel binding
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

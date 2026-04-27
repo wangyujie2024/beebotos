@@ -1,7 +1,8 @@
 //! DAO domain state management
 
-use crate::api::{DaoSummary, ProposalInfo, ProposalStatus};
 use leptos::prelude::*;
+
+use crate::api::{DaoSummary, ProposalInfo, ProposalStatus};
 
 /// DAO domain state
 #[derive(Clone, Debug)]

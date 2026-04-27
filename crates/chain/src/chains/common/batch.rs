@@ -1,17 +1,19 @@
 //! Batch Operations Module
 //!
-//! Provides enhanced batch operations for transactions, calls, and event queries.
-//! Supports both multicall contract integration and batched RPC calls.
+//! Provides enhanced batch operations for transactions, calls, and event
+//! queries. Supports both multicall contract integration and batched RPC calls.
+
+use std::collections::HashMap;
+use std::sync::Arc;
+use std::time::Instant;
+
+use alloy_rpc_types::TransactionRequest;
+use futures::future::join_all;
+use tracing::{info, instrument};
 
 use crate::chains::common::{EvmError, EvmProvider};
 use crate::compat::{Address, Bytes, U256};
 use crate::constants::MAX_RPC_BATCH_SIZE;
-use alloy_rpc_types::TransactionRequest;
-use futures::future::join_all;
-use std::collections::HashMap;
-use std::sync::Arc;
-use std::time::Instant;
-use tracing::{info, instrument};
 
 /// Batch request type
 #[derive(Debug, Clone)]
@@ -532,7 +534,8 @@ mod tests {
 
         // Test validation
         let errors = batch.validate();
-        assert!(errors.is_empty() || !errors.is_empty()); // Depends on tx validation logic
+        assert!(errors.is_empty() || !errors.is_empty()); // Depends on tx
+                                                          // validation logic
     }
 
     #[test]

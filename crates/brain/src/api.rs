@@ -6,7 +6,7 @@
 //! # Example
 //!
 //! ```
-//! use beebotos_brain::api::{SocialBrainApi, ApiConfig};
+//! use beebotos_brain::api::{ApiConfig, SocialBrainApi};
 //! use beebotos_brain::pad::Pad;
 //!
 //! // Create API instance
@@ -146,7 +146,7 @@ pub struct SocialBrainApi {
 /// let config = ApiConfig {
 ///     memory_enabled: true,
 ///     emotion_enabled: true,
-///     learning_enabled: false,  // Disable learning
+///     learning_enabled: false, // Disable learning
 ///     personality_influence: 0.7,
 /// };
 /// ```
@@ -230,11 +230,12 @@ impl SocialBrainApi {
 
     /// Query the memory system for relevant information.
     ///
-    /// Searches across all enabled memory types (short-term, episodic, semantic, procedural)
-    /// based on the provided query parameters.
+    /// Searches across all enabled memory types (short-term, episodic,
+    /// semantic, procedural) based on the provided query parameters.
     ///
     /// # Arguments
-    /// * `query` - Memory query specifying search terms, filters, and result limits
+    /// * `query` - Memory query specifying search terms, filters, and result
+    ///   limits
     ///
     /// # Returns
     /// * `Ok(MemoryResults)` - Query results from all memory types
@@ -262,7 +263,8 @@ impl SocialBrainApi {
     /// Store information in memory with specified importance.
     ///
     /// Content is stored in short-term memory first. High-importance items
-    /// are prioritized and may be consolidated to long-term memory during sleep.
+    /// are prioritized and may be consolidated to long-term memory during
+    /// sleep.
     ///
     /// # Arguments
     /// * `content` - The information to store
@@ -318,7 +320,8 @@ impl SocialBrainApi {
     /// the current emotional state.
     ///
     /// # Returns
-    /// PAD state with pleasure (-1.0 to 1.0), arousal (0.0 to 1.0), dominance (0.0 to 1.0)
+    /// PAD state with pleasure (-1.0 to 1.0), arousal (0.0 to 1.0), dominance
+    /// (0.0 to 1.0)
     pub fn current_pad(&self) -> Pad {
         *self.emotional_intelligence.current()
     }
@@ -374,12 +377,15 @@ impl SocialBrainApi {
     /// * `stimulus` - Input text or sensory information
     ///
     /// # Returns
-    /// * `Ok(StimulusResponse)` - Response including memory ID, emotional change, and action
+    /// * `Ok(StimulusResponse)` - Response including memory ID, emotional
+    ///   change, and action
     /// * `Err(BrainError)` - If processing fails
     ///
     /// # Example
     /// ```rust
-    /// let response = api.process_stimulus("Urgent: system failure detected").unwrap();
+    /// let response = api
+    ///     .process_stimulus("Urgent: system failure detected")
+    ///     .unwrap();
     /// println!("Memory ID: {}", response.memory_id);
     /// println!("Emotional impact: {:?}", response.emotional_change);
     /// if let Some(action) = response.action_recommended {
@@ -533,7 +539,8 @@ impl SocialBrainApi {
     /// Modify emotional stimulus based on personality traits.
     ///
     /// # Personality Effects
-    /// - **Neuroticism**: Amplifies negative emotions (higher = more negative response)
+    /// - **Neuroticism**: Amplifies negative emotions (higher = more negative
+    ///   response)
     /// - **Openness**: Increases arousal (higher = more excited response)
     ///
     /// # Arguments
@@ -564,7 +571,7 @@ impl SocialBrainApi {
     ///
     /// Uses keyword-based sentiment analysis:
     /// - Positive words (good, great, etc.) increase pleasure
-    /// - Negative words (bad, fail, etc.) decrease pleasure  
+    /// - Negative words (bad, fail, etc.) decrease pleasure
     /// - Urgent words (urgent, critical, etc.) increase arousal
     ///
     /// # Arguments
@@ -656,7 +663,8 @@ impl SocialBrainApi {
     ///
     /// # Action Triggers
     /// - **High arousal** (> HIGH_AROUSAL_THRESHOLD): Suggest calming action
-    /// - **Negative pleasure** (< NEGATIVE_PLEASURE_THRESHOLD): Suggest mood improvement
+    /// - **Negative pleasure** (< NEGATIVE_PLEASURE_THRESHOLD): Suggest mood
+    ///   improvement
     ///
     /// # Returns
     /// Optional action recommendation, or None if no action needed

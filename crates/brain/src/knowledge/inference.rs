@@ -1,6 +1,7 @@
 //! Knowledge Inference
 //!
-//! Inference over knowledge graphs using transitive closure and pattern matching.
+//! Inference over knowledge graphs using transitive closure and pattern
+//! matching.
 
 #![allow(dead_code)]
 

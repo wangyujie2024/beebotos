@@ -1,7 +1,8 @@
 //! 浏览器配置卡片组件
 
-use crate::browser::{BrowserProfile, ConnectionStatus};
 use leptos::prelude::*;
+
+use crate::browser::{BrowserProfile, ConnectionStatus};
 
 /// 配置卡片组件
 #[component]
@@ -102,7 +103,7 @@ mod tests {
     fn test_profile_card_creation() {
         let profile = BrowserProfile::new("Test", 9222);
         let status = ConnectionStatus::Connected;
-        
+
         // Verify profile and status are created correctly
         assert_eq!(profile.name, "Test");
         assert!(matches!(status, ConnectionStatus::Connected));

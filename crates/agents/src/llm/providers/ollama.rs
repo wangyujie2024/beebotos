@@ -36,12 +36,12 @@ impl Default for OllamaConfig {
 impl OllamaConfig {
     pub fn from_env() -> Result<Self, String> {
         use std::env;
-        
-        let base_url = env::var("OLLAMA_BASE_URL")
-            .unwrap_or_else(|_| "http://localhost:11434".to_string());
 
-        let default_model = env::var("OLLAMA_DEFAULT_MODEL")
-            .unwrap_or_else(|_| "llama2".to_string());
+        let base_url =
+            env::var("OLLAMA_BASE_URL").unwrap_or_else(|_| "http://localhost:11434".to_string());
+
+        let default_model =
+            env::var("OLLAMA_DEFAULT_MODEL").unwrap_or_else(|_| "llama2".to_string());
 
         Ok(Self {
             base_url,
@@ -75,7 +75,10 @@ impl OllamaProvider {
             max_output_tokens: 4_096,
         };
 
-        info!("Ollama provider initialized with base URL: {}", config.base_url);
+        info!(
+            "Ollama provider initialized with base URL: {}",
+            config.base_url
+        );
 
         Ok(Self {
             config,
@@ -85,45 +88,51 @@ impl OllamaProvider {
     }
 
     pub fn from_env() -> Result<Self, LLMError> {
-        let config = OllamaConfig::from_env()
-            .map_err(|e| LLMError::InvalidRequest(e))?;
+        let config = OllamaConfig::from_env().map_err(|e| LLMError::InvalidRequest(e))?;
         Self::new(config)
     }
 
     fn build_headers(&self) -> Result<HeaderMap, LLMError> {
         let mut headers = HeaderMap::new();
-        headers.insert(header::CONTENT_TYPE, HeaderValue::from_static("application/json"));
+        headers.insert(
+            header::CONTENT_TYPE,
+            HeaderValue::from_static("application/json"),
+        );
         Ok(headers)
     }
 
     fn convert_messages(&self, messages: Vec<Message>) -> Vec<OllamaMessage> {
-        messages.into_iter().map(|msg| {
-            let role = match msg.role {
-                Role::System => "system",
-                Role::User => "user",
-                Role::Assistant => "assistant",
-                Role::Tool => "tool",
-            };
-            
-            OllamaMessage {
-                role: role.to_string(),
-                content: msg.text_content(),
-                images: None, // Could be extended to support vision
-            }
-        }).collect()
+        messages
+            .into_iter()
+            .map(|msg| {
+                let role = match msg.role {
+                    Role::System => "system",
+                    Role::User => "user",
+                    Role::Assistant => "assistant",
+                    Role::Tool => "tool",
+                };
+
+                OllamaMessage {
+                    role: role.to_string(),
+                    content: msg.text_content(),
+                    images: None, // Could be extended to support vision
+                }
+            })
+            .collect()
     }
 
     fn convert_tools(&self, tools: Option<Vec<Tool>>) -> Option<Vec<OllamaTool>> {
         tools.map(|tools| {
-            tools.into_iter().map(|tool| {
-                OllamaTool {
+            tools
+                .into_iter()
+                .map(|tool| OllamaTool {
                     function: OllamaFunction {
                         name: tool.function.name,
                         description: tool.function.description.unwrap_or_default(),
                         parameters: tool.function.parameters,
                     },
-                }
-            }).collect()
+                })
+                .collect()
         })
     }
 
@@ -135,7 +144,7 @@ impl OllamaProvider {
         };
 
         let messages = self.convert_messages(request.messages);
-        
+
         let mut options = serde_json::Map::new();
         if let Some(temp) = request.config.temperature {
             options.insert("temperature".to_string(), json!(temp));
@@ -173,37 +182,54 @@ impl OllamaProvider {
         loop {
             trace!("Sending request to Ollama API (attempt {})", attempt + 1);
 
-            let response = self.http_client.post(&url).headers(headers.clone()).json(&body).send().await
+            let response = self
+                .http_client
+                .post(&url)
+                .headers(headers.clone())
+                .json(&body)
+                .send()
+                .await
                 .map_err(|e| {
                     if e.is_timeout() {
                         LLMError::Timeout
                     } else {
-                        LLMError::Network(format!("Failed to connect to Ollama at {}. Is Ollama running? Error: {}", 
-                            self.config.base_url, e))
+                        LLMError::Network(format!(
+                            "Failed to connect to Ollama at {}. Is Ollama running? Error: {}",
+                            self.config.base_url, e
+                        ))
                     }
                 })?;
 
-            if response.status().is_success() { 
-                return Ok(response); 
+            if response.status().is_success() {
+                return Ok(response);
             }
 
             let status = response.status();
-            let error_body = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-            
+            let error_body = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
+
             let error = match status {
                 reqwest::StatusCode::NOT_FOUND => LLMError::ModelNotFound(format!(
                     "Model not found. Run 'ollama pull <model>' to download it."
                 )),
-                _ => LLMError::Api { code: status.as_u16(), message: error_body },
+                _ => LLMError::Api {
+                    code: status.as_u16(),
+                    message: error_body,
+                },
             };
 
-            if !self.config.retry_policy.should_retry(&error, attempt) { 
-                return Err(error); 
+            if !self.config.retry_policy.should_retry(&error, attempt) {
+                return Err(error);
             }
 
             attempt += 1;
             let delay = self.config.retry_policy.delay_for_attempt(attempt);
-            warn!("Request failed, retrying in {:?} (attempt {}/{})", delay, attempt, self.config.retry_policy.max_retries);
+            warn!(
+                "Request failed, retrying in {:?} (attempt {}/{})",
+                delay, attempt, self.config.retry_policy.max_retries
+            );
             tokio::time::sleep(delay).await;
         }
     }
@@ -215,20 +241,22 @@ impl OllamaProvider {
 
 #[async_trait]
 impl LLMProvider for OllamaProvider {
-    fn name(&self) -> &str { 
-        "ollama" 
+    fn name(&self) -> &str {
+        "ollama"
     }
 
-    fn capabilities(&self) -> ProviderCapabilities { 
-        self.capabilities.clone() 
+    fn capabilities(&self) -> ProviderCapabilities {
+        self.capabilities.clone()
     }
 
     async fn complete(&self, request: LLMRequest) -> LLMResult<LLMResponse> {
         debug!("Sending completion request to Ollama");
 
         let response = self.execute_with_retry(request).await?;
-        
-        let ollama_resp: OllamaResponse = response.json().await
+
+        let ollama_resp: OllamaResponse = response
+            .json()
+            .await
             .map_err(|e| LLMError::Serialization(e.to_string()))?;
 
         // Ollama doesn't return token usage directly, estimate from character count
@@ -241,14 +269,17 @@ impl LLMProvider for OllamaProvider {
         debug!("Received response from Ollama model: {}", ollama_resp.model);
 
         let tool_calls = ollama_resp.message.tool_calls.map(|tcs| {
-            tcs.into_iter().map(|tc| ToolCall {
-                id: self.generate_id(),
-                r#type: "function".to_string(),
-                function: FunctionCall {
-                    name: tc.function.name,
-                    arguments: serde_json::to_string(&tc.function.arguments).unwrap_or_default(),
-                },
-            }).collect()
+            tcs.into_iter()
+                .map(|tc| ToolCall {
+                    id: self.generate_id(),
+                    r#type: "function".to_string(),
+                    function: FunctionCall {
+                        name: tc.function.name,
+                        arguments: serde_json::to_string(&tc.function.arguments)
+                            .unwrap_or_default(),
+                    },
+                })
+                .collect()
         });
 
         Ok(LLMResponse {
@@ -263,7 +294,11 @@ impl LLMProvider for OllamaProvider {
                 } else {
                     Message::assistant(ollama_resp.message.content)
                 },
-                finish_reason: if ollama_resp.done { Some("stop".to_string()) } else { None },
+                finish_reason: if ollama_resp.done {
+                    Some("stop".to_string())
+                } else {
+                    None
+                },
                 logprobs: None,
             }],
             usage: Some(Usage {
@@ -276,33 +311,33 @@ impl LLMProvider for OllamaProvider {
 
     async fn complete_stream(&self, request: LLMRequest) -> LLMResult<mpsc::Receiver<StreamChunk>> {
         let (tx, rx) = mpsc::channel(100);
-        
+
         let mut request = request;
         request.config.stream = Some(true);
-        
+
         let response = self.execute_with_retry(request).await?;
-        
+
         let mut stream = response.bytes_stream();
         let event_id = self.generate_id();
-        
+
         tokio::spawn(async move {
             let mut buffer = String::new();
-            
+
             while let Some(chunk_result) = stream.next().await {
                 match chunk_result {
                     Ok(bytes) => {
                         let text = String::from_utf8_lossy(&bytes);
                         buffer.push_str(&text);
-                        
+
                         // Ollama streaming returns JSON lines
                         while let Some(pos) = buffer.find('\n') {
                             let line = buffer.split_off(pos + 1);
                             let json_str = std::mem::replace(&mut buffer, line).trim().to_string();
-                            
+
                             if json_str.is_empty() {
                                 continue;
                             }
-                            
+
                             match serde_json::from_str::<OllamaStreamChunk>(&json_str) {
                                 Ok(chunk) => {
                                     let finish_reason = if chunk.done {
@@ -310,15 +345,19 @@ impl LLMProvider for OllamaProvider {
                                     } else {
                                         None
                                     };
-                                    
-                                    if tx.send(StreamChunk::new(
-                                        event_id.clone(),
-                                        chunk.message.content.clone(),
-                                        finish_reason,
-                                    )).await.is_err() {
+
+                                    if tx
+                                        .send(StreamChunk::new(
+                                            event_id.clone(),
+                                            chunk.message.content.clone(),
+                                            finish_reason,
+                                        ))
+                                        .await
+                                        .is_err()
+                                    {
                                         return;
                                     }
-                                    
+
                                     if chunk.done {
                                         return;
                                     }
@@ -349,10 +388,13 @@ impl LLMProvider for OllamaProvider {
 
     async fn health_check(&self) -> LLMResult<()> {
         let url = format!("{}/api/tags", self.config.base_url);
-        
-        match self.http_client.get(&url)
+
+        match self
+            .http_client
+            .get(&url)
             .timeout(std::time::Duration::from_secs(5))
-            .send().await 
+            .send()
+            .await
         {
             Ok(response) if response.status().is_success() => Ok(()),
             _ => Err(LLMError::Provider("Ollama is not running".to_string())),
@@ -361,35 +403,45 @@ impl LLMProvider for OllamaProvider {
 
     async fn list_models(&self) -> LLMResult<Vec<ModelInfo>> {
         let url = format!("{}/api/tags", self.config.base_url);
-        
-        let response = self.http_client.get(&url).send().await
+
+        let response = self
+            .http_client
+            .get(&url)
+            .send()
+            .await
             .map_err(|e| LLMError::Network(e.to_string()))?;
-        
+
         if !response.status().is_success() {
-            return Err(LLMError::Api { 
-                code: response.status().as_u16(), 
-                message: response.text().await.unwrap_or_default() 
+            return Err(LLMError::Api {
+                code: response.status().as_u16(),
+                message: response.text().await.unwrap_or_default(),
             });
         }
-        
-        let tags: OllamaTagsResponse = response.json().await
+
+        let tags: OllamaTagsResponse = response
+            .json()
+            .await
             .map_err(|e| LLMError::Serialization(e.to_string()))?;
-        
-        Ok(tags.models.into_iter().map(|m| {
-            ModelInfo {
-                id: m.name.clone(),
-                name: m.name,
-                description: None,
-                context_window: m.details.num_ctx.unwrap_or(2048) as usize,
-                max_tokens: 4_096,
-                capabilities: ModelCapabilities { 
-                    vision: false, 
-                    function_calling: false, 
-                    json_mode: true 
-                },
-                pricing: Some((0.0, 0.0)), // Local models are free
-            }
-        }).collect())
+
+        Ok(tags
+            .models
+            .into_iter()
+            .map(|m| {
+                ModelInfo {
+                    id: m.name.clone(),
+                    name: m.name,
+                    description: None,
+                    context_window: m.details.num_ctx.unwrap_or(2048) as usize,
+                    max_tokens: 4_096,
+                    capabilities: ModelCapabilities {
+                        vision: false,
+                        function_calling: false,
+                        json_mode: true,
+                    },
+                    pricing: Some((0.0, 0.0)), // Local models are free
+                }
+            })
+            .collect())
     }
 }
 

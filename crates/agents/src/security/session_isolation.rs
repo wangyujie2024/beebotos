@@ -43,9 +43,9 @@ impl IsolationLevel {
     pub fn provides_network_isolation(&self) -> bool {
         matches!(self, Self::Wasm | Self::Process)
     }
-    
+
     /// Apply isolation for session execution
-    /// 
+    ///
     /// ARCHITECTURE FIX: Actually implements isolation mechanisms
     pub async fn apply<F, Fut, R>(&self, f: F) -> std::result::Result<R, IsolationError>
     where
@@ -58,7 +58,9 @@ impl IsolationLevel {
             IsolationLevel::Thread => {
                 // Thread-level isolation using tokio spawn
                 let handle = tokio::spawn(async move { f().await });
-                handle.await.map_err(|e| IsolationError::ThreadError(e.to_string()))
+                handle
+                    .await
+                    .map_err(|e| IsolationError::ThreadError(e.to_string()))
             }
             IsolationLevel::Wasm => {
                 // WASM sandbox - requires wasmtime integration
@@ -72,7 +74,9 @@ impl IsolationLevel {
                 // For now, use thread + strict resource limits
                 tracing::info!("Process isolation: using thread + strict limits");
                 let handle = tokio::spawn(async move { f().await });
-                handle.await.map_err(|e| IsolationError::ProcessError(e.to_string()))
+                handle
+                    .await
+                    .map_err(|e| IsolationError::ProcessError(e.to_string()))
             }
         }
     }
@@ -227,9 +231,9 @@ impl IsolatedSession {
             .signed_duration_since(self.started_at)
             .num_seconds()
     }
-    
+
     /// Execute code within this isolated session
-    /// 
+    ///
     /// ARCHITECTURE FIX: Actually applies isolation level during execution
     pub async fn execute<F, Fut, R>(&self, operation: F) -> std::result::Result<R, IsolationError>
     where
@@ -238,14 +242,14 @@ impl IsolatedSession {
         R: Send + 'static,
     {
         // Check resource limits before execution
-        self.check_resource_limits().await.map_err(|e| {
-            IsolationError::ResourceLimit(e.to_string())
-        })?;
-        
+        self.check_resource_limits()
+            .await
+            .map_err(|e| IsolationError::ResourceLimit(e.to_string()))?;
+
         // Apply isolation based on level
         self.isolation_level.apply(operation).await
     }
-    
+
     /// Execute with timeout enforcement
     pub async fn execute_with_timeout<F, Fut, R>(
         &self,
@@ -258,12 +262,13 @@ impl IsolatedSession {
         R: Send + 'static,
     {
         let timeout_duration = std::time::Duration::from_secs(timeout_secs);
-        
+
         match tokio::time::timeout(timeout_duration, self.execute(operation)).await {
             Ok(result) => result,
-            Err(_) => Err(IsolationError::ResourceLimit(
-                format!("Execution timeout after {} seconds", timeout_secs)
-            )),
+            Err(_) => Err(IsolationError::ResourceLimit(format!(
+                "Execution timeout after {} seconds",
+                timeout_secs
+            ))),
         }
     }
 }

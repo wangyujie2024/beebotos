@@ -1,7 +1,8 @@
 //! BeeBotOS Gateway Library
 //!
 //! Production-ready API Gateway library with:
-//! - Multiple rate limiting algorithms (token bucket, sliding window, fixed window)
+//! - Multiple rate limiting algorithms (token bucket, sliding window, fixed
+//!   window)
 //! - JWT authentication and authorization
 //! - WebSocket connection management
 //! - Service discovery and load balancing
@@ -12,15 +13,17 @@
 //! # Example
 //!
 //! ```rust
-//! use beebotos_gateway_lib::config::GatewayConfig;
-//! use beebotos_gateway_lib::rate_limit::{RateLimitManager, token_bucket::TokenBucketRateLimiter};
 //! use std::sync::Arc;
+//!
+//! use beebotos_gateway_lib::config::GatewayConfig;
+//! use beebotos_gateway_lib::rate_limit::token_bucket::TokenBucketRateLimiter;
+//! use beebotos_gateway_lib::rate_limit::RateLimitManager;
 //!
 //! async fn setup() {
 //!     let config = GatewayConfig::from_env().unwrap();
-//!     let rate_limiter = Arc::new(RateLimitManager::new(
-//!         Arc::new(TokenBucketRateLimiter::new(100.0, 200))
-//!     ));
+//!     let rate_limiter = Arc::new(RateLimitManager::new(Arc::new(
+//!         TokenBucketRateLimiter::new(100.0, 200),
+//!     )));
 //! }
 //! ```
 
@@ -37,69 +40,61 @@ pub mod health;
 pub mod middleware;
 pub mod rate_limit;
 // 🟢 P1 FIX: Repository pattern for data access
+pub mod channel_binding_store;
 pub mod repository;
 pub mod state_store;
 pub mod websocket;
-pub mod channel_binding_store;
 
 // 🟢 P1 FIX: Re-export unified error types from core
-pub use beebotos_core::{
-    BeeBotOSError, ErrorBuilder, ErrorCode, ErrorContext, Result as CoreResult,
-    Severity, bail as core_bail, err as core_err,
-};
-// 🟢 P1 FIX: Re-export unified configuration management
-pub use beebotos_core::{ConfigCenter, Environment};
-
 /// Re-export commonly used types
 pub use agent_runtime::{
     AgentCapability, AgentConfig, AgentConfigBuilder, AgentEvent, AgentHandle, AgentId,
     AgentRuntime, AgentRuntimeFactory, AgentState, AgentStatus, LlmConfig, MemoryConfig,
     RuntimeConfig, SandboxLevel, StateCommand as AgentStateCommand, TaskConfig, TaskId, TaskResult,
 };
-pub use config::{app_config, GatewayConfig, IntoGatewayConfig};
-pub use error::{GatewayError, Result};
-pub use repository::{
-    Entity, FilterCondition, FilterOperator, FilterValue, PgRepository,
-    Pagination, QueryFilter, Repository, SortOrder,
+pub use beebotos_core::{
+    bail as core_bail, err as core_err, BeeBotOSError, ErrorBuilder, ErrorCode, ErrorContext,
+    Result as CoreResult, Severity,
 };
-// MockRepository is only available in test configuration
-#[cfg(test)]
-pub use repository::MockRepository;
-
+// 🟢 P1 FIX: Re-export unified configuration management
+pub use beebotos_core::{ConfigCenter, Environment};
+/// Re-export channel binding store types
+pub use channel_binding_store::{ChannelBinding, ChannelBindingStore};
+pub use config::{app_config, GatewayConfig, IntoGatewayConfig};
+/// Re-export discovery types
+pub use discovery::{
+    CircuitBreaker, CircuitState, LoadBalancer, RandomBalancer, RoundRobinBalancer,
+    ServiceDiscovery, ServiceInstance, ServiceRouter, StaticDiscovery, WeightedRoundRobinBalancer,
+};
+pub use error::{GatewayError, Result};
 /// Re-export error adapter traits
 pub use error_adapter::BeeBotOSErrorExt;
-pub use state_store::{
-    AgentFilter, AgentInfo, QueryResult, StateCommand, StateEvent, StateEventType, StateQuery,
-    StateStore, StateStoreConfig, StateStoreStats,
-};
-
+/// Re-export health types
+pub use health::{ComponentHealth, HealthRegistry, HealthResponse, HealthStatus};
 /// Re-export middleware types
 pub use middleware::{
     auth_middleware, cors_layer, generate_access_token, generate_refresh_token, logging_middleware,
     rate_limit_middleware, request_id_middleware, trace_layer, AuthUser, Claims, GatewayState,
     RequestContext, TokenType,
 };
-
 /// Re-export rate limiting types
 pub use rate_limit::{
     ClientTier, FixedWindowRateLimiter, NoopRateLimiter, RateLimitConfig, RateLimitManager,
     RateLimitResult, RateLimiter,
 };
-
-/// Re-export discovery types
-pub use discovery::{
-    CircuitBreaker, CircuitState, LoadBalancer, RandomBalancer, RoundRobinBalancer,
-    ServiceDiscovery, ServiceInstance, ServiceRouter, StaticDiscovery, WeightedRoundRobinBalancer,
+// MockRepository is only available in test configuration
+#[cfg(test)]
+pub use repository::MockRepository;
+pub use repository::{
+    Entity, FilterCondition, FilterOperator, FilterValue, Pagination, PgRepository, QueryFilter,
+    Repository, SortOrder,
 };
-
+pub use state_store::{
+    AgentFilter, AgentInfo, QueryResult, StateCommand, StateEvent, StateEventType, StateQuery,
+    StateStore, StateStoreConfig, StateStoreStats,
+};
 /// Re-export WebSocket types
 pub use websocket::{ConnectionState, WebSocketManager, WsMessage};
-
-/// Re-export channel binding store types
-pub use channel_binding_store::{ChannelBindingStore, ChannelBinding};
-
-/// Re-export health types
-pub use health::{ComponentHealth, HealthRegistry, HealthResponse, HealthStatus};
 
 /// Library version
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -108,6 +103,7 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const NAME: &str = env!("CARGO_PKG_NAME");
 
 use std::sync::Arc;
+
 use tokio::sync::RwLock;
 use tracing::info;
 
@@ -244,8 +240,9 @@ impl GatewayBuilder {
 
 /// Utility functions
 pub mod utils {
-    use super::*;
     use std::net::SocketAddr;
+
+    use super::*;
 
     /// Parse socket address from string
     pub fn parse_addr(addr: impl AsRef<str>) -> crate::Result<SocketAddr> {

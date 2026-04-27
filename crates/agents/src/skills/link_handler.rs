@@ -75,8 +75,8 @@ impl WebScraper {
         headers.insert(
             USER_AGENT,
             HeaderValue::from_static(
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 \
-                 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) \
+                 Chrome/120.0.0.0 Safari/537.36",
             ),
         );
 
@@ -209,7 +209,9 @@ impl WebScraper {
         }
 
         // Try to extract from og:title meta tag
-        let og_title_regex = Regex::new(r#"<meta[^>]*property=["']og:title["'][^>]*content=["']([^"']+)["']"#).ok()?;
+        let og_title_regex =
+            Regex::new(r#"<meta[^>]*property=["']og:title["'][^>]*content=["']([^"']+)["']"#)
+                .ok()?;
         if let Some(captures) = og_title_regex.captures(html) {
             return captures.get(1).map(|m| m.as_str().trim().to_string());
         }
@@ -220,9 +222,11 @@ impl WebScraper {
     /// Extract text content from HTML
     fn extract_text_from_html(&self, html: &str) -> String {
         // Remove script and style tags
-        let script_regex = Regex::new(r"<script[^>]*>[\s\S]*?</script>").expect("static regex is valid");
-        let style_regex = Regex::new(r"<style[^>]*>[\s\S]*?</style>").expect("static regex is valid");
-        
+        let script_regex =
+            Regex::new(r"<script[^>]*>[\s\S]*?</script>").expect("static regex is valid");
+        let style_regex =
+            Regex::new(r"<style[^>]*>[\s\S]*?</style>").expect("static regex is valid");
+
         let mut text = script_regex.replace_all(html, "").to_string();
         text = style_regex.replace_all(&text, "").to_string();
 
@@ -302,8 +306,6 @@ impl WebScraper {
     }
 }
 
-
-
 /// Scraped content from web page
 #[derive(Debug, Clone)]
 pub struct ScrapedContent {
@@ -350,10 +352,10 @@ impl LinkHandler {
     }
 
     /// Process a URL and return a summary
-    /// 
+    ///
     /// # Arguments
     /// * `url` - The URL to process
-    /// 
+    ///
     /// # Returns
     /// * `LinkSummary` - Generated summary with metadata
     pub async fn process(&self, url: &str) -> Result<LinkSummary> {
@@ -411,10 +413,8 @@ impl LinkHandler {
     /// Generate summary using LLM
     async fn summarize(&self, content: &ScrapedContent) -> Result<String> {
         let prompt = format!(
-            "Please provide a concise summary (max 200 words) of the following {}:\n\n\
-             Title: {}\n\n\
-             Content:\n{}\n\n\
-             Summary:",
+            "Please provide a concise summary (max 200 words) of the following {}:\n\nTitle: \
+             {}\n\nContent:\n{}\n\nSummary:",
             content.content_type,
             content.title.as_deref().unwrap_or("Untitled"),
             &content.content[..content.content.len().min(5000)] // Limit content length
@@ -435,7 +435,8 @@ impl LinkHandler {
             .await
             .map_err(|e| AgentError::Execution(format!("LLM summarization failed: {}", e)))?;
 
-        Ok(response.choices
+        Ok(response
+            .choices
             .into_iter()
             .next()
             .map(|c| c.message.text_content())
@@ -445,9 +446,8 @@ impl LinkHandler {
     /// Extract key points from content
     async fn extract_key_points(&self, content: &str) -> Result<Vec<String>> {
         let prompt = format!(
-            "Extract 3-5 key points from the following text. \
-             Return only the key points, one per line, starting with a dash:\n\n{}\n\n\
-             Key points:",
+            "Extract 3-5 key points from the following text. Return only the key points, one per \
+             line, starting with a dash:\n\n{}\n\nKey points:",
             &content[..content.len().min(3000)]
         );
 
@@ -534,8 +534,7 @@ pub fn format_summary_for_display(summary: &LinkSummary) -> String {
     // Metadata
     result.push_str(&format!(
         "🔗 链接: {}\n📊 类型: {}\n",
-        summary.url,
-        summary.content_type
+        summary.url, summary.content_type
     ));
 
     if let Some(read_time) = summary.read_time {

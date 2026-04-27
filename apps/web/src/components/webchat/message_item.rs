@@ -1,7 +1,8 @@
 //! 消息项组件
 
-use crate::webchat::ChatMessage;
 use leptos::prelude::*;
+
+use crate::webchat::ChatMessage;
 
 /// 消息项组件
 #[component]

@@ -4,14 +4,16 @@
 //! the new comprehensive `LLMClient`.
 
 use std::collections::HashMap;
+
 use async_trait::async_trait;
 use tokio::sync::mpsc;
 
 use crate::communication::{LLMCallInterface, Message as CommMessage};
-use crate::llm::{LLMClient, Message as LLMMessage, Role};
 use crate::error::Result as AgentResult;
+use crate::llm::{LLMClient, Message as LLMMessage, Role};
 
-/// Adapter that wraps the new LLMClient to implement the legacy LLMCallInterface
+/// Adapter that wraps the new LLMClient to implement the legacy
+/// LLMCallInterface
 pub struct LLMClientAdapter {
     client: LLMClient,
 }
@@ -89,7 +91,10 @@ impl LLMCallInterface for LLMClientAdapter {
             .map(|m| m.content)
             .unwrap_or_default();
 
-        let rx = self.client.chat_stream(&last_msg).await
+        let rx = self
+            .client
+            .chat_stream(&last_msg)
+            .await
             .map_err(|e| crate::error::AgentError::Execution(e.to_string()))?;
 
         Ok(rx)
@@ -100,9 +105,10 @@ impl LLMCallInterface for LLMClientAdapter {
 pub struct LegacyLLMClientBuilder;
 
 impl LegacyLLMClientBuilder {
-    /// Build from environment (Kimi)
+    /// Build from environment (OpenAI-compatible)
     pub async fn from_env() -> AgentResult<Box<dyn LLMCallInterface>> {
-        let client = crate::llm::create_kimi_client().await
+        let client = crate::llm::create_openai_client()
+            .await
             .map_err(|e| crate::error::AgentError::InvalidConfig(e.to_string()))?;
 
         Ok(Box::new(LLMClientAdapter::new(client)))

@@ -102,22 +102,46 @@ mod tests {
     #[test]
     fn test_emotional_trait_baseline_offsets() {
         let optimistic = EmotionalTrait::Optimistic.baseline_offset();
-        assert!(optimistic.pleasure > 0.0, "Optimistic pleasure should be > 0, got {}", optimistic.pleasure);
+        assert!(
+            optimistic.pleasure > 0.0,
+            "Optimistic pleasure should be > 0, got {}",
+            optimistic.pleasure
+        );
 
         let pessimistic = EmotionalTrait::Pessimistic.baseline_offset();
-        assert!(pessimistic.pleasure < 0.0, "Pessimistic pleasure should be < 0, got {}", pessimistic.pleasure);
+        assert!(
+            pessimistic.pleasure < 0.0,
+            "Pessimistic pleasure should be < 0, got {}",
+            pessimistic.pleasure
+        );
 
         let high_energy = EmotionalTrait::HighEnergy.baseline_offset();
-        assert!(high_energy.arousal > 0.5, "HighEnergy arousal should be > 0.5, got {}", high_energy.arousal);
+        assert!(
+            high_energy.arousal > 0.5,
+            "HighEnergy arousal should be > 0.5, got {}",
+            high_energy.arousal
+        );
 
         let low_energy = EmotionalTrait::LowEnergy.baseline_offset();
-        assert!(low_energy.arousal < 0.5, "LowEnergy arousal should be < 0.5, got {}", low_energy.arousal);
+        assert!(
+            low_energy.arousal < 0.5,
+            "LowEnergy arousal should be < 0.5, got {}",
+            low_energy.arousal
+        );
 
         let assertive = EmotionalTrait::Assertive.baseline_offset();
-        assert!(assertive.dominance > 0.5, "Assertive dominance should be > 0.5, got {}", assertive.dominance);
+        assert!(
+            assertive.dominance > 0.5,
+            "Assertive dominance should be > 0.5, got {}",
+            assertive.dominance
+        );
 
         let passive = EmotionalTrait::Passive.baseline_offset();
-        assert!(passive.dominance < 0.5, "Passive dominance should be < 0.5, got {}", passive.dominance);
+        assert!(
+            passive.dominance < 0.5,
+            "Passive dominance should be < 0.5, got {}",
+            passive.dominance
+        );
     }
 
     // =============================================================================

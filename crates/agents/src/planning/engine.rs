@@ -5,16 +5,16 @@
 //! - Chain-of-Thought
 //! - Goal-based planning
 
-use super::{
-    plan::{Action, Plan, PlanId, PlanStep, PlanningResult, Priority},
-    storage::{InMemoryPlanStorage, PlanFilter, PlanStorage},
-    Decomposer, DecompositionContext,
-};
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
+
+use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 use tokio::time::{interval, Duration};
+
+use super::plan::{Action, Plan, PlanId, PlanStep, PlanningResult, Priority};
+use super::storage::{InMemoryPlanStorage, PlanFilter, PlanStorage};
+use super::{Decomposer, DecompositionContext};
 
 /// Planning engine that coordinates different planning strategies
 ///
@@ -49,7 +49,7 @@ pub struct PlanningConfig {
 }
 
 /// Tool registry for planners
-/// 
+///
 /// CODE QUALITY FIX: Configurable tool names instead of hardcoded values
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlannerToolRegistry {
@@ -75,15 +75,14 @@ impl PlanningConfig {
     /// Create config from environment variables
     pub fn from_env() -> Self {
         use std::env;
-        
+
         let tool_registry = PlannerToolRegistry {
-            search_tool: env::var("PLANNER_SEARCH_TOOL")
-                .unwrap_or_else(|_| "search".to_string()),
+            search_tool: env::var("PLANNER_SEARCH_TOOL").unwrap_or_else(|_| "search".to_string()),
             execute_tool: env::var("PLANNER_EXECUTE_TOOL")
                 .unwrap_or_else(|_| "execute".to_string()),
             custom_tools: HashMap::new(),
         };
-        
+
         Self {
             default_strategy: PlanStrategy::ReAct,
             enable_replanning: true,
@@ -234,10 +233,10 @@ impl PlanningEngine {
 
         tokio::spawn(async move {
             let mut interval = interval(Duration::from_secs(interval_secs));
-            
+
             loop {
                 interval.tick().await;
-                
+
                 // Clean up persistent storage
                 if let Some(storage) = &storage {
                     match storage.cleanup_expired().await {
@@ -251,7 +250,7 @@ impl PlanningEngine {
                         }
                     }
                 }
-                
+
                 // Clean up in-memory cache
                 {
                     let mut plans_guard = plans.write().await;
@@ -260,7 +259,7 @@ impl PlanningEngine {
                         .filter(|p| p.is_expired())
                         .map(|p| p.id.clone())
                         .collect();
-                    
+
                     for id in expired {
                         plans_guard.remove(&id);
                     }
@@ -271,7 +270,8 @@ impl PlanningEngine {
 
     /// Create a plan using the configured strategy
     ///
-    /// ARCHITECTURE FIX: Plans are now persisted to storage and subject to TTL cleanup.
+    /// ARCHITECTURE FIX: Plans are now persisted to storage and subject to TTL
+    /// cleanup.
     pub async fn create_plan(
         &self,
         goal: &str,
@@ -378,7 +378,7 @@ impl PlanningEngine {
         // Fall back to in-memory
         let plans = self.plans.read().await;
         let mut results: Vec<Plan> = plans.values().cloned().collect();
-        
+
         // Apply simple filter
         if let Some(filter) = filter {
             if let Some(status) = filter.status {
@@ -388,7 +388,7 @@ impl PlanningEngine {
                 results.truncate(limit);
             }
         }
-        
+
         results
     }
 
@@ -402,7 +402,7 @@ impl PlanningEngine {
     #[allow(unused_assignments)]
     pub async fn cleanup_expired(&self) -> usize {
         let mut count = 0;
-        
+
         // Clean up in-memory cache
         {
             let mut plans = self.plans.write().await;
@@ -411,13 +411,13 @@ impl PlanningEngine {
                 .filter(|p| p.is_expired())
                 .map(|p| p.id.clone())
                 .collect();
-            
+
             count = expired.len();
             for id in expired {
                 plans.remove(&id);
             }
         }
-        
+
         // Clean up persistent storage
         if let Some(storage) = &self.storage {
             match storage.cleanup_expired().await {
@@ -427,7 +427,7 @@ impl PlanningEngine {
                 }
             }
         }
-        
+
         count
     }
 
@@ -458,8 +458,9 @@ impl Default for PlanningEngine {
 }
 
 /// ReAct (Reasoning + Acting) planner
-/// 
-/// CODE QUALITY FIX: Now uses configurable tool registry instead of hardcoded names
+///
+/// CODE QUALITY FIX: Now uses configurable tool registry instead of hardcoded
+/// names
 pub struct ReActPlanner {
     tool_registry: PlannerToolRegistry,
 }
@@ -471,7 +472,7 @@ impl ReActPlanner {
             tool_registry: PlannerToolRegistry::default(),
         }
     }
-    
+
     /// Create with custom tool registry
     pub fn with_tools(tool_registry: PlannerToolRegistry) -> Self {
         Self { tool_registry }
@@ -483,36 +484,39 @@ impl ReActPlanner {
 
         // Initial reasoning
         steps.push(
-            PlanStep::reasoning(format!("Analyze the goal: {}", goal))
-                .with_action(Action::LLMReasoning {
+            PlanStep::reasoning(format!("Analyze the goal: {}", goal)).with_action(
+                Action::LLMReasoning {
                     prompt: format!("Analyze this goal and identify key aspects: {}", goal),
                     context: HashMap::new(),
-                }),
+                },
+            ),
         );
 
         // Information gathering if needed - uses configured search tool
         steps.push(
-            PlanStep::new("gather", "Gather necessary information")
-                .with_action(Action::ToolUse {
-                    tool_name: self.tool_registry.search_tool.clone(),
-                    parameters: HashMap::new(),
-                }),
+            PlanStep::new("gather", "Gather necessary information").with_action(Action::ToolUse {
+                tool_name: self.tool_registry.search_tool.clone(),
+                parameters: HashMap::new(),
+            }),
         );
 
         // Planning/decision step
-        steps.push(PlanStep::decision("Determine approach based on gathered information"));
+        steps.push(PlanStep::decision(
+            "Determine approach based on gathered information",
+        ));
 
         // Action execution - uses configured execute tool
         steps.push(
-            PlanStep::new("execute", "Execute primary action")
-                .with_action(Action::ToolUse {
-                    tool_name: self.tool_registry.execute_tool.clone(),
-                    parameters: HashMap::new(),
-                }),
+            PlanStep::new("execute", "Execute primary action").with_action(Action::ToolUse {
+                tool_name: self.tool_registry.execute_tool.clone(),
+                parameters: HashMap::new(),
+            }),
         );
 
         // Observation and reflection
-        steps.push(PlanStep::reasoning("Reflect on results and determine next steps"));
+        steps.push(PlanStep::reasoning(
+            "Reflect on results and determine next steps",
+        ));
 
         // Validation
         steps.push(PlanStep::new("validate", "Validate results against goal"));
@@ -623,8 +627,9 @@ impl Default for ChainOfThoughtPlanner {
 }
 
 /// Goal-based planner
-/// 
-/// CODE QUALITY FIX: Now uses configurable tool registry instead of hardcoded names
+///
+/// CODE QUALITY FIX: Now uses configurable tool registry instead of hardcoded
+/// names
 pub struct GoalBasedPlanner {
     tool_registry: PlannerToolRegistry,
 }
@@ -636,7 +641,7 @@ impl GoalBasedPlanner {
             tool_registry: PlannerToolRegistry::default(),
         }
     }
-    
+
     /// Create with custom tool registry
     pub fn with_tools(tool_registry: PlannerToolRegistry) -> Self {
         Self { tool_registry }
@@ -648,11 +653,14 @@ impl GoalBasedPlanner {
 
         // Identify main goal
         steps.push(
-            PlanStep::new("identify_goal", format!("Identify and clarify goal: {}", goal))
-                .with_action(Action::LLMReasoning {
-                    prompt: format!("Clarify and formalize this goal: {}", goal),
-                    context: HashMap::new(),
-                }),
+            PlanStep::new(
+                "identify_goal",
+                format!("Identify and clarify goal: {}", goal),
+            )
+            .with_action(Action::LLMReasoning {
+                prompt: format!("Clarify and formalize this goal: {}", goal),
+                context: HashMap::new(),
+            }),
         );
 
         // Define success criteria
@@ -670,11 +678,12 @@ impl GoalBasedPlanner {
 
         // Execute actions - uses configured execute tool
         steps.push(
-            PlanStep::new("execute", "Execute planned actions toward goal")
-                .with_action(Action::ToolUse {
+            PlanStep::new("execute", "Execute planned actions toward goal").with_action(
+                Action::ToolUse {
                     tool_name: self.tool_registry.execute_tool.clone(),
                     parameters: HashMap::new(),
-                }),
+                },
+            ),
         );
 
         // Verify goal achievement
@@ -755,8 +764,7 @@ impl Planner for HybridPlanner {
     #[allow(unused_variables)]
     async fn plan(&self, goal: &str, context: &PlanContext) -> PlanningResult<Plan> {
         // First use decomposer for task breakdown
-        let decomp_context = DecompositionContext::new()
-            .with_max_depth(2);  // 🆕 FIX: Reduced from 3 to limit step count
+        let decomp_context = DecompositionContext::new().with_max_depth(2); // 🆕 FIX: Reduced from 3 to limit step count
 
         let mut plan = self.decomposer.decompose(goal, &decomp_context)?;
         plan.name = "Hybrid Plan".to_string();
@@ -778,10 +786,14 @@ impl Planner for HybridPlanner {
         let mut deduped = Vec::new();
         let mut seen_descriptions = std::collections::HashSet::new();
         for step in enhanced_steps {
-            let normalized = step.description.to_lowercase().replace(|c: char| !c.is_alphanumeric(), "");
+            let normalized = step
+                .description
+                .to_lowercase()
+                .replace(|c: char| !c.is_alphanumeric(), "");
             // Skip if we've seen a very similar description
             if seen_descriptions.iter().any(|s: &String| {
-                let similarity = normalized.chars().filter(|c| s.contains(*c)).count() as f32 / normalized.len().max(s.len()) as f32;
+                let similarity = normalized.chars().filter(|c| s.contains(*c)).count() as f32
+                    / normalized.len().max(s.len()) as f32;
                 similarity > 0.85
             }) {
                 continue;
@@ -804,12 +816,11 @@ impl Planner for HybridPlanner {
             plan.add_step_with_deps(plan.steps[i].clone(), vec![i - 1])?;
         }
 
-        // 🆕 FIX: Mark plan as parallel-safe when steps are independent (no branching deps)
-        // This allows the executor to run steps concurrently and avoid timeout
-        plan.metadata.insert(
-            "enable_parallel".to_string(),
-            serde_json::Value::Bool(true),
-        );
+        // 🆕 FIX: Mark plan as parallel-safe when steps are independent (no branching
+        // deps) This allows the executor to run steps concurrently and avoid
+        // timeout
+        plan.metadata
+            .insert("enable_parallel".to_string(), serde_json::Value::Bool(true));
         plan.metadata.insert(
             "max_concurrency".to_string(),
             serde_json::Value::Number(serde_json::Number::from(5)),
@@ -845,7 +856,10 @@ mod tests {
 
         assert_eq!(plan.name, "ReAct Plan");
         assert!(!plan.steps.is_empty());
-        assert!(plan.steps.iter().any(|s| matches!(s.step_type, super::super::StepType::Reasoning)));
+        assert!(plan
+            .steps
+            .iter()
+            .any(|s| matches!(s.step_type, super::super::StepType::Reasoning)));
     }
 
     #[tokio::test]
@@ -853,7 +867,10 @@ mod tests {
         let planner = ChainOfThoughtPlanner::new();
         let context = PlanContext::new("test-agent");
 
-        let plan = planner.plan("Solve complex math problem", &context).await.unwrap();
+        let plan = planner
+            .plan("Solve complex math problem", &context)
+            .await
+            .unwrap();
 
         assert_eq!(plan.name, "Chain-of-Thought Plan");
         assert!(!plan.steps.is_empty());

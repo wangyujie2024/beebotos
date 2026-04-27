@@ -1,6 +1,7 @@
-use crate::i18n::I18nContext;
 use leptos::prelude::*;
 use leptos_router::hooks::use_location;
+
+use crate::i18n::I18nContext;
 
 #[component]
 pub fn TopBar() -> impl IntoView {
@@ -51,10 +52,10 @@ pub fn TopBar() -> impl IntoView {
                 <h1 class="page-title">{move || page_title.get()}</h1>
             </div>
             <div class="top-bar-right">
-                <button class="icon-btn" title="Notifications">
+                <button class="icon-btn" title=move || i18n_stored.get_value().t("notifications")>
                     "🔔"
                 </button>
-                <button class="icon-btn" title="Settings" on:click=move |_| {
+                <button class="icon-btn" title=move || i18n_stored.get_value().t("nav-settings") on:click=move |_| {
                     let navigate = leptos_router::hooks::use_navigate();
                     navigate("/settings", Default::default());
                 }>

@@ -3,16 +3,18 @@
 //! Provides a centralized event management system with subscription handling,
 //! automatic reconnection, and event routing.
 
-use crate::chains::common::events::{EventFilter, EventProcessor, EvmEvent, SubscriptionType};
-use crate::chains::common::EvmProvider;
-use crate::{ChainError, Result};
-use alloy_primitives::B256;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
+
+use alloy_primitives::B256;
 use tokio::sync::{mpsc, RwLock};
 use tokio::task::JoinHandle;
 use tracing::{debug, error, info, instrument, warn};
+
+use crate::chains::common::events::{EventFilter, EventProcessor, EvmEvent, SubscriptionType};
+use crate::chains::common::EvmProvider;
+use crate::{ChainError, Result};
 
 /// Unique subscription ID
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

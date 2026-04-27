@@ -8,8 +8,9 @@ pub use mock_provider::{MockProvider, MockProviderBuilder};
 
 /// Test constants for consistent testing
 pub mod constants {
-    use alloy_primitives::{Address, U256};
     use std::str::FromStr;
+
+    use alloy_primitives::{Address, U256};
 
     /// Test addresses
     pub const TEST_ADDRESS_1: &str = "0x1234567890123456789012345678901234567890";
@@ -66,8 +67,9 @@ macro_rules! assert_result_err {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use alloy_primitives::U256;
+
+    use super::*;
 
     #[test]
     fn test_constants() {

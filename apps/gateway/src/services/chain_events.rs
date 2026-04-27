@@ -5,10 +5,10 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::{broadcast, RwLock};
-use tracing::{debug, error, info, instrument, warn};
 
 use beebotos_chain::compat::ChainClientTrait;
+use tokio::sync::{broadcast, RwLock};
+use tracing::{debug, error, info, instrument, warn};
 
 use super::chain_event_parser::{ChainEventParser, ParsedEvent};
 
@@ -62,10 +62,7 @@ pub enum ChainEvent {
         success: bool,
     },
     /// Transaction pending (submitted but not yet confirmed)
-    TransactionPending {
-        tx_hash: String,
-        timestamp: u64,
-    },
+    TransactionPending { tx_hash: String, timestamp: u64 },
 }
 
 /// Event subscription
@@ -134,7 +131,7 @@ impl ChainEventManager {
     /// Create new event manager
     pub fn new(client: Arc<dyn ChainClientTrait>) -> Self {
         let (event_tx, _) = broadcast::channel(1000);
-        
+
         Self {
             client,
             subscriptions: Arc::new(RwLock::new(HashMap::new())),
@@ -142,12 +139,12 @@ impl ChainEventManager {
             event_parser: None,
         }
     }
-    
+
     /// Create with event parser
     #[allow(dead_code)]
     pub fn with_parser(client: Arc<dyn ChainClientTrait>, parser: ChainEventParser) -> Self {
         let (event_tx, _) = broadcast::channel(1000);
-        
+
         Self {
             client,
             subscriptions: Arc::new(RwLock::new(HashMap::new())),
@@ -155,18 +152,18 @@ impl ChainEventManager {
             event_parser: Some(parser),
         }
     }
-    
+
     /// Set event parser
     #[allow(dead_code)]
     pub fn set_event_parser(&mut self, parser: ChainEventParser) {
         self.event_parser = Some(parser);
     }
-    
+
     /// Subscribe to events
     pub fn subscribe(&self) -> broadcast::Receiver<ChainEvent> {
         self.event_tx.subscribe()
     }
-    
+
     /// Add event subscription
     #[allow(dead_code)]
     pub async fn add_subscription(&self, subscription: EventSubscription) {
@@ -175,7 +172,7 @@ impl ChainEventManager {
         subs.insert(subscription_id.clone(), subscription);
         debug!(subscription_id = %subscription_id, "Added event subscription");
     }
-    
+
     /// Remove event subscription
     #[allow(dead_code)]
     pub async fn remove_subscription(&self, subscription_id: &str) {
@@ -183,47 +180,50 @@ impl ChainEventManager {
         subs.remove(subscription_id);
         debug!(subscription_id = %subscription_id, "Removed event subscription");
     }
-    
+
     /// Publish event to all subscribers
     pub fn publish_event(&self, event: ChainEvent) {
         let _ = self.event_tx.send(event);
     }
-    
+
     /// Start event monitoring loop
     pub fn start_monitoring(self: Arc<Self>) {
         tokio::spawn(async move {
             info!("Starting chain event monitoring loop");
-            
+
             loop {
                 // Poll for new events
                 if let Err(e) = self.poll_events().await {
                     error!(error = %e, "Error polling events");
                 }
-                
+
                 tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
             }
         });
     }
-    
+
     /// Poll for new events
     async fn poll_events(&self) -> anyhow::Result<()> {
         // Get current block number
-        let current_block = self.client.get_block_number().await
+        let current_block = self
+            .client
+            .get_block_number()
+            .await
             .map_err(|e| anyhow::anyhow!("Failed to get block number: {}", e))?;
-        
+
         debug!(current_block = %current_block, "Polling for events");
-        
+
         // TODO: Query events from chain using filters
         // This would query the contract event logs
-        
+
         Ok(())
     }
-    
+
     /// Track a transaction for confirmation and parse events
     #[instrument(skip(self), fields(tx_hash = %tx_hash))]
     pub async fn track_transaction(&self, tx_hash: &str) {
         info!("Starting transaction tracking");
-        
+
         // Publish pending event
         self.publish_event(ChainEvent::TransactionPending {
             tx_hash: tx_hash.to_string(),
@@ -232,7 +232,7 @@ impl ChainEventManager {
                 .unwrap_or_default()
                 .as_secs(),
         });
-        
+
         // Start confirmation tracking with event parsing
         let tx_hash_bytes: [u8; 32] = match hex::decode(tx_hash.trim_start_matches("0x")) {
             Ok(bytes) if bytes.len() == 32 => {
@@ -245,22 +245,23 @@ impl ChainEventManager {
                 return;
             }
         };
-        
+
         let has_parser = self.event_parser.is_some();
         let event_parser = self.event_parser.clone();
-        
+
         let client = Arc::clone(&self.client);
         let event_tx = self.event_tx.clone();
         let tx_hash = tx_hash.to_string();
-        
+
         tokio::spawn(async move {
             track_confirmation_with_parsing(
-                client, 
-                event_tx, 
-                tx_hash, 
+                client,
+                event_tx,
+                tx_hash,
                 tx_hash_bytes,
                 has_parser.then(|| event_parser).flatten(),
-            ).await;
+            )
+            .await;
         });
     }
 }
@@ -275,9 +276,12 @@ async fn track_confirmation_with_parsing(
 ) {
     let mut checked_blocks = 0u64;
     let max_wait_blocks = 100u64; // Stop after ~20 minutes (100 * 12s blocks)
-    
+
     loop {
-        match client.get_transaction_receipt(beebotos_chain::compat::TxHash::from_slice(&tx_hash_bytes)).await {
+        match client
+            .get_transaction_receipt(beebotos_chain::compat::TxHash::from_slice(&tx_hash_bytes))
+            .await
+        {
             Ok(Some(receipt)) => {
                 // Parse events from receipt if parser is available
                 if let Some(ref parser) = event_parser {
@@ -286,34 +290,34 @@ async fn track_confirmation_with_parsing(
                         convert_and_emit_event(&event_tx, event, &tx_hash, receipt.block_number);
                     }
                 }
-                
+
                 let confirmed = ChainEvent::TransactionConfirmed {
                     tx_hash: tx_hash.clone(),
                     block_number: receipt.block_number,
                     gas_used: receipt.gas_used,
                     success: receipt.status,
                 };
-                
+
                 let _ = event_tx.send(confirmed);
-                
+
                 info!(
                     tx_hash = %tx_hash,
                     block_number = %receipt.block_number,
                     success = %receipt.status,
                     "Transaction confirmed"
                 );
-                
+
                 return;
             }
             Ok(None) => {
                 // Transaction not yet mined
                 checked_blocks += 1;
-                
+
                 if checked_blocks >= max_wait_blocks {
                     warn!(tx_hash = %tx_hash, "Transaction confirmation timeout");
                     return;
                 }
-                
+
                 tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
             }
             Err(e) => {
@@ -357,7 +361,7 @@ fn convert_and_emit_event(
         }),
         _ => None,
     };
-    
+
     if let Some(e) = chain_event {
         let _ = event_tx.send(e);
     }
@@ -373,7 +377,7 @@ impl ConfirmationTracker {
             client,
         }
     }
-    
+
     /// Add transaction to track
     #[allow(dead_code)]
     pub async fn track(&self, tx_hash: String) {
@@ -384,31 +388,31 @@ impl ConfirmationTracker {
             confirmations: 0,
             status: PendingTxStatus::Submitted,
         };
-        
+
         let mut txs = self.pending_txs.write().await;
         txs.insert(tx_hash, pending);
     }
-    
+
     /// Get pending transaction status
     #[allow(dead_code)]
     pub async fn get_status(&self, tx_hash: &str) -> Option<PendingTransaction> {
         let txs = self.pending_txs.read().await;
         txs.get(tx_hash).cloned()
     }
-    
+
     /// Start confirmation monitoring
     #[allow(dead_code)]
     pub fn start_monitoring(self: Arc<Self>) {
         tokio::spawn(async move {
             info!("Starting confirmation tracker");
-            
+
             loop {
                 self.check_confirmations().await;
                 tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
             }
         });
     }
-    
+
     /// Check confirmations for all pending transactions
     #[allow(dead_code)]
     async fn check_confirmations(&self) {
@@ -419,21 +423,21 @@ impl ConfirmationTracker {
                 return;
             }
         };
-        
+
         let mut txs = self.pending_txs.write().await;
         let mut to_remove = Vec::new();
-        
+
         for (tx_hash, pending) in txs.iter_mut() {
             if pending.status == PendingTxStatus::Confirmed {
                 to_remove.push(tx_hash.clone());
                 continue;
             }
-            
+
             // Check if transaction is mined
             if let Some(mined_block) = pending.block_number {
                 let confirmations = current_block - mined_block;
                 pending.confirmations = confirmations;
-                
+
                 if confirmations >= self.required_confirmations {
                     pending.status = PendingTxStatus::Confirmed;
                     info!(
@@ -445,7 +449,7 @@ impl ConfirmationTracker {
                 }
             }
         }
-        
+
         // Remove confirmed transactions
         for tx_hash in to_remove {
             txs.remove(&tx_hash);
@@ -464,10 +468,10 @@ mod tests {
             event_type: EventType::IdentityRegistered,
             filters: EventFilters::default(),
         };
-        
+
         assert_eq!(subscription.event_type, EventType::IdentityRegistered);
     }
-    
+
     #[test]
     fn test_pending_transaction() {
         let pending = PendingTransaction {
@@ -477,7 +481,7 @@ mod tests {
             confirmations: 5,
             status: PendingTxStatus::Mined,
         };
-        
+
         assert_eq!(pending.confirmations, 5);
         assert_eq!(pending.status, PendingTxStatus::Mined);
     }

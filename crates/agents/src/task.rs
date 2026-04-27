@@ -10,8 +10,9 @@ use serde::{Deserialize, Serialize};
 ///
 /// Type-safe task types prevent runtime errors from typos
 /// and provide clear documentation of supported operations.
-/// 
-/// 🆕 PLANNING FIX: Added planning-related task types for Agent planning integration
+///
+/// 🆕 PLANNING FIX: Added planning-related task types for Agent planning
+/// integration
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum TaskType {
     /// LLM chat completion
@@ -146,8 +147,9 @@ pub struct Artifact {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::str::FromStr;
+
+    use super::*;
 
     #[test]
     fn test_task_creation() {

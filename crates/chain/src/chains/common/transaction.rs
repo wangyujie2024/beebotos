@@ -2,10 +2,12 @@
 //!
 //! Provides chain-agnostic transaction construction.
 
+use std::collections::HashMap;
+
+use alloy_rpc_types::TransactionRequest;
+
 use crate::chains::common::TransactionPriority;
 use crate::compat::{Address, U256};
-use alloy_rpc_types::TransactionRequest;
-use std::collections::HashMap;
 
 /// Transaction builder with fluent API
 #[derive(Debug, Clone)]

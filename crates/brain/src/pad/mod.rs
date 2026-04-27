@@ -1,7 +1,7 @@
 //! PAD Module - Core Emotional State Model
 //!
-//! This module provides the **PAD (Pleasure-Arousal-Dominance)** emotional model,
-//! a dimensional approach to representing emotional states in 3D space.
+//! This module provides the **PAD (Pleasure-Arousal-Dominance)** emotional
+//! model, a dimensional approach to representing emotional states in 3D space.
 //!
 //! ## Purpose
 //! - Low-level emotional state representation
@@ -15,7 +15,8 @@
 //! - A compact representation for neural network inputs
 //!
 //! ## Relation to `emotion` module
-//! The `emotion` module builds on top of PAD and adds higher-level concepts like:
+//! The `emotion` module builds on top of PAD and adds higher-level concepts
+//! like:
 //! - Emotion dynamics and decay over time
 //! - Emotional contagion between agents
 //! - Emotion-based memory tagging
@@ -29,8 +30,6 @@ pub use emotion::{
     BasicEmotion, Emotion, EmotionCategory, EmotionalEvent, EmotionalIntelligence, EmotionalTrait,
     Pad,
 };
-
-
 
 #[cfg(test)]
 #[path = "tests.rs"]

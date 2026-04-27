@@ -1,8 +1,10 @@
 //! 调试控制台组件
 
-use crate::browser::debugger::{BrowserLogEntry, LogLevel};
-use crate::utils::event_target_value;
 use leptos::prelude::*;
+
+use crate::browser::debugger::{BrowserLogEntry, LogLevel};
+use crate::i18n::I18nContext;
+use crate::utils::event_target_value;
 
 /// 调试控制台组件
 #[component]
@@ -13,6 +15,9 @@ pub fn DebugConsole(
     #[prop(optional)] on_clear: Option<Box<dyn Fn()>>,
     #[prop(optional)] on_export: Option<Box<dyn Fn()>>,
 ) -> impl IntoView {
+    let i18n = use_context::<I18nContext>().expect("i18n context not found");
+    let i18n_stored = StoredValue::new(i18n);
+
     let _auto_scroll = auto_scroll.unwrap_or(true);
 
     // 过滤日志
@@ -30,7 +35,7 @@ pub fn DebugConsole(
     view! {
         <div class="debug-console">
             <div class="debug-header">
-                <h4>"Debug Console"</h4>
+                <h4>{move || i18n_stored.get_value().t("debug-console-title")}</h4>
                 <div class="debug-actions">
                     <button
                         class="btn btn-sm"
@@ -40,7 +45,7 @@ pub fn DebugConsole(
                             }
                         }
                     >
-                        "Clear"
+                        {move || i18n_stored.get_value().t("debug-console-clear")}
                     </button>
                     <button
                         class="btn btn-sm"
@@ -50,7 +55,7 @@ pub fn DebugConsole(
                             }
                         }
                     >
-                        "Export"
+                        {move || i18n_stored.get_value().t("debug-console-export")}
                     </button>
                 </div>
             </div>
@@ -59,7 +64,7 @@ pub fn DebugConsole(
                 {if filtered_logs.is_empty() {
                     view! {
                         <div class="empty-logs">
-                            <p>"No logs to display"</p>
+                            <p>{move || i18n_stored.get_value().t("debug-console-empty")}</p>
                         </div>
                     }.into_any()
                 } else {
@@ -111,9 +116,12 @@ pub fn LogLevelFilter(
     current_level: Option<LogLevel>,
     on_change: Box<dyn Fn(Option<LogLevel>)>,
 ) -> impl IntoView {
+    let i18n = use_context::<I18nContext>().expect("i18n context not found");
+    let i18n_stored = StoredValue::new(i18n);
+
     view! {
         <div class="log-level-filter">
-            <label>"Filter Level:"</label>
+            <label>{move || i18n_stored.get_value().t("debug-console-filter-level")}</label>
             <select
                 on:change=move |ev| {
                     let value = event_target_value(&ev);
@@ -128,15 +136,13 @@ pub fn LogLevelFilter(
                     on_change(level);
                 }
             >
-                <option value="" selected={current_level.is_none()}>"All"</option>
-                <option value="debug" selected={current_level == Some(LogLevel::Debug)}>"Debug"</option>
-                <option value="info" selected={current_level == Some(LogLevel::Info)}>"Info"</option>
-                <option value="warning" selected={current_level == Some(LogLevel::Warning)}>"Warning"</option>
-                <option value="error" selected={current_level == Some(LogLevel::Error)}>"Error"</option>
-                <option value="critical" selected={current_level == Some(LogLevel::Critical)}>"Critical"</option>
+                <option value="" selected={current_level.is_none()}>{move || i18n_stored.get_value().t("debug-console-filter-all")}</option>
+                <option value="debug" selected={current_level == Some(LogLevel::Debug)}>{move || i18n_stored.get_value().t("debug-console-filter-debug")}</option>
+                <option value="info" selected={current_level == Some(LogLevel::Info)}>{move || i18n_stored.get_value().t("debug-console-filter-info")}</option>
+                <option value="warning" selected={current_level == Some(LogLevel::Warning)}>{move || i18n_stored.get_value().t("debug-console-filter-warning")}</option>
+                <option value="error" selected={current_level == Some(LogLevel::Error)}>{move || i18n_stored.get_value().t("debug-console-filter-error")}</option>
+                <option value="critical" selected={current_level == Some(LogLevel::Critical)}>{move || i18n_stored.get_value().t("debug-console-filter-critical")}</option>
             </select>
         </div>
     }
 }
-
-

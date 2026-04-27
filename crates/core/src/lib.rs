@@ -14,24 +14,16 @@ pub mod types;
 
 // 🟢 P1 FIX: Export unified configuration management
 pub use config::{Config, ConfigCenter, Environment};
-// 🟢 P1 FIX: Export unified error types (legacy aliases for backward compatibility)
-pub use error::{
-    BeeBotOSError as Error,
-    Result as LegacyResult,
-};
 // 🟢 P1 FIX: New unified error types
-pub use error::{
-    BeeBotOSError,
-    ErrorBuilder,
-    ErrorCode,
-    ErrorContext,
-    Result,
-    Severity,
-};
+pub use error::{BeeBotOSError, ErrorBuilder, ErrorCode, ErrorContext, Result, Severity};
+// 🟢 P1 FIX: Export unified error types (legacy aliases for backward compatibility)
+pub use error::{BeeBotOSError as Error, Result as LegacyResult};
 // Note: bail and err macros are #[macro_export] and available at crate root automatically
 pub use event::{Event, EventBus};
-pub use event_bus::{EventBusHandle, EventBusError, SystemEvent, SystemEventBus, TypedEventReceiver};
-pub use message_bus::{CoreMessageBus, init_message_bus, message_bus};
+pub use event_bus::{
+    EventBusError, EventBusHandle, SystemEvent, SystemEventBus, TypedEventReceiver,
+};
+pub use message_bus::{init_message_bus, message_bus, CoreMessageBus};
 pub use types::*;
 
 /// Version information

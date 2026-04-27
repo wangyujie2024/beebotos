@@ -3,13 +3,15 @@
 //! Precompiles WASM modules to native code for faster startup.
 //! Supports caching and parallel compilation.
 
-use crate::error::{KernelError, Result};
-use crate::wasm::engine::WasmEngine;
-use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+
+use parking_lot::RwLock;
 use tracing::{debug, info, warn};
+
+use crate::error::{KernelError, Result};
+use crate::wasm::engine::WasmEngine;
 
 /// Precompiled module cache
 pub struct PrecompileCache {
@@ -388,8 +390,9 @@ pub fn validate_wasm(wasm_bytes: &[u8]) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use tempfile::TempDir;
+
+    use super::*;
 
     #[test]
     fn test_cache_key() {

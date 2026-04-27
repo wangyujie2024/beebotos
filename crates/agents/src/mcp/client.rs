@@ -32,23 +32,26 @@ impl Default for ClientConfig {
 
 /// MCP Client
 ///
-/// ARCHITECTURE FIX: Now implements proper request-response matching using request IDs.
-/// Each request gets a unique ID, and responses are matched to their corresponding requests.
+/// ARCHITECTURE FIX: Now implements proper request-response matching using
+/// request IDs. Each request gets a unique ID, and responses are matched to
+/// their corresponding requests.
 pub struct MCPClient {
     config: ClientConfig,
     initialized: AtomicBool,
     request_counter: Mutex<u64>,
     server_capabilities: RwLock<Option<ServerCapabilities>>,
     request_tx: mpsc::UnboundedSender<JsonRpcRequest>,
-    /// ARCHITECTURE FIX: Map of pending requests (request_id -> response channel)
+    /// ARCHITECTURE FIX: Map of pending requests (request_id -> response
+    /// channel)
     pending_requests: Arc<Mutex<HashMap<RequestId, tokio::sync::oneshot::Sender<JsonRpcResponse>>>>,
 }
 
 impl MCPClient {
     /// Create new MCP client
     ///
-    /// ARCHITECTURE FIX: Returns a client along with channels for request/response handling.
-    /// Use `start_response_handler` to spawn a task that handles incoming responses.
+    /// ARCHITECTURE FIX: Returns a client along with channels for
+    /// request/response handling. Use `start_response_handler` to spawn a
+    /// task that handles incoming responses.
     pub fn new(
         config: ClientConfig,
     ) -> (
@@ -74,7 +77,8 @@ impl MCPClient {
         (client, request_rx, response_tx)
     }
 
-    /// ARCHITECTURE FIX: Start background task to handle responses and match to requests
+    /// ARCHITECTURE FIX: Start background task to handle responses and match to
+    /// requests
     fn start_response_handler(&self, mut response_rx: mpsc::UnboundedReceiver<JsonRpcResponse>) {
         let pending = self.pending_requests.clone();
 
@@ -310,9 +314,10 @@ impl MCPClient {
 
     /// Send request
     ///
-    /// ARCHITECTURE FIX: Implements proper request-response matching using request IDs.
-    /// Each request is assigned a unique ID and registered in pending_requests.
-    /// The response handler task routes responses back to the correct request.
+    /// ARCHITECTURE FIX: Implements proper request-response matching using
+    /// request IDs. Each request is assigned a unique ID and registered in
+    /// pending_requests. The response handler task routes responses back to
+    /// the correct request.
     async fn request(
         &self,
         method: impl Into<String>,
@@ -367,7 +372,9 @@ impl MCPClient {
                 // Response handler dropped - clean up pending request
                 let mut pending = self.pending_requests.lock().await;
                 pending.remove(&request_id);
-                Err(MCPError::ConnectionFailed("Response channel closed".to_string()))
+                Err(MCPError::ConnectionFailed(
+                    "Response channel closed".to_string(),
+                ))
             }
             Err(_) => {
                 // Timeout - clean up pending request
@@ -406,19 +413,19 @@ impl MCPClient {
 }
 
 /// ARCHITECTURE FIX: Implement Drop for graceful cleanup
-/// 
+///
 /// Note: This uses try_lock to avoid blocking in drop.
 /// In production, prefer explicit close() calls for proper async cleanup.
 impl Drop for MCPClient {
     fn drop(&mut self) {
         // Mark as not initialized to signal shutdown
         self.initialized.store(false, Ordering::SeqCst);
-        
+
         // Try to clear pending requests without blocking
         if let Ok(mut pending) = self.pending_requests.try_lock() {
             pending.clear();
         }
-        
+
         // Note: We cannot send async close notification in Drop
         // The application should call close().await before dropping
         tracing::debug!("MCPClient dropped, pending requests cleared");

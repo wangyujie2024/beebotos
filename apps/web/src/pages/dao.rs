@@ -1,12 +1,13 @@
-use crate::api::{CreateProposalRequest, DaoSummary, ProposalInfo, ProposalStatus};
-use crate::components::Modal;
-use crate::state::notification::NotificationType;
-use crate::state::use_app_state;
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 use leptos::view;
 use leptos_meta::*;
 use leptos_router::components::A;
+
+use crate::api::{CreateProposalRequest, DaoSummary, ProposalInfo, ProposalStatus};
+use crate::components::Modal;
+use crate::state::notification::NotificationType;
+use crate::state::use_app_state;
 
 #[component]
 pub fn DaoPage() -> impl IntoView {

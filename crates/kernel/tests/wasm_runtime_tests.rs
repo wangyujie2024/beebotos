@@ -1,6 +1,7 @@
 //! WASM Runtime Tests
 //!
-//! Tests for WebAssembly execution engine, instance management, memory, and metering.
+//! Tests for WebAssembly execution engine, instance management, memory, and
+//! metering.
 
 use beebotos_kernel::wasm::engine::CacheStats;
 use beebotos_kernel::wasm::host_funcs::{HostContext, HostFunctions};

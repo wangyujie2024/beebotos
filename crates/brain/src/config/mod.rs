@@ -19,15 +19,17 @@ pub mod hot_reload;
 pub mod loader;
 pub mod validator;
 
+use std::path::Path;
+
 pub use hot_reload::{AutoReloadConfig, ConfigWatcher, HotReloadConfig};
 pub use loader::{ConfigLoader, ConfigSource};
 pub use validator::{ConfigValidator, ValidationError, ValidationResult};
 
+use crate::neat::config::NeatConfig;
 use crate::{
-    neat::config::NeatConfig, BaselineEmotion, BrainConfig, FeatureToggles, MemoryConfig,
-    PadConfig, ParallelConfig, PersonalityConfig,
+    BaselineEmotion, BrainConfig, FeatureToggles, MemoryConfig, PadConfig, ParallelConfig,
+    PersonalityConfig,
 };
-use std::path::Path;
 
 /// Configuration builder for fluent API
 #[derive(Debug, Clone)]

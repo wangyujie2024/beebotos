@@ -4,10 +4,9 @@
 //! Supports CTCP (Client-To-Client Protocol), formatting codes,
 //! and IRC-specific features.
 
-use crate::communication::channel::content::{
-    ContentType as UnifiedContentType, PlatformContent,
-};
 use serde::{Deserialize, Serialize};
+
+use crate::communication::channel::content::{ContentType as UnifiedContentType, PlatformContent};
 
 /// IRC message types
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -95,7 +94,14 @@ impl IRCFormat {
     /// Format text with color
     pub fn color(text: impl AsRef<str>, fg: u8, bg: Option<u8>) -> String {
         if let Some(bg) = bg {
-            format!("{}{:02},{:02}{}{}", Self::COLOR, fg, bg, text.as_ref(), Self::RESET)
+            format!(
+                "{}{:02},{:02}{}{}",
+                Self::COLOR,
+                fg,
+                bg,
+                text.as_ref(),
+                Self::RESET
+            )
         } else {
             format!("{}{:02}{}{}", Self::COLOR, fg, text.as_ref(), Self::RESET)
         }
@@ -164,9 +170,22 @@ impl CTCP {
         let params_str = if params.is_empty() {
             String::new()
         } else {
-            format!(" {}", params.iter().map(|p| p.as_ref()).collect::<Vec<_>>().join(" "))
+            format!(
+                " {}",
+                params
+                    .iter()
+                    .map(|p| p.as_ref())
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            )
         };
-        format!("{}{}{}{}", Self::DELIM, command.as_ref(), params_str, Self::DELIM)
+        format!(
+            "{}{}{}{}",
+            Self::DELIM,
+            command.as_ref(),
+            params_str,
+            Self::DELIM
+        )
     }
 
     /// Create CTCP reply
@@ -181,11 +200,12 @@ impl CTCP {
             return None;
         }
 
-        let inner = &text[1..text.len()-1];
+        let inner = &text[1..text.len() - 1];
         let parts: Vec<&str> = inner.splitn(2, ' ').collect();
-        
+
         let command = parts.first()?.to_string();
-        let params = parts.get(1)
+        let params = parts
+            .get(1)
             .map(|p| p.split(' ').map(|s| s.to_string()).collect())
             .unwrap_or_default();
 
@@ -318,7 +338,6 @@ impl IRCContentParser {
         let mut ranges = Vec::new();
         let mut chars = text.chars().enumerate().peekable();
 
-
         let mut bold_start: Option<usize> = None;
         let mut italic_start: Option<usize> = None;
         let mut underline_start: Option<usize> = None;
@@ -326,7 +345,8 @@ impl IRCContentParser {
 
         while let Some((idx, ch)) = chars.next() {
             match ch {
-                '\x02' => { // Bold
+                '\x02' => {
+                    // Bold
                     if let Some(start) = bold_start {
                         ranges.push(FormatRange {
                             start,
@@ -338,7 +358,8 @@ impl IRCContentParser {
                         bold_start = Some(idx);
                     }
                 }
-                '\x1D' => { // Italic
+                '\x1D' => {
+                    // Italic
                     if let Some(start) = italic_start {
                         ranges.push(FormatRange {
                             start,
@@ -350,7 +371,8 @@ impl IRCContentParser {
                         italic_start = Some(idx);
                     }
                 }
-                '\x1F' => { // Underline
+                '\x1F' => {
+                    // Underline
                     if let Some(start) = underline_start {
                         ranges.push(FormatRange {
                             start,
@@ -362,7 +384,8 @@ impl IRCContentParser {
                         underline_start = Some(idx);
                     }
                 }
-                '\x03' => { // Color
+                '\x03' => {
+                    // Color
                     if let Some((start, fg, bg)) = color_start {
                         ranges.push(FormatRange {
                             start,
@@ -394,11 +417,16 @@ impl IRCContentParser {
                         }
 
                         let fg_num = fg.parse().unwrap_or(0);
-                        let bg_num = if bg.is_empty() { None } else { Some(bg.parse().unwrap_or(0)) };
+                        let bg_num = if bg.is_empty() {
+                            None
+                        } else {
+                            Some(bg.parse().unwrap_or(0))
+                        };
                         color_start = Some((idx, fg_num, bg_num));
                     }
                 }
-                '\x0F' => { // Reset
+                '\x0F' => {
+                    // Reset
                     if let Some(start) = bold_start {
                         ranges.push(FormatRange {
                             start,
@@ -434,7 +462,6 @@ impl IRCContentParser {
                 }
                 _ => {}
             }
-
         }
 
         // Close any open formats at end of text
@@ -473,8 +500,9 @@ impl IRCContentParser {
     /// Extract URLs from text
     fn extract_urls(&self, text: &str) -> Vec<String> {
         let url_regex = regex::Regex::new(
-            r"https?://[a-zA-Z0-9][-\w]*(?:\.[a-zA-Z0-9][-\w]*)+(?::\d+)?(?:/[^\s]*)?"
-        ).ok();
+            r"https?://[a-zA-Z0-9][-\w]*(?:\.[a-zA-Z0-9][-\w]*)+(?::\d+)?(?:/[^\s]*)?",
+        )
+        .ok();
 
         url_regex.map_or_else(Vec::new, |re| {
             re.find_iter(text).map(|m| m.as_str().to_string()).collect()
@@ -486,19 +514,26 @@ impl IRCContentParser {
         // Simple mention detection - nicks at start of message or after space
         text.split_whitespace()
             .filter(|w| w.starts_with('@') && w.len() > 1)
-            .map(|w| w[1..].trim_end_matches(|c: char| !c.is_alphanumeric()).to_string())
+            .map(|w| {
+                w[1..]
+                    .trim_end_matches(|c: char| !c.is_alphanumeric())
+                    .to_string()
+            })
             .collect()
     }
 
     /// Build formatted message
     pub fn build_formatted(&self, parts: &[FormatPart]) -> String {
-        parts.iter().map(|part| match part {
-            FormatPart::Text(text) => text.clone(),
-            FormatPart::Bold(text) => IRCFormat::bold(text),
-            FormatPart::Italic(text) => IRCFormat::italic(text),
-            FormatPart::Underline(text) => IRCFormat::underline(text),
-            FormatPart::Color { text, fg, bg } => IRCFormat::color(text, *fg, *bg),
-        }).collect()
+        parts
+            .iter()
+            .map(|part| match part {
+                FormatPart::Text(text) => text.clone(),
+                FormatPart::Bold(text) => IRCFormat::bold(text),
+                FormatPart::Italic(text) => IRCFormat::italic(text),
+                FormatPart::Underline(text) => IRCFormat::underline(text),
+                FormatPart::Color { text, fg, bg } => IRCFormat::color(text, *fg, *bg),
+            })
+            .collect()
     }
 
     /// Build action message
@@ -530,7 +565,11 @@ pub enum FormatPart {
     Bold(String),
     Italic(String),
     Underline(String),
-    Color { text: String, fg: u8, bg: Option<u8> },
+    Color {
+        text: String,
+        fg: u8,
+        bg: Option<u8>,
+    },
 }
 
 #[cfg(test)]
@@ -632,10 +671,14 @@ impl PlatformContent for IRCMessageType {
             IRCMessageType::Private { content, .. } => IRCFormat::strip(content),
             IRCMessageType::Channel { content, .. } => IRCFormat::strip(content),
             IRCMessageType::Notice { content, .. } => IRCFormat::strip(content),
-            IRCMessageType::Ctcp { command, params, .. } => {
+            IRCMessageType::Ctcp {
+                command, params, ..
+            } => {
                 format!("[CTCP {}] {}", command, params.join(" "))
             }
-            IRCMessageType::CtcpReply { command, response, .. } => {
+            IRCMessageType::CtcpReply {
+                command, response, ..
+            } => {
                 format!("[CTCP Reply {}] {}", command, response)
             }
             IRCMessageType::Action { action, .. } => {

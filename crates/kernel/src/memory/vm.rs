@@ -6,11 +6,13 @@
 //! - Page table management
 //! - Address space isolation
 
-use crate::error::{KernelError, Result};
-use parking_lot::RwLock;
 use std::collections::BTreeMap;
 use std::sync::OnceLock;
+
+use parking_lot::RwLock;
 use tracing::{debug, trace};
+
+use crate::error::{KernelError, Result};
 
 /// Virtual address space size (48-bit on x86_64)
 pub const VIRTUAL_ADDRESS_SPACE_SIZE: u64 = 1 << 48;
@@ -202,7 +204,8 @@ impl Default for RegionBacking {
 /// All public methods are thread-safe using interior mutability.
 ///
 /// # Lock Ordering
-/// When acquiring multiple locks, always follow this order to prevent deadlocks:
+/// When acquiring multiple locks, always follow this order to prevent
+/// deadlocks:
 /// 1. `regions` (RwLock)
 /// 2. `next_alloc` (RwLock)
 ///

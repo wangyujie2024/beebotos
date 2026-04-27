@@ -56,6 +56,8 @@ pub mod events;
 pub mod ipc;
 /// Memory management including allocation, paging, and isolation
 pub mod memory;
+/// Message Bus integration
+pub mod message_bus;
 /// P2P networking stack
 pub mod network;
 /// Resource limits and monitoring
@@ -72,8 +74,6 @@ pub mod syscalls;
 pub mod task;
 /// Task monitoring and state change notifications
 pub mod task_monitor;
-/// Message Bus integration
-pub mod message_bus;
 /// WebAssembly runtime integration
 pub mod wasm;
 
@@ -92,7 +92,9 @@ pub fn print_memory_leak_report() {
 use beebotos_core::types::AgentId;
 pub use error::{KernelError, Result, SecurityError};
 // 🟢 P1 FIX: Message Bus integration
-pub use message_bus::{KernelMessageBus, KernelTaskEvent, KernelCapabilityEvent, init_message_bus, message_bus};
+pub use message_bus::{
+    init_message_bus, message_bus, KernelCapabilityEvent, KernelMessageBus, KernelTaskEvent,
+};
 
 /// Kernel version
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -413,9 +415,13 @@ impl Kernel {
     }
 
     /// Wait for task completion with timeout
-    pub async fn wait_for_task(&self, task_id: TaskId, timeout: std::time::Duration) -> std::result::Result<TaskWaitResult, TaskWaitError> {
+    pub async fn wait_for_task(
+        &self,
+        task_id: TaskId,
+        timeout: std::time::Duration,
+    ) -> std::result::Result<TaskWaitResult, TaskWaitError> {
         let start = std::time::Instant::now();
-        
+
         loop {
             match self.get_task_status(task_id).await {
                 Some(scheduler::TaskStatus::Completed) => {

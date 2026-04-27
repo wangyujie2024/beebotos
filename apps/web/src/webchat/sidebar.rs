@@ -2,8 +2,9 @@
 //!
 //! 实现 `/btw` 快捷指令，支持在主会话线程旁进行快速侧提问
 
-use super::{ChatMessage, MessageMetadata, MessageRole};
 use serde::{Deserialize, Serialize};
+
+use super::{ChatMessage, MessageMetadata, MessageRole};
 
 /// 侧边提问
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -38,10 +39,7 @@ pub struct SideQuestionContext {
 
 impl SideQuestion {
     /// 创建新的侧边提问
-    pub fn new(
-        parent_session_id: impl Into<String>,
-        question: impl Into<String>,
-    ) -> Self {
+    pub fn new(parent_session_id: impl Into<String>, question: impl Into<String>) -> Self {
         Self {
             id: uuid::Uuid::new_v4().to_string(),
             parent_session_id: parent_session_id.into(),
@@ -163,7 +161,11 @@ impl SideQuestionManager {
     }
 
     /// 更新提问响应
-    pub fn update_response(&mut self, id: &str, response: impl Into<String>) -> Option<&SideQuestion> {
+    pub fn update_response(
+        &mut self,
+        id: &str,
+        response: impl Into<String>,
+    ) -> Option<&SideQuestion> {
         if let Some(q) = self.get_question_mut(id) {
             q.set_response(response);
             return Some(q);

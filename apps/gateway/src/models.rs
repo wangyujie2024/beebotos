@@ -54,9 +54,18 @@ impl TryFrom<AgentRecordRow> for AgentRecord {
                 .map_err(|e| format!("Invalid capabilities JSON: {}", e))?,
             model_provider: row.model_provider,
             model_name: row.model_name,
-            created_at: row.created_at.parse().map_err(|e| format!("Invalid datetime: {}", e))?,
-            updated_at: row.updated_at.parse().map_err(|e| format!("Invalid datetime: {}", e))?,
-            last_heartbeat: row.last_heartbeat.map(|s| s.parse()).transpose()
+            created_at: row
+                .created_at
+                .parse()
+                .map_err(|e| format!("Invalid datetime: {}", e))?,
+            updated_at: row
+                .updated_at
+                .parse()
+                .map_err(|e| format!("Invalid datetime: {}", e))?,
+            last_heartbeat: row
+                .last_heartbeat
+                .map(|s| s.parse())
+                .transpose()
                 .map_err(|e| format!("Invalid datetime: {}", e))?,
             owner_id: row.owner_id,
             metadata: serde_json::from_str(&row.metadata)

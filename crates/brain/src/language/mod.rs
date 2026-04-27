@@ -4,8 +4,9 @@ pub mod nlp;
 pub mod sentiment;
 pub mod translation;
 
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LanguageProcessor {

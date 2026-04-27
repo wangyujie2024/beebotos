@@ -2,11 +2,12 @@
 //!
 //! Provides endpoints for monitoring LLM service metrics.
 
+use std::sync::Arc;
+
 use axum::extract::State;
 use axum::response::IntoResponse;
 use axum::Json;
 use serde_json::json;
-use std::sync::Arc;
 
 use crate::AppState;
 
@@ -14,7 +15,7 @@ use crate::AppState;
 pub async fn get_llm_metrics(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let summary = state.llm_service.get_metrics_summary();
     let provider_status = state.llm_service.get_provider_status().await;
-    
+
     // Calculate success rate
     let total = summary.total_requests;
     let success_rate = if total > 0 {
@@ -22,11 +23,11 @@ pub async fn get_llm_metrics(State(state): State<Arc<AppState>>) -> impl IntoRes
     } else {
         0.0
     };
-    
+
     // Get latency percentiles
     let (p50, p95, p99) = state.llm_service.metrics().latency_percentiles().await;
     let avg_latency = state.llm_service.metrics().average_latency_ms().await;
-    
+
     Json(json!({
         "summary": {
             "total_requests": summary.total_requests,
@@ -61,7 +62,7 @@ pub async fn get_llm_health(State(state): State<Arc<AppState>>) -> impl IntoResp
     match state.llm_service.health_check().await {
         Ok(_) => {
             let provider_status = state.llm_service.get_provider_status().await;
-            
+
             Json(json!({
                 "status": "healthy",
                 "providers": provider_status.iter().map(|(name, healthy, failures)| {
@@ -74,14 +75,12 @@ pub async fn get_llm_health(State(state): State<Arc<AppState>>) -> impl IntoResp
                 "timestamp": chrono::Utc::now().to_rfc3339(),
             }))
         }
-        Err(e) => {
-            Json(json!({
-                "status": "unhealthy",
-                "error": e.to_string(),
-                "providers": [],
-                "timestamp": chrono::Utc::now().to_rfc3339(),
-            }))
-        }
+        Err(e) => Json(json!({
+            "status": "unhealthy",
+            "error": e.to_string(),
+            "providers": [],
+            "timestamp": chrono::Utc::now().to_rfc3339(),
+        })),
     }
 }
 
@@ -90,7 +89,7 @@ pub async fn reset_llm_metrics(State(state): State<Arc<AppState>>) -> impl IntoR
     // Note: In production, this should require admin authentication
     // For now, we just return the metrics before reset
     let summary = state.llm_service.get_metrics_summary();
-    
+
     Json(json!({
         "message": "Metrics reset is not implemented for security reasons",
         "previous_summary": summary,

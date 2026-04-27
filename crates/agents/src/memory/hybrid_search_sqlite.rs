@@ -1,7 +1,8 @@
 //! Hybrid Search with SQLite Persistence
 //!
-//! Persistent hybrid search implementation using SQLite with FTS5 and sqlite-vec extensions.
-//! Provides durable storage for vector embeddings and BM25 full-text search.
+//! Persistent hybrid search implementation using SQLite with FTS5 and
+//! sqlite-vec extensions. Provides durable storage for vector embeddings and
+//! BM25 full-text search.
 //!
 //! # Database Schema
 //!
@@ -36,16 +37,20 @@
 //! );
 //! ```
 
-use crate::error::Result;
-use crate::memory::hybrid_search::HybridSearchConfig;
-use crate::memory::search::{MemorySearch, SearchConfig, SearchResult, SearchStats, DEFAULT_MAX_RESULTS};
-use rusqlite::{params, Connection, OptionalExtension, Row};
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
+
+use rusqlite::{params, Connection, OptionalExtension, Row};
+use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
 use uuid::Uuid;
+
+use crate::error::Result;
+use crate::memory::hybrid_search::HybridSearchConfig;
+use crate::memory::search::{
+    MemorySearch, SearchConfig, SearchResult, SearchStats, DEFAULT_MAX_RESULTS,
+};
 
 /// Default SQLite database file name
 pub const DEFAULT_SEARCH_DB: &str = "data/search_index.db";
@@ -84,7 +89,7 @@ impl HybridSearchSqlite {
     /// Create or open a SQLite-backed search engine
     pub fn new(db_path: impl AsRef<Path>, config: HybridSearchConfig) -> Result<Self> {
         let db_path = db_path.as_ref().to_path_buf();
-        
+
         // Ensure parent directory exists
         if let Some(parent) = db_path.parent() {
             std::fs::create_dir_all(parent).map_err(|e| {
@@ -96,10 +101,7 @@ impl HybridSearchSqlite {
         }
 
         let conn = Connection::open(&db_path).map_err(|e| {
-            crate::error::AgentError::storage(format!(
-                "Failed to open database: {}",
-                e
-            ))
+            crate::error::AgentError::storage(format!("Failed to open database: {}", e))
         })?;
 
         let mut engine = Self {
@@ -111,7 +113,10 @@ impl HybridSearchSqlite {
         // Initialize database schema
         engine.init_schema()?;
 
-        info!("SQLite hybrid search engine initialized at: {:?}", engine.db_path);
+        info!(
+            "SQLite hybrid search engine initialized at: {:?}",
+            engine.db_path
+        );
         Ok(engine)
     }
 
@@ -144,8 +149,9 @@ impl HybridSearchSqlite {
         })?;
 
         // Create FTS5 virtual table for full-text search
-        // Note: content_rowid is not a column; it's a special directive that must be used with
-        // content='table_name' option. We use a simpler schema without it.
+        // Note: content_rowid is not a column; it's a special directive that must be
+        // used with content='table_name' option. We use a simpler schema
+        // without it.
         conn.execute(
             "CREATE VIRTUAL TABLE IF NOT EXISTS ft_items USING fts5(
                 content,
@@ -155,7 +161,7 @@ impl HybridSearchSqlite {
         )
         .map_err(|e| {
             crate::error::AgentError::storage(format!(
-                "Failed to create FTS5 table: {}. Make sure FTS5 is enabled in SQLite", 
+                "Failed to create FTS5 table: {}. Make sure FTS5 is enabled in SQLite",
                 e
             ))
         })?;
@@ -214,10 +220,7 @@ impl HybridSearchSqlite {
 
         let mut conn = self.conn.lock().unwrap();
         let tx = conn.transaction().map_err(|e| {
-            crate::error::AgentError::storage(format!(
-                "Failed to start transaction: {}",
-                e
-            ))
+            crate::error::AgentError::storage(format!("Failed to start transaction: {}", e))
         })?;
 
         // 1. Insert into memory_entries
@@ -235,10 +238,7 @@ impl HybridSearchSqlite {
             ],
         )
         .map_err(|e| {
-            crate::error::AgentError::storage(format!(
-                "Failed to insert memory entry: {}",
-                e
-            ))
+            crate::error::AgentError::storage(format!("Failed to insert memory entry: {}", e))
         })?;
 
         // 2. Insert into FTS5 for BM25 search
@@ -249,18 +249,19 @@ impl HybridSearchSqlite {
             params![content, metadata_with_id],
         )
         .map_err(|e| {
-            crate::error::AgentError::storage(format!(
-                "Failed to insert FTS5 entry: {}",
-                e
-            ))
+            crate::error::AgentError::storage(format!("Failed to insert FTS5 entry: {}", e))
         })?;
 
         // 3. Insert vector (try sqlite-vec first, fallback to blob)
         let vector_blob = Self::vector_to_blob(embedding);
-        
+
         if self.has_vec_extension() {
             // Use sqlite-vec
-            let vector_str = embedding.iter().map(|f| f.to_string()).collect::<Vec<_>>().join(",");
+            let vector_str = embedding
+                .iter()
+                .map(|f| f.to_string())
+                .collect::<Vec<_>>()
+                .join(",");
             tx.execute(
                 "INSERT INTO vec_items (rowid, embedding) 
                  VALUES ((SELECT rowid FROM memory_entries WHERE id = ?1), vec_f32(?2))",
@@ -274,10 +275,7 @@ impl HybridSearchSqlite {
                 )
             })
             .map_err(|e| {
-                crate::error::AgentError::storage(format!(
-                    "Failed to insert vector: {}",
-                    e
-                ))
+                crate::error::AgentError::storage(format!("Failed to insert vector: {}", e))
             })?;
         } else {
             // Use fallback
@@ -294,13 +292,14 @@ impl HybridSearchSqlite {
         }
 
         tx.commit().map_err(|e| {
-            crate::error::AgentError::storage(format!(
-                "Failed to commit transaction: {}",
-                e
-            ))
+            crate::error::AgentError::storage(format!("Failed to commit transaction: {}", e))
         })?;
 
-        debug!("Indexed entry {} with {}-dimensional vector", id, embedding.len());
+        debug!(
+            "Indexed entry {} with {}-dimensional vector",
+            id,
+            embedding.len()
+        );
         Ok(())
     }
 
@@ -384,30 +383,31 @@ impl HybridSearchSqlite {
                 .collect::<Vec<_>>()
                 .join(",");
 
-            let mut stmt = conn.prepare(
-                "SELECT e.id, e.content, e.content_hash, e.timestamp, e.metadata, e.file_path,
+            let mut stmt = conn
+                .prepare(
+                    "SELECT e.id, e.content, e.content_hash, e.timestamp, e.metadata, e.file_path,
                         vec_distance_L2(v.embedding, vec_f32(?1)) as distance
                  FROM vec_items v
                  JOIN memory_entries e ON v.rowid = e.rowid
                  ORDER BY distance
-                 LIMIT ?2"
-            ).map_err(|e| {
-                crate::error::AgentError::storage(format!(
-                    "Failed to prepare vector search: {}",
-                    e
-                ))
-            })?;
+                 LIMIT ?2",
+                )
+                .map_err(|e| {
+                    crate::error::AgentError::storage(format!(
+                        "Failed to prepare vector search: {}",
+                        e
+                    ))
+                })?;
 
-            let rows = stmt.query_map(params![query_str, limit as i64], |row| {
-                let distance: f64 = row.get(6)?;
-                let score = 1.0 / (1.0 + distance as f32); // Convert distance to similarity
-                Ok((Self::row_to_entry(row)?, score))
-            }).map_err(|e| {
-                crate::error::AgentError::storage(format!(
-                    "Vector search failed: {}",
-                    e
-                ))
-            })?;
+            let rows = stmt
+                .query_map(params![query_str, limit as i64], |row| {
+                    let distance: f64 = row.get(6)?;
+                    let score = 1.0 / (1.0 + distance as f32); // Convert distance to similarity
+                    Ok((Self::row_to_entry(row)?, score))
+                })
+                .map_err(|e| {
+                    crate::error::AgentError::storage(format!("Vector search failed: {}", e))
+                })?;
 
             for row in rows {
                 let (entry, score) = row.map_err(|e| {
@@ -420,29 +420,33 @@ impl HybridSearchSqlite {
             }
         } else {
             // Fallback: Brute force cosine similarity
-            let mut stmt = conn.prepare(
-                "SELECT e.id, e.content, e.content_hash, e.timestamp, e.metadata, e.file_path,
+            let mut stmt = conn
+                .prepare(
+                    "SELECT e.id, e.content, e.content_hash, e.timestamp, e.metadata, e.file_path,
                         v.vector
                  FROM vector_fallback v
-                 JOIN memory_entries e ON v.entry_id = e.id"
-            ).map_err(|e| {
-                crate::error::AgentError::storage(format!(
-                    "Failed to prepare fallback vector search: {}",
-                    e
-                ))
-            })?;
+                 JOIN memory_entries e ON v.entry_id = e.id",
+                )
+                .map_err(|e| {
+                    crate::error::AgentError::storage(format!(
+                        "Failed to prepare fallback vector search: {}",
+                        e
+                    ))
+                })?;
 
-            let rows = stmt.query_map([], |row| {
-                let vector_blob: Vec<u8> = row.get(6)?;
-                let stored_vector = Self::blob_to_vector(&vector_blob);
-                let similarity = Self::cosine_similarity(query_embedding, &stored_vector);
-                Ok((Self::row_to_entry(row)?, similarity))
-            }).map_err(|e| {
-                crate::error::AgentError::storage(format!(
-                    "Fallback vector search failed: {}",
-                    e
-                ))
-            })?;
+            let rows = stmt
+                .query_map([], |row| {
+                    let vector_blob: Vec<u8> = row.get(6)?;
+                    let stored_vector = Self::blob_to_vector(&vector_blob);
+                    let similarity = Self::cosine_similarity(query_embedding, &stored_vector);
+                    Ok((Self::row_to_entry(row)?, similarity))
+                })
+                .map_err(|e| {
+                    crate::error::AgentError::storage(format!(
+                        "Fallback vector search failed: {}",
+                        e
+                    ))
+                })?;
 
             for row in rows {
                 let (entry, score) = row.map_err(|e| {
@@ -475,31 +479,27 @@ impl HybridSearchSqlite {
 
         // Use FTS5 bm25() function for ranking
         // Note: bm25() returns negative values (lower is better/more relevant)
-        let mut stmt = conn.prepare(
-            "SELECT e.id, e.content, e.content_hash, e.timestamp, e.metadata, e.file_path,
+        let mut stmt = conn
+            .prepare(
+                "SELECT e.id, e.content, e.content_hash, e.timestamp, e.metadata, e.file_path,
                     bm25(ft_items) as rank
              FROM ft_items
              JOIN memory_entries e ON json_extract(ft_items.metadata, '$.entry_id') = e.id
              WHERE ft_items MATCH ?1
              ORDER BY rank ASC
-             LIMIT ?2"
-        ).map_err(|e| {
-            crate::error::AgentError::storage(format!(
-                "Failed to prepare BM25 search: {}",
-                e
-            ))
-        })?;
+             LIMIT ?2",
+            )
+            .map_err(|e| {
+                crate::error::AgentError::storage(format!("Failed to prepare BM25 search: {}", e))
+            })?;
 
         // Convert query to FTS5 query syntax (add wildcards for prefix matching)
-        // Sanitize each word to avoid FTS5 syntax errors from special characters like ?, ", *, etc.
-        // Use OR semantics for better recall in memory retrieval.
+        // Sanitize each word to avoid FTS5 syntax errors from special characters like
+        // ?, ", *, etc. Use OR semantics for better recall in memory retrieval.
         let fts_query: String = query
             .split_whitespace()
             .filter_map(|word| {
-                let sanitized: String = word
-                    .chars()
-                    .filter(|c| c.is_alphanumeric())
-                    .collect();
+                let sanitized: String = word.chars().filter(|c| c.is_alphanumeric()).collect();
                 if sanitized.is_empty() {
                     None
                 } else {
@@ -509,25 +509,19 @@ impl HybridSearchSqlite {
             .collect::<Vec<_>>()
             .join(" OR ");
 
-        let rows = stmt.query_map(params![fts_query, limit as i64], |row| {
-            let rank: f64 = row.get(6)?;
-            // BM25 rank is negative (lower is better in SQLite FTS5), normalize to 0-1
-            // Higher score = better match. Use 1/(1+|rank|) so rank=0 gives score=1.0.
-            let score = 1.0 / (rank.abs() as f32 + 1.0);
-            Ok((Self::row_to_entry(row)?, score))
-        }).map_err(|e| {
-            crate::error::AgentError::storage(format!(
-                "BM25 search failed: {}",
-                e
-            ))
-        })?;
+        let rows = stmt
+            .query_map(params![fts_query, limit as i64], |row| {
+                let rank: f64 = row.get(6)?;
+                // BM25 rank is negative (lower is better in SQLite FTS5), normalize to 0-1
+                // Higher score = better match. Use 1/(1+|rank|) so rank=0 gives score=1.0.
+                let score = 1.0 / (rank.abs() as f32 + 1.0);
+                Ok((Self::row_to_entry(row)?, score))
+            })
+            .map_err(|e| crate::error::AgentError::storage(format!("BM25 search failed: {}", e)))?;
 
         for row in rows {
             let (entry, score) = row.map_err(|e| {
-                crate::error::AgentError::storage(format!(
-                    "Failed to read BM25 search row: {}",
-                    e
-                ))
+                crate::error::AgentError::storage(format!("Failed to read BM25 search row: {}", e))
             })?;
             results.push((entry.id, score, entry));
         }
@@ -539,12 +533,9 @@ impl HybridSearchSqlite {
     pub fn delete_entry(&self, id: Uuid) -> Result<()> {
         let mut conn = self.conn.lock().unwrap();
         let tx = conn.transaction().map_err(|e| {
-            crate::error::AgentError::storage(format!(
-                "Failed to start delete transaction: {}",
-                e
-            ))
+            crate::error::AgentError::storage(format!("Failed to start delete transaction: {}", e))
         })?;
-        
+
         // Delete from FTS5 index using metadata JSON match
         tx.execute(
             "DELETE FROM ft_items WHERE json_extract(metadata, '$.entry_id') = ?1",
@@ -564,18 +555,10 @@ impl HybridSearchSqlite {
             "DELETE FROM memory_entries WHERE id = ?1",
             params![id.to_string()],
         )
-        .map_err(|e| {
-            crate::error::AgentError::storage(format!(
-                "Failed to delete entry: {}",
-                e
-            ))
-        })?;
+        .map_err(|e| crate::error::AgentError::storage(format!("Failed to delete entry: {}", e)))?;
 
         tx.commit().map_err(|e| {
-            crate::error::AgentError::storage(format!(
-                "Failed to commit delete transaction: {}",
-                e
-            ))
+            crate::error::AgentError::storage(format!("Failed to commit delete transaction: {}", e))
         })?;
 
         info!("Deleted entry {} from search index", id);
@@ -585,25 +568,21 @@ impl HybridSearchSqlite {
     /// Get entry by ID
     pub fn get_entry(&self, id: Uuid) -> Result<Option<SqliteMemoryEntry>> {
         let conn = self.conn.lock().unwrap();
-        
-        let mut stmt = conn.prepare(
-            "SELECT id, content, content_hash, timestamp, metadata, file_path 
-             FROM memory_entries WHERE id = ?1"
-        ).map_err(|e| {
-            crate::error::AgentError::storage(format!(
-                "Failed to prepare get_entry: {}",
-                e
-            ))
-        })?;
+
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, content, content_hash, timestamp, metadata, file_path 
+             FROM memory_entries WHERE id = ?1",
+            )
+            .map_err(|e| {
+                crate::error::AgentError::storage(format!("Failed to prepare get_entry: {}", e))
+            })?;
 
         let result = stmt
             .query_row(params![id.to_string()], |row| Self::row_to_entry(row))
             .optional()
             .map_err(|e| {
-                crate::error::AgentError::storage(format!(
-                    "Failed to get entry: {}",
-                    e
-                ))
+                crate::error::AgentError::storage(format!("Failed to get entry: {}", e))
             })?;
 
         Ok(result)
@@ -618,11 +597,7 @@ impl HybridSearchSqlite {
             .unwrap_or(0);
 
         let vector_entries: i64 = conn
-            .query_row(
-                "SELECT COUNT(*) FROM vector_fallback",
-                [],
-                |row| row.get(0),
-            )
+            .query_row("SELECT COUNT(*) FROM vector_fallback", [], |row| row.get(0))
             .unwrap_or(0);
 
         let fts_entries: i64 = conn
@@ -646,10 +621,7 @@ impl HybridSearchSqlite {
     pub fn vacuum(&self) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute("VACUUM", []).map_err(|e| {
-            crate::error::AgentError::storage(format!(
-                "Failed to vacuum database: {}",
-                e
-            ))
+            crate::error::AgentError::storage(format!("Failed to vacuum database: {}", e))
         })?;
         info!("Database vacuum completed");
         Ok(())
@@ -666,7 +638,9 @@ impl HybridSearchSqlite {
 
         let timestamp_str: String = row.get(3)?;
         let timestamp = chrono::DateTime::parse_from_rfc3339(&timestamp_str)
-            .map_err(|e| rusqlite::Error::InvalidParameterName(format!("Invalid timestamp: {}", e)))?
+            .map_err(|e| {
+                rusqlite::Error::InvalidParameterName(format!("Invalid timestamp: {}", e))
+            })?
             .with_timezone(&chrono::Utc);
 
         let metadata_json: String = row.get(4).unwrap_or_default();
@@ -828,10 +802,7 @@ impl MemorySearch for HybridSearchSqlite {
         conn.execute("DELETE FROM vector_fallback", []).ok();
         conn.execute("DELETE FROM memory_entries", [])
             .map_err(|e| {
-                crate::error::AgentError::storage(format!(
-                    "Failed to clear memory entries: {}",
-                    e
-                ))
+                crate::error::AgentError::storage(format!("Failed to clear memory entries: {}", e))
             })?;
         Ok(())
     }
@@ -876,8 +847,9 @@ impl std::fmt::Display for SearchDatabaseStats {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use tempfile::TempDir;
+
+    use super::*;
 
     fn create_test_engine() -> (HybridSearchSqlite, TempDir) {
         let temp_dir = TempDir::new().unwrap();
@@ -926,7 +898,10 @@ mod tests {
 
         // Search with BM25
         let results = engine.search("database", None, 10).unwrap();
-        assert!(!results.is_empty(), "BM25 search should return results for 'database'");
+        assert!(
+            !results.is_empty(),
+            "BM25 search should return results for 'database'"
+        );
 
         // Search with vector
         let results = engine

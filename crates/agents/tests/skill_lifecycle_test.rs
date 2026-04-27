@@ -15,10 +15,8 @@ fn echo_wasm_skill() -> Vec<u8> {
         // WASM header
         0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
         // type section: (i32, i32) -> i32
-        0x01, 0x07, 0x01, 0x60, 0x02, 0x7f, 0x7f, 0x01, 0x7f,
-        // function section
-        0x03, 0x02, 0x01, 0x00,
-        // export section: "handle"
+        0x01, 0x07, 0x01, 0x60, 0x02, 0x7f, 0x7f, 0x01, 0x7f, // function section
+        0x03, 0x02, 0x01, 0x00, // export section: "handle"
         0x07, 0x0a, 0x01, 0x06, 0x68, 0x61, 0x6e, 0x64, 0x6c, 0x65, 0x00, 0x00,
         // code section: local.get 0, end
         0x0a, 0x06, 0x01, 0x04, 0x00, 0x20, 0x00, 0x0b,
@@ -72,7 +70,11 @@ async fn test_skill_full_lifecycle() {
     // ========== 3. 注册到 Registry ==========
     let registry = SkillRegistry::new();
     registry
-        .register(loaded.clone(), "utility", vec!["echo".into(), "test".into()])
+        .register(
+            loaded.clone(),
+            "utility",
+            vec!["echo".into(), "test".into()],
+        )
         .await;
 
     let found = registry.get(skill_id).await;
@@ -128,7 +130,10 @@ async fn test_skill_full_lifecycle() {
         }
         Err(e) => {
             // WASM 协议不匹配时预期会失败，记录但不断言失败
-            println!("Execution error (expected if WASM protocol mismatch): {}", e);
+            println!(
+                "Execution error (expected if WASM protocol mismatch): {}",
+                e
+            );
         }
     }
 

@@ -3,12 +3,12 @@
 //! Parses and formats content from Google Chat messages.
 //! Supports cards, mentions, and interactive elements.
 
-use crate::communication::channel::content::{
-    ContentType as UnifiedContentType, PlatformContent,
-};
-use crate::error::{AgentError, Result};
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+
+use serde::{Deserialize, Serialize};
+
+use crate::communication::channel::content::{ContentType as UnifiedContentType, PlatformContent};
+use crate::error::{AgentError, Result};
 
 /// Google Chat message content types
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -20,14 +20,9 @@ pub enum GoogleChatContent {
         annotations: Option<Vec<TextAnnotation>>,
     },
     /// Card message
-    Card {
-        cards: Vec<Card>,
-    },
+    Card { cards: Vec<Card> },
     /// Card with text
-    CardWithText {
-        text: String,
-        cards: Vec<Card>,
-    },
+    CardWithText { text: String, cards: Vec<Card> },
     /// Slash command
     SlashCommand {
         command_id: String,
@@ -67,7 +62,7 @@ pub struct UserMention {
 pub struct User {
     pub name: String,
     pub display_name: String,
-    pub avatar_url: Option<String>
+    pub avatar_url: Option<String>,
 }
 
 /// Slash command info
@@ -284,7 +279,10 @@ impl GoogleChatContentParser {
             if !parts.is_empty() {
                 let cmd_name = parts[0].trim_start_matches('/').to_string();
                 let args = parts[1..].iter().map(|s| s.to_string()).collect();
-                commands.push(Command { name: cmd_name, args });
+                commands.push(Command {
+                    name: cmd_name,
+                    args,
+                });
             }
         }
 
@@ -304,7 +302,7 @@ impl GoogleChatContentParser {
     /// Format text for Google Chat
     pub fn format_text(&self, text: &str, mentions: &[Mention]) -> String {
         let mut result = text.to_string();
-        
+
         // Replace mentions with Google Chat format
         for mention in mentions.iter().rev() {
             let mention_tag = format!(
@@ -317,7 +315,7 @@ impl GoogleChatContentParser {
                 result.replace_range(start..end, &mention_tag);
             }
         }
-        
+
         result
     }
 
@@ -462,7 +460,7 @@ mod tests {
     fn test_parse_text() {
         let parser = GoogleChatContentParser::new();
         let content = parser.parse_text("Hello <users/123>John</users/123>!");
-        
+
         assert_eq!(content.text, "Hello John!");
         assert_eq!(content.mentions.len(), 1);
         assert_eq!(content.mentions[0].user_id, "123");
@@ -473,7 +471,7 @@ mod tests {
     fn test_parse_command() {
         let parser = GoogleChatContentParser::new();
         let content = parser.parse_text("/help general");
-        
+
         assert_eq!(content.commands.len(), 1);
         assert_eq!(content.commands[0].name, "help");
         assert_eq!(content.commands[0].args, vec!["general"]);
@@ -483,7 +481,7 @@ mod tests {
     fn test_build_card() {
         let parser = GoogleChatContentParser::new();
         let card = parser.build_card("Title", Some("Subtitle"), "Body text");
-        
+
         assert_eq!(card.header.as_ref().unwrap().title, "Title");
         assert_eq!(card.sections.len(), 1);
     }
@@ -493,7 +491,7 @@ mod tests {
         let parser = GoogleChatContentParser::new();
         let card = parser.build_card("Title", Some("Subtitle"), "Body");
         let text = parser.extract_card_text(&card);
-        
+
         assert!(text.contains("Title"));
         assert!(text.contains("Subtitle"));
         assert!(text.contains("Body"));
@@ -520,14 +518,16 @@ impl PlatformContent for GoogleChatContent {
             GoogleChatContent::Text { text, .. } => text.clone(),
             GoogleChatContent::Card { cards } => {
                 let parser = GoogleChatContentParser::new();
-                cards.iter()
+                cards
+                    .iter()
                     .map(|card| parser.extract_card_text(card))
                     .collect::<Vec<_>>()
                     .join(" ")
             }
             GoogleChatContent::CardWithText { text, cards } => {
                 let parser = GoogleChatContentParser::new();
-                let card_text = cards.iter()
+                let card_text = cards
+                    .iter()
                     .map(|card| parser.extract_card_text(card))
                     .collect::<Vec<_>>()
                     .join(" ");

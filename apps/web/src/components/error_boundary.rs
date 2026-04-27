@@ -1,3 +1,4 @@
+use crate::i18n::I18nContext;
 use leptos::prelude::*;
 use leptos::view;
 
@@ -56,14 +57,17 @@ pub struct AppError {
 }
 
 fn default_error_view() -> impl IntoView {
+    let i18n = use_context::<I18nContext>().expect("i18n context not found");
+    let i18n_stored = StoredValue::new(i18n);
+
     view! {
         <div class="error-boundary">
-            <h2>"Something went wrong"</h2>
-            <p>"Please refresh the page and try again."</p>
+            <h2>{move || i18n_stored.get_value().t("error-generic")}</h2>
+            <p>{move || i18n_stored.get_value().t("error-refresh-hint")}</p>
             <button on:click=move |_| {
                 let _ = window().location().reload();
             }>
-                "Refresh Page"
+                {move || i18n_stored.get_value().t("action-refresh")}
             </button>
         </div>
     }
@@ -110,7 +114,8 @@ fn Toast(#[prop(into)] message: String, on_dismiss: impl Fn() + 'static) -> impl
 }
 
 /// Async error handler wrapper - simplified for CSR
-/// Note: In CSR mode with Leptos 0.8, use LocalResource instead of this component
+/// Note: In CSR mode with Leptos 0.8, use LocalResource instead of this
+/// component
 #[component]
 pub fn AsyncHandler<T, E, F, V>(
     #[prop(into)] _future: F,
@@ -123,18 +128,24 @@ where
     F: std::future::Future<Output = Result<T, E>> + Send + 'static,
     V: IntoView,
 {
+    let i18n = use_context::<I18nContext>().expect("i18n context not found");
+    let i18n_stored = StoredValue::new(i18n);
+
     // This is a placeholder - in CSR mode you should use LocalResource directly
     view! {
-        <div>"AsyncHandler not supported in CSR mode - use LocalResource"</div>
+        <div>{move || i18n_stored.get_value().t("error-async-handler")}</div>
     }
 }
 
 #[component]
 fn LoadingSpinner() -> impl IntoView {
+    let i18n = use_context::<I18nContext>().expect("i18n context not found");
+    let i18n_stored = StoredValue::new(i18n);
+
     view! {
         <div class="loading-spinner">
             <div class="spinner"></div>
-            <span>"Loading..."</span>
+            <span>{move || i18n_stored.get_value().t("loading-page")}</span>
         </div>
     }
 }

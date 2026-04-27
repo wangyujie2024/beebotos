@@ -9,7 +9,7 @@
 //!
 //! # Example
 //! ```rust,no_run
-//! use beebotos_agents::device::{AndroidDevice, DeviceAutomation, AppLifecycle};
+//! use beebotos_agents::device::{AndroidDevice, AppLifecycle, DeviceAutomation};
 //!
 //! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 //! let device = AndroidDevice::new("emulator-5554");
@@ -25,18 +25,19 @@
 //! # }
 //! ```
 
-use super::{
-    AppInfo, AppLifecycle, DeviceAutomation, DeviceCapability, DeviceInfo,
-    DeviceStatus, ElementLocator, HardwareButton, LocatorType, ScreenBounds,
-    Size, SwipeDirection, UiElement,
-};
-use crate::error::{AgentError, Result};
-use async_trait::async_trait;
 use std::sync::Arc;
+
+use async_trait::async_trait;
 use tokio::process::Command as TokioCommand;
 use tokio::sync::Mutex;
-use tokio::time::{sleep, Duration, timeout};
+use tokio::time::{sleep, timeout, Duration};
 use tracing::{debug, info};
+
+use super::{
+    AppInfo, AppLifecycle, DeviceAutomation, DeviceCapability, DeviceInfo, DeviceStatus,
+    ElementLocator, HardwareButton, LocatorType, ScreenBounds, Size, SwipeDirection, UiElement,
+};
+use crate::error::{AgentError, Result};
 
 /// Android device controller
 ///
@@ -110,15 +111,21 @@ impl AndroidDevice {
     /// Get UI hierarchy dump
     async fn get_ui_hierarchy(&self) -> Result<String> {
         // Try uiautomator dump first
-        let result = self.shell("uiautomator dump /dev/tty 2>/dev/null || cat /sdcard/window_dump.xml 2>/dev/null").await;
-        
+        let result = self
+            .shell(
+                "uiautomator dump /dev/tty 2>/dev/null || cat /sdcard/window_dump.xml 2>/dev/null",
+            )
+            .await;
+
         match result {
             Ok(xml) if !xml.is_empty() => Ok(xml),
             _ => {
                 // Fallback: try to dump to file and pull
-                self.shell("uiautomator dump /sdcard/window_dump.xml").await.ok();
+                self.shell("uiautomator dump /sdcard/window_dump.xml")
+                    .await
+                    .ok();
                 sleep(Duration::from_millis(500)).await;
-                
+
                 // Pull the file content
                 let content = self.shell("cat /sdcard/window_dump.xml").await?;
                 Ok(content)
@@ -160,11 +167,11 @@ impl AndroidDevice {
     /// Find element in UI hierarchy
     async fn find_element_in_hierarchy(&self, locator: &ElementLocator) -> Result<UiElement> {
         let hierarchy = self.get_ui_hierarchy().await?;
-        
+
         // Parse XML and find element
         // This is a simplified implementation - in production, use proper XML parsing
         let elements = self.parse_elements(&hierarchy).await?;
-        
+
         for element in elements {
             if self.matches_locator(&element, locator) {
                 return Ok(element);
@@ -180,7 +187,7 @@ impl AndroidDevice {
     /// Parse UI elements from hierarchy XML
     async fn parse_elements(&self, hierarchy: &str) -> Result<Vec<UiElement>> {
         let mut elements = Vec::new();
-        
+
         // Simple regex-like parsing for node elements
         // In production, use a proper XML parser like quick-xml or serde_xml_rs
         for line in hierarchy.lines() {
@@ -242,21 +249,15 @@ impl AndroidDevice {
     /// Check if element matches locator
     fn matches_locator(&self, element: &UiElement, locator: &ElementLocator) -> bool {
         match locator.locator_type {
-            LocatorType::Id => {
-                element.id.as_ref() == Some(&locator.value)
-            }
-            LocatorType::Text => {
-                element.text.as_ref() == Some(&locator.value)
-            }
-            LocatorType::PartialText => {
-                element.text.as_ref().map(|t| t.contains(&locator.value)).unwrap_or(false)
-            }
-            LocatorType::AccessibilityId => {
-                element.description.as_ref() == Some(&locator.value)
-            }
-            LocatorType::ClassName => {
-                element.class_name.as_ref() == Some(&locator.value)
-            }
+            LocatorType::Id => element.id.as_ref() == Some(&locator.value),
+            LocatorType::Text => element.text.as_ref() == Some(&locator.value),
+            LocatorType::PartialText => element
+                .text
+                .as_ref()
+                .map(|t| t.contains(&locator.value))
+                .unwrap_or(false),
+            LocatorType::AccessibilityId => element.description.as_ref() == Some(&locator.value),
+            LocatorType::ClassName => element.class_name.as_ref() == Some(&locator.value),
             LocatorType::XPath => {
                 // Basic XPath pattern matching (simplified implementation)
                 // Supports patterns like:
@@ -272,48 +273,50 @@ impl AndroidDevice {
     /// Basic XPath pattern matching
     fn matches_xpath(&self, element: &UiElement, xpath: &str) -> bool {
         let xpath = xpath.trim();
-        
+
         // Handle //ClassName pattern
         if let Some(class_name) = xpath.strip_prefix("//") {
             if element.class_name.as_ref() == Some(&class_name.to_string()) {
                 return true;
             }
         }
-        
+
         // Handle //*[contains(@text, "...")] pattern
         if xpath.contains("contains(@text,") {
             if let Some(start) = xpath.find("\"") {
-                if let Some(end) = xpath[start+1..].find("\"") {
-                    let text = &xpath[start+1..start+1+end];
-                    return element.text.as_ref()
+                if let Some(end) = xpath[start + 1..].find("\"") {
+                    let text = &xpath[start + 1..start + 1 + end];
+                    return element
+                        .text
+                        .as_ref()
                         .map(|t| t.contains(text))
                         .unwrap_or(false);
                 }
             }
         }
-        
+
         // Handle //View[@resource-id="..."] pattern
         if xpath.contains("[@resource-id=\"") {
             if let Some(start) = xpath.find("@resource-id=\"") {
                 let start = start + 14; // Length of '@resource-id="'
                 if let Some(end) = xpath[start..].find("\"") {
-                    let id = &xpath[start..start+end];
+                    let id = &xpath[start..start + end];
                     return element.id.as_ref() == Some(&id.to_string());
                 }
             }
         }
-        
+
         // Handle //View[@text="..."] pattern
         if xpath.contains("[@text=\"") {
             if let Some(start) = xpath.find("[@text=\"") {
                 let start = start + 8; // Length of '[@text="'
                 if let Some(end) = xpath[start..].find("\"") {
-                    let text = &xpath[start..start+end];
+                    let text = &xpath[start..start + end];
                     return element.text.as_ref() == Some(&text.to_string());
                 }
             }
         }
-        
+
         false
     }
 
@@ -321,8 +324,9 @@ impl AndroidDevice {
     async fn wait_for_device(&self, timeout_secs: u64) -> Result<()> {
         let result = timeout(
             Duration::from_secs(timeout_secs),
-            self.adb(&["wait-for-device"])
-        ).await;
+            self.adb(&["wait-for-device"]),
+        )
+        .await;
 
         match result {
             Ok(Ok(_)) => Ok(()),
@@ -334,25 +338,32 @@ impl AndroidDevice {
     /// Get screen dimensions
     async fn get_screen_dimensions(&self) -> Result<(u32, u32)> {
         let output = self.shell("wm size").await?;
-        
+
         // Parse "Physical size: 1080x1920"
         if let Some(size_part) = output.split("Physical size:").nth(1) {
             let size_str = size_part.trim();
             let dims: Vec<&str> = size_str.split('x').collect();
             if dims.len() == 2 {
-                let width = dims[0].parse().map_err(|_| AgentError::Execution("Invalid width".to_string()))?;
-                let height = dims[1].parse().map_err(|_| AgentError::Execution("Invalid height".to_string()))?;
+                let width = dims[0]
+                    .parse()
+                    .map_err(|_| AgentError::Execution("Invalid width".to_string()))?;
+                let height = dims[1]
+                    .parse()
+                    .map_err(|_| AgentError::Execution("Invalid height".to_string()))?;
                 return Ok((width, height));
             }
         }
 
-        Err(AgentError::Execution("Failed to get screen dimensions".to_string()))
+        Err(AgentError::Execution(
+            "Failed to get screen dimensions".to_string(),
+        ))
     }
 
     /// Dump screen to file (for debugging)
     pub async fn dump_screen(&self, output_path: &str) -> Result<()> {
         let hierarchy = self.get_ui_hierarchy().await?;
-        tokio::fs::write(output_path, hierarchy).await
+        tokio::fs::write(output_path, hierarchy)
+            .await
             .map_err(|e| AgentError::Execution(format!("Failed to write dump: {}", e)))?;
         Ok(())
     }
@@ -391,10 +402,10 @@ impl DeviceAutomation for AndroidDevice {
 
     async fn disconnect(&self) -> Result<()> {
         info!("Disconnecting from Android device: {}", self.serial);
-        
+
         let mut connected = self.connected.lock().await;
         *connected = false;
-        
+
         Ok(())
     }
 
@@ -409,8 +420,16 @@ impl DeviceAutomation for AndroidDevice {
         }
 
         // Get device properties
-        let model = self.shell("getprop ro.product.model").await?.trim().to_string();
-        let version = self.shell("getprop ro.build.version.release").await?.trim().to_string();
+        let model = self
+            .shell("getprop ro.product.model")
+            .await?
+            .trim()
+            .to_string();
+        let version = self
+            .shell("getprop ro.build.version.release")
+            .await?
+            .trim()
+            .to_string();
         let (width, height) = self.get_screen_dimensions().await?;
 
         let info = DeviceInfo {
@@ -419,10 +438,7 @@ impl DeviceAutomation for AndroidDevice {
             model,
             os_version: version,
             status: DeviceStatus::Ready,
-            capabilities: vec![
-                DeviceCapability::Touchscreen,
-                DeviceCapability::Screenshot,
-            ],
+            capabilities: vec![DeviceCapability::Touchscreen, DeviceCapability::Screenshot],
             screen_width: width,
             screen_height: height,
             dpi: 320, // Default DPI
@@ -444,21 +460,26 @@ impl DeviceAutomation for AndroidDevice {
 
     async fn take_screenshot(&self) -> Result<Vec<u8>> {
         debug!("Taking screenshot on Android device {}", self.serial);
-        
+
         // Use screencap command
         self.shell("screencap -p /sdcard/screenshot.png").await?;
-        
+
         // Pull the screenshot as raw binary data
-        let output = self.adb_raw(&["exec-out", "cat", "/sdcard/screenshot.png"]).await?;
-        
+        let output = self
+            .adb_raw(&["exec-out", "cat", "/sdcard/screenshot.png"])
+            .await?;
+
         // Clean up temporary file (best effort, ignore errors)
         self.shell("rm /sdcard/screenshot.png").await.ok();
-        
+
         Ok(output)
     }
 
     async fn tap(&self, x: i32, y: i32) -> Result<()> {
-        debug!("Tapping at ({}, {}) on Android device {}", x, y, self.serial);
+        debug!(
+            "Tapping at ({}, {}) on Android device {}",
+            x, y, self.serial
+        );
         self.shell(&format!("input tap {} {}", x, y)).await?;
         Ok(())
     }
@@ -469,42 +490,85 @@ impl DeviceAutomation for AndroidDevice {
         self.shell(&format!(
             "input swipe {} {} {} {} {}",
             x, y, x, y, duration_ms
-        )).await?;
+        ))
+        .await?;
         Ok(())
     }
 
-    async fn swipe(&self, from_x: i32, from_y: i32, to_x: i32, to_y: i32, duration_ms: u64) -> Result<()> {
-        debug!("Swiping from ({}, {}) to ({}, {})", from_x, from_y, to_x, to_y);
+    async fn swipe(
+        &self,
+        from_x: i32,
+        from_y: i32,
+        to_x: i32,
+        to_y: i32,
+        duration_ms: u64,
+    ) -> Result<()> {
+        debug!(
+            "Swiping from ({}, {}) to ({}, {})",
+            from_x, from_y, to_x, to_y
+        );
         self.shell(&format!(
             "input swipe {} {} {} {} {}",
             from_x, from_y, to_x, to_y, duration_ms
-        )).await?;
+        ))
+        .await?;
         Ok(())
     }
 
-    async fn swipe_direction(&self, direction: SwipeDirection, distance: u32, duration_ms: u64) -> Result<()> {
+    async fn swipe_direction(
+        &self,
+        direction: SwipeDirection,
+        distance: u32,
+        duration_ms: u64,
+    ) -> Result<()> {
         let (width, height) = self.get_screen_dimensions().await?;
         let center_x = width as i32 / 2;
         let center_y = height as i32 / 2;
         let distance = distance as i32;
 
         let (from_x, from_y, to_x, to_y) = match direction {
-            SwipeDirection::Up => (center_x, center_y + distance / 2, center_x, center_y - distance / 2),
-            SwipeDirection::Down => (center_x, center_y - distance / 2, center_x, center_y + distance / 2),
-            SwipeDirection::Left => (center_x + distance / 2, center_y, center_x - distance / 2, center_y),
-            SwipeDirection::Right => (center_x - distance / 2, center_y, center_x + distance / 2, center_y),
+            SwipeDirection::Up => (
+                center_x,
+                center_y + distance / 2,
+                center_x,
+                center_y - distance / 2,
+            ),
+            SwipeDirection::Down => (
+                center_x,
+                center_y - distance / 2,
+                center_x,
+                center_y + distance / 2,
+            ),
+            SwipeDirection::Left => (
+                center_x + distance / 2,
+                center_y,
+                center_x - distance / 2,
+                center_y,
+            ),
+            SwipeDirection::Right => (
+                center_x - distance / 2,
+                center_y,
+                center_x + distance / 2,
+                center_y,
+            ),
         };
 
         self.swipe(from_x, from_y, to_x, to_y, duration_ms).await
     }
 
-    async fn pinch(&self, center_x: i32, center_y: i32, scale: f64, duration_ms: u64) -> Result<()> {
+    async fn pinch(
+        &self,
+        center_x: i32,
+        center_y: i32,
+        scale: f64,
+        duration_ms: u64,
+    ) -> Result<()> {
         // Android doesn't have native pinch gesture, simulate with two-finger swipe
         // For scale > 1.0 (zoom in): fingers move outward
         // For scale < 1.0 (zoom out): fingers move inward
         let base_distance = 150; // Base distance from center
         let distance = (base_distance as f64 * scale.abs()) as i32;
-        
+
         // Calculate start and end positions for two fingers
         let (finger1_start, finger1_end, finger2_start, finger2_end) = if scale > 1.0 {
             // Zoom in: start close, end far
@@ -529,34 +593,43 @@ impl DeviceAutomation for AndroidDevice {
         };
 
         // Use input swipe for both fingers (sequential, not simultaneous - limitation)
-        debug!("Pinch gesture at ({}, {}) with scale {} (duration: {}ms)", center_x, center_y, scale, duration_ms);
-        
+        debug!(
+            "Pinch gesture at ({}, {}) with scale {} (duration: {}ms)",
+            center_x, center_y, scale, duration_ms
+        );
+
         // Execute first finger swipe
         self.shell(&format!(
             "input swipe {} {} {} {} {}",
             finger1_start.0, finger1_start.1, finger1_end.0, finger1_end.1, duration_ms
-        )).await?;
-        
+        ))
+        .await?;
+
         // Small delay between fingers
         tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
-        
+
         // Execute second finger swipe
         self.shell(&format!(
             "input swipe {} {} {} {} {}",
             finger2_start.0, finger2_start.1, finger2_end.0, finger2_end.1, duration_ms
-        )).await?;
-        
+        ))
+        .await?;
+
         Ok(())
     }
 
     async fn find_element(&self, locator: &ElementLocator) -> Result<UiElement> {
-        debug!("Finding element: {:?} = {}", locator.locator_type, locator.value);
-        
+        debug!(
+            "Finding element: {:?} = {}",
+            locator.locator_type, locator.value
+        );
+
         // Use timeout
         let result = timeout(
             Duration::from_millis(locator.timeout_ms),
-            self.find_element_in_hierarchy(locator)
-        ).await;
+            self.find_element_in_hierarchy(locator),
+        )
+        .await;
 
         match result {
             Ok(element) => element,
@@ -570,7 +643,7 @@ impl DeviceAutomation for AndroidDevice {
     async fn find_elements(&self, locator: &ElementLocator) -> Result<Vec<UiElement>> {
         let hierarchy = self.get_ui_hierarchy().await?;
         let elements = self.parse_elements(&hierarchy).await?;
-        
+
         let matching: Vec<UiElement> = elements
             .into_iter()
             .filter(|e| self.matches_locator(e, locator))
@@ -593,17 +666,19 @@ impl DeviceAutomation for AndroidDevice {
 
     async fn get_element_text(&self, locator: &ElementLocator) -> Result<String> {
         let element = self.find_element(locator).await?;
-        element.text.ok_or_else(|| AgentError::Execution("Element has no text".to_string()))
+        element
+            .text
+            .ok_or_else(|| AgentError::Execution("Element has no text".to_string()))
     }
 
     async fn set_element_text(&self, locator: &ElementLocator, text: &str) -> Result<()> {
         // First tap the element to focus
         self.tap_element(locator).await?;
         sleep(Duration::from_millis(200)).await;
-        
+
         // Clear existing text
         self.shell("input keyevent KEYCODE_CLEAR").await.ok();
-        
+
         // Type new text
         self.type_text(text).await
     }
@@ -611,11 +686,13 @@ impl DeviceAutomation for AndroidDevice {
     async fn clear_element_text(&self, locator: &ElementLocator) -> Result<()> {
         self.tap_element(locator).await?;
         sleep(Duration::from_millis(200)).await;
-        
+
         // Select all and delete
-        self.shell("input keyevent KEYCODE_CTRL_LEFT KEYCODE_A").await.ok();
+        self.shell("input keyevent KEYCODE_CTRL_LEFT KEYCODE_A")
+            .await
+            .ok();
         self.shell("input keyevent KEYCODE_DEL").await?;
-        
+
         Ok(())
     }
 
@@ -692,28 +769,28 @@ impl AppLifecycle for AndroidDevice {
         self.shell(&format!(
             "monkey -p {} -c android.intent.category.LAUNCHER 1",
             package_name
-        )).await?;
+        ))
+        .await?;
         Ok(())
     }
 
     async fn launch_app_with_activity(&self, package_name: &str, activity: &str) -> Result<()> {
         info!("Launching activity: {}/{}", package_name, activity);
-        self.shell(&format!(
-            "am start -n {}/{}",
-            package_name, activity
-        )).await?;
+        self.shell(&format!("am start -n {}/{}", package_name, activity))
+            .await?;
         Ok(())
     }
 
     async fn close_app(&self, package_name: &str) -> Result<()> {
         info!("Closing app: {}", package_name);
-        self.shell(&format!("am force-stop {}", package_name)).await?;
+        self.shell(&format!("am force-stop {}", package_name))
+            .await?;
         Ok(())
     }
 
     async fn is_app_installed(&self, package_name: &str) -> Result<bool> {
-        // Use `|| true` to prevent grep from returning non-zero exit code when no match is found,
-        // which would cause the adb shell command to fail.
+        // Use `|| true` to prevent grep from returning non-zero exit code when no match
+        // is found, which would cause the adb shell command to fail.
         let output = self
             .shell(&format!("pm list packages | grep {} || true", package_name))
             .await?;
@@ -721,7 +798,8 @@ impl AppLifecycle for AndroidDevice {
     }
 
     async fn is_app_running(&self, package_name: &str) -> Result<bool> {
-        // Use `|| true` to prevent grep from returning non-zero exit code when no match is found.
+        // Use `|| true` to prevent grep from returning non-zero exit code when no match
+        // is found.
         let output = self
             .shell(&format!("ps | grep {} || true", package_name))
             .await?;
@@ -730,10 +808,13 @@ impl AppLifecycle for AndroidDevice {
 
     async fn get_app_info(&self, package_name: &str) -> Result<AppInfo> {
         // Get version name
-        let version = self.shell(&format!(
-            "dumpsys package {} | grep versionName",
-            package_name
-        )).await.unwrap_or_default();
+        let version = self
+            .shell(&format!(
+                "dumpsys package {} | grep versionName",
+                package_name
+            ))
+            .await
+            .unwrap_or_default();
 
         let is_installed = self.is_app_installed(package_name).await?;
         let is_running = self.is_app_running(package_name).await?;
@@ -771,19 +852,15 @@ impl AppLifecycle for AndroidDevice {
 
     async fn grant_permission(&self, package_name: &str, permission: &str) -> Result<()> {
         info!("Granting permission {} to {}", permission, package_name);
-        self.shell(&format!(
-            "pm grant {} {}",
-            package_name, permission
-        )).await?;
+        self.shell(&format!("pm grant {} {}", package_name, permission))
+            .await?;
         Ok(())
     }
 
     async fn revoke_permission(&self, package_name: &str, permission: &str) -> Result<()> {
         info!("Revoking permission {} from {}", permission, package_name);
-        self.shell(&format!(
-            "pm revoke {} {}",
-            package_name, permission
-        )).await?;
+        self.shell(&format!("pm revoke {} {}", package_name, permission))
+            .await?;
         Ok(())
     }
 }
@@ -806,7 +883,10 @@ impl AndroidController {
 
     /// Input key event
     pub async fn input_keyevent(&self, keycode: &str) -> Result<()> {
-        self.device.shell(&format!("input keyevent {}", keycode)).await.map(|_| ())
+        self.device
+            .shell(&format!("input keyevent {}", keycode))
+            .await
+            .map(|_| ())
     }
 
     /// Input text
@@ -816,12 +896,17 @@ impl AndroidController {
 
     /// Start activity
     pub async fn start_activity(&self, package: &str, activity: &str) -> Result<()> {
-        self.device.launch_app_with_activity(package, activity).await
+        self.device
+            .launch_app_with_activity(package, activity)
+            .await
     }
 
     /// Broadcast intent
     pub async fn broadcast_intent(&self, action: &str) -> Result<()> {
-        self.device.shell(&format!("am broadcast -a {}", action)).await.map(|_| ())
+        self.device
+            .shell(&format!("am broadcast -a {}", action))
+            .await
+            .map(|_| ())
     }
 
     /// Open a URL or deep link via ACTION_VIEW
@@ -837,7 +922,9 @@ impl AndroidController {
 
     /// Get logcat
     pub async fn get_logcat(&self, lines: usize) -> Result<String> {
-        self.device.adb(&["logcat", "-d", "-t", &lines.to_string()]).await
+        self.device
+            .adb(&["logcat", "-d", "-t", &lines.to_string()])
+            .await
     }
 
     /// Clear logcat
@@ -858,19 +945,28 @@ impl AndroidController {
     /// Enable/disable WiFi
     pub async fn set_wifi(&self, enabled: bool) -> Result<()> {
         let state = if enabled { "enable" } else { "disable" };
-        self.device.shell(&format!("svc wifi {}", state)).await.map(|_| ())
+        self.device
+            .shell(&format!("svc wifi {}", state))
+            .await
+            .map(|_| ())
     }
 
     /// Enable/disable mobile data
     pub async fn set_mobile_data(&self, enabled: bool) -> Result<()> {
         let state = if enabled { "enable" } else { "disable" };
-        self.device.shell(&format!("svc data {}", state)).await.map(|_| ())
+        self.device
+            .shell(&format!("svc data {}", state))
+            .await
+            .map(|_| ())
     }
 
     /// Set airplane mode
     pub async fn set_airplane_mode(&self, enabled: bool) -> Result<()> {
         let state = if enabled { "enable" } else { "disable" };
-        self.device.shell(&format!("cmd connectivity airplane-mode {}", state)).await.map(|_| ())
+        self.device
+            .shell(&format!("cmd connectivity airplane-mode {}", state))
+            .await
+            .map(|_| ())
     }
 
     /// Get battery level
@@ -878,11 +974,15 @@ impl AndroidController {
         let output = self.device.shell("dumpsys battery | grep level").await?;
         // Parse "level: 85"
         if let Some(level_str) = output.split(':').nth(1) {
-            let level: u8 = level_str.trim().parse()
+            let level: u8 = level_str
+                .trim()
+                .parse()
                 .map_err(|_| AgentError::Execution("Invalid battery level".to_string()))?;
             return Ok(level);
         }
-        Err(AgentError::Execution("Failed to parse battery level".to_string()))
+        Err(AgentError::Execution(
+            "Failed to parse battery level".to_string(),
+        ))
     }
 
     /// Is device charging
@@ -893,10 +993,14 @@ impl AndroidController {
 
     /// Get device orientation
     pub async fn get_orientation(&self) -> Result<u8> {
-        let output = self.device.shell("dumpsys input | grep 'SurfaceOrientation'").await?;
+        let output = self
+            .device
+            .shell("dumpsys input | grep 'SurfaceOrientation'")
+            .await?;
         // Parse orientation
         if let Some(ori_str) = output.split_whitespace().last() {
-            let ori: u8 = ori_str.parse()
+            let ori: u8 = ori_str
+                .parse()
                 .map_err(|_| AgentError::Execution("Invalid orientation".to_string()))?;
             return Ok(ori);
         }
@@ -905,10 +1009,14 @@ impl AndroidController {
 
     /// Set device orientation
     pub async fn set_orientation(&self, orientation: u8) -> Result<()> {
-        self.device.shell(&format!(
-            "content insert --uri content://settings/system --bind name:s:user_rotation --bind value:i:{}",
-            orientation
-        )).await.map(|_| ())
+        self.device
+            .shell(&format!(
+                "content insert --uri content://settings/system --bind name:s:user_rotation \
+                 --bind value:i:{}",
+                orientation
+            ))
+            .await
+            .map(|_| ())
     }
 
     /// Dump UI hierarchy for debugging
@@ -934,15 +1042,14 @@ mod tests {
 
     #[test]
     fn test_android_device_with_adb_path() {
-        let device = AndroidDevice::new("emulator-5554")
-            .with_adb_path("/usr/local/bin/adb");
+        let device = AndroidDevice::new("emulator-5554").with_adb_path("/usr/local/bin/adb");
         assert_eq!(device.adb_path, "/usr/local/bin/adb");
     }
 
     #[tokio::test]
     async fn test_parse_bounds() {
         let device = AndroidDevice::new("test");
-        
+
         // Valid bounds
         let bounds = device.parse_bounds("[100,200][300,400]");
         assert!(bounds.is_some());
@@ -960,9 +1067,12 @@ mod tests {
     fn test_extract_attr() {
         let device = AndroidDevice::new("test");
         let line = r#"<node text="Hello" resource-id="btn1" />"#;
-        
+
         assert_eq!(device.extract_attr(line, "text"), Some("Hello".to_string()));
-        assert_eq!(device.extract_attr(line, "resource-id"), Some("btn1".to_string()));
+        assert_eq!(
+            device.extract_attr(line, "resource-id"),
+            Some("btn1".to_string())
+        );
         assert_eq!(device.extract_attr(line, "nonexistent"), None);
     }
 }

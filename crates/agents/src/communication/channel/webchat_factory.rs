@@ -9,10 +9,8 @@ use serde_json::Value;
 use tokio::sync::RwLock;
 use tracing::info;
 
-use super::{
-    BaseChannelConfig, Channel, ChannelFactory, ConnectionMode,
-    webchat_channel::{WebChatChannel, WebChatConfig},
-};
+use super::webchat_channel::{WebChatChannel, WebChatConfig};
+use super::{BaseChannelConfig, Channel, ChannelFactory, ConnectionMode};
 use crate::communication::PlatformType;
 use crate::error::Result;
 
@@ -80,7 +78,10 @@ impl ChannelFactory for WebChatFactory {
                 .and_then(|v| v.as_u64())
                 .map(|v| v as u16)
                 .unwrap_or(8000),
-            webhook_url: config.get("webhook_url").and_then(|v| v.as_str()).map(|s| s.to_string()),
+            webhook_url: config
+                .get("webhook_url")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string()),
         };
 
         let channel_config = WebChatConfig { base: base_config };

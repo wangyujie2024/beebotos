@@ -1,8 +1,8 @@
 //! Task status tracking for monitoring
 
 use std::collections::HashMap;
-use tokio::sync::{broadcast, RwLock};
 
+use tokio::sync::{broadcast, RwLock};
 
 use crate::scheduler::TaskId;
 
@@ -73,25 +73,25 @@ impl TaskInfo {
 #[derive(Debug, Clone)]
 pub enum TaskStatusEvent {
     /// Task was registered
-    TaskRegistered { 
+    TaskRegistered {
         /// Task ID
-        task_id: TaskId 
+        task_id: TaskId,
     },
     /// Task status changed
-    StatusChanged { 
+    StatusChanged {
         /// Task ID
-        task_id: TaskId, 
+        task_id: TaskId,
         /// Previous status
-        old_status: TaskStatus, 
+        old_status: TaskStatus,
         /// New status
-        new_status: TaskStatus 
+        new_status: TaskStatus,
     },
     /// Task completed
-    TaskCompleted { 
+    TaskCompleted {
         /// Task ID
-        task_id: TaskId, 
+        task_id: TaskId,
         /// Whether task succeeded
-        success: bool 
+        success: bool,
     },
 }
 

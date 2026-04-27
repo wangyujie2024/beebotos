@@ -8,25 +8,22 @@
 //! - Request logging
 //! - Error handling
 
-use axum::{
-    extract::{ConnectInfo, FromRequestParts, Request, State},
-    http::{header, request::Parts, HeaderValue},
-    middleware::Next,
-    response::{IntoResponse, Response},
-};
+use std::net::SocketAddr;
+use std::sync::Arc;
+use std::time::Instant;
 
+use axum::extract::{ConnectInfo, FromRequestParts, Request, State};
+use axum::http::request::Parts;
+use axum::http::{header, HeaderValue};
+use axum::middleware::Next;
+use axum::response::{IntoResponse, Response};
 use chrono::{Duration as ChronoDuration, Utc};
 use jsonwebtoken::{
     decode, encode, Algorithm, DecodingKey, EncodingKey, Header, TokenData, Validation,
 };
 use serde::{Deserialize, Serialize};
-use std::net::SocketAddr;
-use std::sync::Arc;
-use std::time::Instant;
-use tower_http::{
-    cors::{AllowOrigin, Any, CorsLayer},
-    trace::{DefaultMakeSpan, DefaultOnRequest, DefaultOnResponse, TraceLayer},
-};
+use tower_http::cors::{AllowOrigin, Any, CorsLayer};
+use tower_http::trace::{DefaultMakeSpan, DefaultOnRequest, DefaultOnResponse, TraceLayer};
 use tracing::{debug, error, info, info_span, warn, Instrument};
 use uuid::Uuid;
 
@@ -55,8 +52,6 @@ pub struct Claims {
     pub iss: String,
     /// Audience
     pub aud: String,
-    /// User roles
-    pub roles: Vec<String>,
     /// Token type
     #[serde(default)]
     pub token_type: TokenType,
@@ -83,8 +78,6 @@ pub enum TokenType {
 pub struct AuthUser {
     /// User ID
     pub user_id: String,
-    /// User roles
-    pub roles: Vec<String>,
     /// JWT claims
     pub claims: Claims,
     /// Client IP
@@ -94,14 +87,14 @@ pub struct AuthUser {
 }
 
 impl AuthUser {
-    /// Check if user has role
-    pub fn has_role(&self, role: &str) -> bool {
-        self.roles.contains(&role.to_string()) || self.roles.contains(&"admin".to_string())
+    /// Check if user has role - disabled, all authenticated users have all roles
+    pub fn has_role(&self, _role: &str) -> bool {
+        true
     }
 
-    /// Check if user is admin
+    /// Check if user is admin - disabled, all authenticated users are treated as admin
     pub fn is_admin(&self) -> bool {
-        self.has_role("admin")
+        true
     }
 }
 
@@ -171,14 +164,12 @@ pub async fn auth_middleware(
             exp: (Utc::now() + ChronoDuration::hours(24)).timestamp(),
             iss: state.config.jwt.issuer.clone(),
             aud: state.config.jwt.audience.clone(),
-            roles: vec!["admin".to_string()],
             token_type: TokenType::Access,
             session_id: None,
         };
 
         let auth_user = AuthUser {
             user_id: claims.sub.clone(),
-            roles: claims.roles.clone(),
             claims,
             client_ip,
             request_id: request_id.clone(),
@@ -213,7 +204,6 @@ pub async fn auth_middleware(
     // Create auth user
     let auth_user = AuthUser {
         user_id: claims.sub.clone(),
-        roles: claims.roles.clone(),
         claims,
         client_ip,
         request_id: request_id.clone(),
@@ -249,7 +239,6 @@ fn validate_token(token: &str, config: &crate::config::JwtConfig) -> anyhow::Res
 /// Generate JWT access token
 pub fn generate_access_token(
     user_id: impl Into<String>,
-    roles: Vec<String>,
     config: &crate::config::JwtConfig,
 ) -> Result<String> {
     let now = Utc::now();
@@ -262,7 +251,6 @@ pub fn generate_access_token(
         exp: (now + ChronoDuration::minutes(config.expiry_minutes as i64)).timestamp(),
         iss: config.issuer.clone(),
         aud: config.audience.clone(),
-        roles,
         token_type: TokenType::Access,
         session_id: Some(jti),
     };
@@ -290,7 +278,6 @@ pub fn generate_refresh_token(
         exp: (now + ChronoDuration::minutes(config.refresh_expiry_minutes as i64)).timestamp(),
         iss: config.issuer.clone(),
         aud: config.audience.clone(),
-        roles: vec![],
         token_type: TokenType::Refresh,
         session_id: Some(jti),
     };
@@ -470,15 +457,16 @@ pub async fn logging_middleware(
 
 /// CORS layer configuration
 ///
-/// 🟠 HIGH SECURITY: Blocks dangerous combination of allow_any_origin + allow_credentials
+/// 🟠 HIGH SECURITY: Blocks dangerous combination of allow_any_origin +
+/// allow_credentials
 pub fn cors_layer(config: &crate::config::CorsConfig) -> CorsLayer {
     // 🟠 HIGH SECURITY FIX: Prevent dangerous CORS configuration
     // Allowing any origin with credentials is a security vulnerability (CSRF risk)
     if config.allow_any_origin && config.allow_credentials {
         panic!(
-            "SECURITY ERROR: CORS 'allow_any_origin' cannot be combined with 'allow_credentials'.\n\
-             This combination creates a security vulnerability.\n\
-             Either disable allow_any_origin or set allow_credentials to false."
+            "SECURITY ERROR: CORS 'allow_any_origin' cannot be combined with \
+             'allow_credentials'.\nThis combination creates a security vulnerability.\nEither \
+             disable allow_any_origin or set allow_credentials to false."
         );
     }
 
@@ -539,12 +527,8 @@ fn is_public_path(path: &str) -> bool {
         "/ws",
         "/ws/status",
     ];
-    const PUBLIC_PREFIXES: &[&str] = &[
-        "/api/v1/channels/wechat/qr",
-    ];
-    const PUBLIC_EXACT: &[&str] = &[
-        "/api/v1/channels",
-    ];
+    const PUBLIC_PREFIXES: &[&str] = &["/api/v1/channels/wechat/qr"];
+    const PUBLIC_EXACT: &[&str] = &["/api/v1/channels"];
 
     PUBLIC_PATHS.iter().any(|p| path.starts_with(p))
         || PUBLIC_PREFIXES.iter().any(|p| path.starts_with(p))
@@ -570,40 +554,27 @@ impl GatewayState {
     }
 }
 
-/// Role-based access control (RBAC) helper
-pub fn require_role(auth_user: &AuthUser, role: &str) -> Result<()> {
-    if auth_user.has_role(role) {
-        Ok(())
-    } else {
-        Err(GatewayError::forbidden(format!(
-            "Required role '{}' not found",
-            role
-        )))
-    }
+/// Role-based access control (RBAC) helper - disabled, all authenticated users have full access
+pub fn require_role(_auth_user: &AuthUser, _role: &str) -> Result<()> {
+    Ok(())
 }
 
-/// Require any of the specified roles
-pub fn require_any_role(auth_user: &AuthUser, roles: &[&str]) -> Result<()> {
-    if roles.iter().any(|r| auth_user.has_role(r)) {
-        Ok(())
-    } else {
-        Err(GatewayError::forbidden(
-            "Insufficient permissions".to_string(),
-        ))
-    }
+/// Require any of the specified roles - disabled, all authenticated users have full access
+pub fn require_any_role(_auth_user: &AuthUser, _roles: &[&str]) -> Result<()> {
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
+    use secrecy::Secret;
+
     use super::*;
     use crate::config::{GatewayConfig, JwtConfig};
-    use secrecy::Secret;
 
     #[test]
     fn test_auth_user_roles() {
         let user = AuthUser {
             user_id: "user-1".to_string(),
-            roles: vec!["user".to_string(), "admin".to_string()],
             claims: Claims {
                 sub: "user-1".to_string(),
                 jti: "jti-1".to_string(),
@@ -611,7 +582,6 @@ mod tests {
                 exp: 0,
                 iss: "test".to_string(),
                 aud: "test".to_string(),
-                roles: vec!["user".to_string(), "admin".to_string()],
                 token_type: TokenType::Access,
                 session_id: None,
             },
@@ -619,10 +589,10 @@ mod tests {
             request_id: "req-1".to_string(),
         };
 
+        // Role checks are disabled - all authenticated users have all roles
         assert!(user.has_role("user"));
         assert!(user.has_role("admin"));
         assert!(user.is_admin());
-        // Admin has all roles, so this returns true
         assert!(user.has_role("moderator"));
     }
 
@@ -646,13 +616,12 @@ mod tests {
         };
 
         // Generate token
-        let token = generate_access_token("user-1", vec!["user".to_string()], &config).unwrap();
+        let token = generate_access_token("user-1", &config).unwrap();
         assert!(!token.is_empty());
 
         // Validate token
         let claims = validate_token(&token, &config).unwrap();
         assert_eq!(claims.sub, "user-1");
-        assert_eq!(claims.roles, vec!["user"]);
         assert_eq!(claims.token_type, TokenType::Access);
     }
 
@@ -660,7 +629,6 @@ mod tests {
     fn test_require_role() {
         let user = AuthUser {
             user_id: "user-1".to_string(),
-            roles: vec!["admin".to_string()],
             claims: Claims {
                 sub: "user-1".to_string(),
                 jti: "jti-1".to_string(),
@@ -668,7 +636,6 @@ mod tests {
                 exp: 0,
                 iss: "test".to_string(),
                 aud: "test".to_string(),
-                roles: vec!["admin".to_string()],
                 token_type: TokenType::Access,
                 session_id: None,
             },
@@ -676,12 +643,11 @@ mod tests {
             request_id: "req-1".to_string(),
         };
 
+        // Role checks are disabled - all authenticated users have all roles
         assert!(require_role(&user, "admin").is_ok());
-        // Admin has all roles, so this also returns ok
         assert!(require_role(&user, "user").is_ok());
 
         assert!(require_any_role(&user, &["admin", "user"]).is_ok());
-        // Admin has all roles, so this also returns ok
         assert!(require_any_role(&user, &["user", "moderator"]).is_ok());
     }
 }

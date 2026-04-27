@@ -8,8 +8,9 @@ use std::time::Instant;
 
 /// Metrics collector for kernel
 ///
-/// Note: This is a simplified implementation that maintains counters internally.
-/// For full metrics integration, use the metrics-exporter-prometheus feature.
+/// Note: This is a simplified implementation that maintains counters
+/// internally. For full metrics integration, use the
+/// metrics-exporter-prometheus feature.
 pub struct MetricsCollector {
     start_time: Instant,
     tasks_submitted: AtomicU64,
@@ -121,7 +122,8 @@ impl MetricsCollector {
     /// Get statistics as formatted string
     pub fn format_stats(&self) -> String {
         format!(
-            "Metrics: tasks(submitted={}, completed={}, failed={}), syscalls(total={}, errors={}), security(violations={}, cap_checks={}), storage(reads={}, writes={})",
+            "Metrics: tasks(submitted={}, completed={}, failed={}), syscalls(total={}, \
+             errors={}), security(violations={}, cap_checks={}), storage(reads={}, writes={})",
             self.tasks_submitted.load(Ordering::SeqCst),
             self.tasks_completed.load(Ordering::SeqCst),
             self.tasks_failed.load(Ordering::SeqCst),

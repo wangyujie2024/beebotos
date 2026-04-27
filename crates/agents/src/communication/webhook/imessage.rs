@@ -480,7 +480,10 @@ mod tests {
         assert_eq!(message.content, "Hello iMessage!");
         assert_eq!(message.message_type, MessageType::Text);
         // sender info is stored in metadata
-        assert_eq!(message.metadata.get("sender_handle"), Some(&"+1234567890".to_string()));
+        assert_eq!(
+            message.metadata.get("sender_handle"),
+            Some(&"+1234567890".to_string())
+        );
     }
 
     #[test]

@@ -47,8 +47,14 @@ impl TryFrom<ChatSessionRow> for ChatSession {
             title: row.title,
             is_pinned: row.is_pinned != 0,
             is_archived: row.is_archived != 0,
-            created_at: row.created_at.parse().map_err(|e| format!("Invalid datetime: {}", e))?,
-            updated_at: row.updated_at.parse().map_err(|e| format!("Invalid datetime: {}", e))?,
+            created_at: row
+                .created_at
+                .parse()
+                .map_err(|e| format!("Invalid datetime: {}", e))?,
+            updated_at: row
+                .updated_at
+                .parse()
+                .map_err(|e| format!("Invalid datetime: {}", e))?,
         })
     }
 }
@@ -88,10 +94,15 @@ impl TryFrom<ChatMessageRow> for ChatMessage {
             content: row.content,
             metadata: serde_json::from_str(&row.metadata)
                 .map_err(|e| format!("Invalid metadata JSON: {}", e))?,
-            token_usage: row.token_usage.map(|s| serde_json::from_str(&s))
+            token_usage: row
+                .token_usage
+                .map(|s| serde_json::from_str(&s))
                 .transpose()
                 .map_err(|e| format!("Invalid token_usage JSON: {}", e))?,
-            created_at: row.created_at.parse().map_err(|e| format!("Invalid datetime: {}", e))?,
+            created_at: row
+                .created_at
+                .parse()
+                .map_err(|e| format!("Invalid datetime: {}", e))?,
         })
     }
 }
@@ -134,16 +145,16 @@ impl WebchatService {
             AppError::database(e)
         })?;
 
-        let row: ChatSessionRow = sqlx::query_as(
-            "SELECT * FROM chat_sessions WHERE user_id = ?1 AND created_at = ?2"
-        )
-        .bind(user_id)
-        .bind(&now)
-        .fetch_one(&self.db)
-        .await
-        .map_err(|e| AppError::database(e))?;
+        let row: ChatSessionRow =
+            sqlx::query_as("SELECT * FROM chat_sessions WHERE user_id = ?1 AND created_at = ?2")
+                .bind(user_id)
+                .bind(&now)
+                .fetch_one(&self.db)
+                .await
+                .map_err(|e| AppError::database(e))?;
 
-        let session: ChatSession = row.try_into()
+        let session: ChatSession = row
+            .try_into()
             .map_err(|e: String| AppError::Internal(format!("Failed to parse session: {}", e)))?;
 
         info!("Created chat session {} for user {}", session.id, user_id);
@@ -156,17 +167,16 @@ impl WebchatService {
         session_id: &str,
         user_id: &str,
     ) -> Result<ChatSession, AppError> {
-        let row: ChatSessionRow = sqlx::query_as(
-            "SELECT * FROM chat_sessions WHERE id = ?1 AND user_id = ?2"
-        )
-        .bind(session_id)
-        .bind(user_id)
-        .fetch_one(&self.db)
-        .await
-        .map_err(|e| match e {
-            sqlx::Error::RowNotFound => AppError::not_found("Session", session_id),
-            _ => AppError::database(e),
-        })?;
+        let row: ChatSessionRow =
+            sqlx::query_as("SELECT * FROM chat_sessions WHERE id = ?1 AND user_id = ?2")
+                .bind(session_id)
+                .bind(user_id)
+                .fetch_one(&self.db)
+                .await
+                .map_err(|e| match e {
+                    sqlx::Error::RowNotFound => AppError::not_found("Session", session_id),
+                    _ => AppError::database(e),
+                })?;
 
         row.try_into()
             .map_err(|e: String| AppError::Internal(format!("Failed to parse session: {}", e)))
@@ -186,9 +196,7 @@ impl WebchatService {
         .await
         .map_err(|e| AppError::database(e))?;
 
-        let sessions: Result<Vec<_>, _> = rows.into_iter()
-            .map(|r| r.try_into())
-            .collect();
+        let sessions: Result<Vec<_>, _> = rows.into_iter().map(|r| r.try_into()).collect();
 
         sessions.map_err(|e: String| AppError::Internal(format!("Failed to parse sessions: {}", e)))
     }
@@ -200,14 +208,13 @@ impl WebchatService {
         user_id: &str,
     ) -> Result<Vec<ChatMessage>, AppError> {
         // Verify ownership
-        let count: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM chat_sessions WHERE id = ?1 AND user_id = ?2"
-        )
-        .bind(session_id)
-        .bind(user_id)
-        .fetch_one(&self.db)
-        .await
-        .map_err(|e| AppError::database(e))?;
+        let count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM chat_sessions WHERE id = ?1 AND user_id = ?2")
+                .bind(session_id)
+                .bind(user_id)
+                .fetch_one(&self.db)
+                .await
+                .map_err(|e| AppError::database(e))?;
 
         if count == 0 {
             return Err(AppError::not_found("Session", session_id));
@@ -225,9 +232,7 @@ impl WebchatService {
         .await
         .map_err(|e| AppError::database(e))?;
 
-        let messages: Result<Vec<_>, _> = rows.into_iter()
-            .map(|r| r.try_into())
-            .collect();
+        let messages: Result<Vec<_>, _> = rows.into_iter().map(|r| r.try_into()).collect();
 
         messages.map_err(|e: String| AppError::Internal(format!("Failed to parse messages: {}", e)))
     }
@@ -242,7 +247,9 @@ impl WebchatService {
         token_usage: Option<Value>,
     ) -> Result<String, AppError> {
         let id = uuid::Uuid::new_v4().to_string();
-        let metadata_json = metadata.map(|v| v.to_string()).unwrap_or_else(|| "{}".to_string());
+        let metadata_json = metadata
+            .map(|v| v.to_string())
+            .unwrap_or_else(|| "{}".to_string());
         let token_usage_json = token_usage.map(|v| v.to_string());
         let now = chrono::Utc::now().to_rfc3339();
 
@@ -276,22 +283,22 @@ impl WebchatService {
         user_id: &str,
         title: &str,
     ) -> Result<ChatSession, AppError> {
-        let result = sqlx::query(
-            "UPDATE chat_sessions SET title = ?1 WHERE id = ?2 AND user_id = ?3"
-        )
-        .bind(title)
-        .bind(session_id)
-        .bind(user_id)
-        .execute(&self.db)
-        .await
-        .map_err(|e| AppError::database(e))?;
+        let result =
+            sqlx::query("UPDATE chat_sessions SET title = ?1 WHERE id = ?2 AND user_id = ?3")
+                .bind(title)
+                .bind(session_id)
+                .bind(user_id)
+                .execute(&self.db)
+                .await
+                .map_err(|e| AppError::database(e))?;
 
         if result.rows_affected() == 0 {
             return Err(AppError::not_found("Session", session_id));
         }
 
         let row: ChatSessionRow = sqlx::query_as(
-            "SELECT id, user_id, channel, title, is_pinned, is_archived, created_at, updated_at FROM chat_sessions WHERE id = ?1 AND user_id = ?2"
+            "SELECT id, user_id, channel, title, is_pinned, is_archived, created_at, updated_at \
+             FROM chat_sessions WHERE id = ?1 AND user_id = ?2",
         )
         .bind(session_id)
         .bind(user_id)
@@ -303,13 +310,9 @@ impl WebchatService {
     }
 
     /// Toggle pin status, returning new pin state
-    pub async fn toggle_pin(
-        &self,
-        session_id: &str,
-        user_id: &str,
-    ) -> Result<bool, AppError> {
+    pub async fn toggle_pin(&self, session_id: &str, user_id: &str) -> Result<bool, AppError> {
         let current: Option<i32> = sqlx::query_scalar(
-            "SELECT is_pinned FROM chat_sessions WHERE id = ?1 AND user_id = ?2"
+            "SELECT is_pinned FROM chat_sessions WHERE id = ?1 AND user_id = ?2",
         )
         .bind(session_id)
         .bind(user_id)
@@ -320,33 +323,26 @@ impl WebchatService {
         let current = current.ok_or_else(|| AppError::not_found("Session", session_id))?;
         let new_pinned = if current == 0 { 1 } else { 0 };
 
-        sqlx::query(
-            "UPDATE chat_sessions SET is_pinned = ?1 WHERE id = ?2 AND user_id = ?3"
-        )
-        .bind(new_pinned)
-        .bind(session_id)
-        .bind(user_id)
-        .execute(&self.db)
-        .await
-        .map_err(|e| AppError::database(e))?;
+        sqlx::query("UPDATE chat_sessions SET is_pinned = ?1 WHERE id = ?2 AND user_id = ?3")
+            .bind(new_pinned)
+            .bind(session_id)
+            .bind(user_id)
+            .execute(&self.db)
+            .await
+            .map_err(|e| AppError::database(e))?;
 
         Ok(new_pinned != 0)
     }
 
     /// Archive a session
-    pub async fn archive_session(
-        &self,
-        session_id: &str,
-        user_id: &str,
-    ) -> Result<(), AppError> {
-        let result = sqlx::query(
-            "UPDATE chat_sessions SET is_archived = 1 WHERE id = ?1 AND user_id = ?2"
-        )
-        .bind(session_id)
-        .bind(user_id)
-        .execute(&self.db)
-        .await
-        .map_err(|e| AppError::database(e))?;
+    pub async fn archive_session(&self, session_id: &str, user_id: &str) -> Result<(), AppError> {
+        let result =
+            sqlx::query("UPDATE chat_sessions SET is_archived = 1 WHERE id = ?1 AND user_id = ?2")
+                .bind(session_id)
+                .bind(user_id)
+                .execute(&self.db)
+                .await
+                .map_err(|e| AppError::database(e))?;
 
         if result.rows_affected() == 0 {
             return Err(AppError::not_found("Session", session_id));
@@ -356,19 +352,13 @@ impl WebchatService {
     }
 
     /// Delete a session (cascades to messages via FK)
-    pub async fn delete_session(
-        &self,
-        session_id: &str,
-        user_id: &str,
-    ) -> Result<(), AppError> {
-        let result = sqlx::query(
-            "DELETE FROM chat_sessions WHERE id = ?1 AND user_id = ?2"
-        )
-        .bind(session_id)
-        .bind(user_id)
-        .execute(&self.db)
-        .await
-        .map_err(|e| AppError::database(e))?;
+    pub async fn delete_session(&self, session_id: &str, user_id: &str) -> Result<(), AppError> {
+        let result = sqlx::query("DELETE FROM chat_sessions WHERE id = ?1 AND user_id = ?2")
+            .bind(session_id)
+            .bind(user_id)
+            .execute(&self.db)
+            .await
+            .map_err(|e| AppError::database(e))?;
 
         if result.rows_affected() == 0 {
             return Err(AppError::not_found("Session", session_id));
@@ -379,19 +369,23 @@ impl WebchatService {
     }
 
     /// Validate that a session exists and belongs to the given user
-    pub async fn validate_session(&self, session_id: &str, user_id: &str) -> Result<bool, AppError> {
-        let count: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM chat_sessions WHERE id = ?1 AND user_id = ?2"
-        )
-        .bind(session_id)
-        .bind(user_id)
-        .fetch_one(&self.db)
-        .await
-        .map_err(|e| AppError::database(e))?;
+    pub async fn validate_session(
+        &self,
+        session_id: &str,
+        user_id: &str,
+    ) -> Result<bool, AppError> {
+        let count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM chat_sessions WHERE id = ?1 AND user_id = ?2")
+                .bind(session_id)
+                .bind(user_id)
+                .fetch_one(&self.db)
+                .await
+                .map_err(|e| AppError::database(e))?;
         Ok(count > 0)
     }
 
-    /// Get or create a session for external channels (personal_wechat, lark, etc.)
+    /// Get or create a session for external channels (personal_wechat, lark,
+    /// etc.)
     pub async fn get_or_create_channel_session(
         &self,
         user_id: &str,
@@ -400,7 +394,7 @@ impl WebchatService {
     ) -> Result<String, AppError> {
         // Look for existing session for this user + channel
         let existing: Option<String> = sqlx::query_scalar(
-            "SELECT id FROM chat_sessions WHERE user_id = ?1 AND channel = ?2 LIMIT 1"
+            "SELECT id FROM chat_sessions WHERE user_id = ?1 AND channel = ?2 LIMIT 1",
         )
         .bind(user_id)
         .bind(channel)
@@ -415,7 +409,10 @@ impl WebchatService {
         // Create new session
         let title = format!("{} Chat", channel);
         let session = self.create_session(user_id, channel, &title).await?;
-        info!("Created new channel session {} for {} / {}", session.id, channel, user_id);
+        info!(
+            "Created new channel session {} for {} / {}",
+            session.id, channel, user_id
+        );
         Ok(session.id)
     }
 }

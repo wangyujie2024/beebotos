@@ -94,12 +94,24 @@ pub struct DatabaseConfig {
     pub run_migrations: bool,
 }
 
-fn default_max_connections() -> u32 { 20 }
-fn default_min_connections() -> u32 { 5 }
-fn default_connect_timeout() -> u64 { 10 }
-fn default_idle_timeout() -> u64 { 600 }
-fn default_run_migrations() -> bool { true }
-fn default_database_url() -> String { "sqlite:data/beebotos.db".to_string() }
+fn default_max_connections() -> u32 {
+    20
+}
+fn default_min_connections() -> u32 {
+    5
+}
+fn default_connect_timeout() -> u64 {
+    10
+}
+fn default_idle_timeout() -> u64 {
+    600
+}
+fn default_run_migrations() -> bool {
+    true
+}
+fn default_database_url() -> String {
+    "sqlite:data/beebotos.db".to_string()
+}
 
 impl Default for BeeBotOSConfig {
     fn default() -> Self {
@@ -150,49 +162,141 @@ impl Default for DatabaseConfig {
     }
 }
 
-fn default_enabled() -> bool { true }
-fn default_max_size_mb() -> u32 { 100 }
-fn default_max_files() -> u32 { 10 }
-fn default_metrics_endpoint() -> String { "0.0.0.0:9090".to_string() }
-fn default_interval_seconds() -> u64 { 60 }
-fn default_sample_rate() -> f32 { 0.1 }
-fn default_requests_per_second() -> u32 { 10 }
-fn default_burst_size() -> u32 { 50 }
-fn default_cooldown_seconds() -> u64 { 60 }
-fn default_default_provider() -> String { "kimi".to_string() }
-fn default_max_tokens() -> u32 { 4096 }
-fn default_system_prompt() -> String { "You are a helpful assistant.".to_string() }
-fn default_request_timeout() -> u64 { 90 }
-fn default_media_storage_path() -> String { "./data/media".to_string() }
-fn default_max_file_size_mb() -> u32 { 50 }
-fn default_context_window_size() -> usize { 20 }
-fn default_auto_reply() -> bool { true }
-fn default_enable_typing_indicator() -> bool { true }
-fn default_log_level() -> String { "info".to_string() }
-fn default_log_format() -> String { "json".to_string() }
-fn default_log_file() -> String { "./data/logs/beebotos.log".to_string() }
-fn default_allowed_webhook_ips() -> Vec<String> { vec!["0.0.0.0/0".to_string()] }
-fn default_verify_signatures() -> bool { true }
-fn default_encryption_enabled() -> bool { true }
-fn default_expiry_hours() -> i64 { 24 }
-fn default_refresh_expiry_hours() -> i64 { 168 }
-fn default_issuer() -> String { "beebotos-gateway".to_string() }
-fn default_audience() -> String { "beebotos-api".to_string() }
-fn default_host() -> String { "0.0.0.0".to_string() }
-fn default_port() -> u16 { 8080 }
-fn default_grpc_port() -> u16 { 50051 }
-fn default_timeout_seconds() -> u64 { 30 }
-fn default_max_body_size_mb() -> usize { 10 }
-fn default_allowed_origins() -> Vec<String> { vec!["*".to_string()] }
-fn default_allowed_methods() -> Vec<String> { vec!["GET".to_string(), "POST".to_string(), "PUT".to_string(), "DELETE".to_string(), "OPTIONS".to_string()] }
-fn default_allowed_headers() -> Vec<String> { vec!["Content-Type".to_string(), "Authorization".to_string()] }
-fn default_kernel_url() -> String { "http://localhost:9000".to_string() }
-fn default_kernel_timeout() -> u64 { 30 }
-fn default_chain_url() -> String { "http://localhost:8545".to_string() }
-fn default_chain_timeout() -> u64 { 30 }
-fn default_system_name() -> String { "BeeBotOS".to_string() }
-fn default_version() -> String { "2.0.0".to_string() }
-fn default_jwt_secret() -> SecretString { SecretString::new(String::new()) }
+fn default_enabled() -> bool {
+    true
+}
+fn default_max_size_mb() -> u32 {
+    100
+}
+fn default_max_files() -> u32 {
+    10
+}
+fn default_metrics_endpoint() -> String {
+    "0.0.0.0:9090".to_string()
+}
+fn default_interval_seconds() -> u64 {
+    60
+}
+fn default_sample_rate() -> f32 {
+    0.1
+}
+fn default_requests_per_second() -> u32 {
+    10
+}
+fn default_burst_size() -> u32 {
+    50
+}
+fn default_cooldown_seconds() -> u64 {
+    60
+}
+fn default_default_provider() -> String {
+    "kimi".to_string()
+}
+fn default_max_tokens() -> u32 {
+    4096
+}
+fn default_system_prompt() -> String {
+    "You are a helpful assistant.".to_string()
+}
+fn default_request_timeout() -> u64 {
+    90
+}
+fn default_media_storage_path() -> String {
+    "./data/media".to_string()
+}
+fn default_max_file_size_mb() -> u32 {
+    50
+}
+fn default_context_window_size() -> usize {
+    20
+}
+fn default_auto_reply() -> bool {
+    true
+}
+fn default_enable_typing_indicator() -> bool {
+    true
+}
+fn default_log_level() -> String {
+    "info".to_string()
+}
+fn default_log_format() -> String {
+    "json".to_string()
+}
+fn default_log_file() -> String {
+    "./data/logs/beebotos.log".to_string()
+}
+fn default_allowed_webhook_ips() -> Vec<String> {
+    vec!["0.0.0.0/0".to_string()]
+}
+fn default_verify_signatures() -> bool {
+    true
+}
+fn default_encryption_enabled() -> bool {
+    true
+}
+fn default_expiry_hours() -> i64 {
+    24
+}
+fn default_refresh_expiry_hours() -> i64 {
+    168
+}
+fn default_issuer() -> String {
+    "beebotos-gateway".to_string()
+}
+fn default_audience() -> String {
+    "beebotos-api".to_string()
+}
+fn default_host() -> String {
+    "0.0.0.0".to_string()
+}
+fn default_port() -> u16 {
+    8080
+}
+fn default_grpc_port() -> u16 {
+    50051
+}
+fn default_timeout_seconds() -> u64 {
+    30
+}
+fn default_max_body_size_mb() -> usize {
+    10
+}
+fn default_allowed_origins() -> Vec<String> {
+    vec!["*".to_string()]
+}
+fn default_allowed_methods() -> Vec<String> {
+    vec![
+        "GET".to_string(),
+        "POST".to_string(),
+        "PUT".to_string(),
+        "DELETE".to_string(),
+        "OPTIONS".to_string(),
+    ]
+}
+fn default_allowed_headers() -> Vec<String> {
+    vec!["Content-Type".to_string(), "Authorization".to_string()]
+}
+fn default_kernel_url() -> String {
+    "http://localhost:9000".to_string()
+}
+fn default_kernel_timeout() -> u64 {
+    30
+}
+fn default_chain_url() -> String {
+    "http://localhost:8545".to_string()
+}
+fn default_chain_timeout() -> u64 {
+    30
+}
+fn default_system_name() -> String {
+    "BeeBotOS".to_string()
+}
+fn default_version() -> String {
+    "2.0.0".to_string()
+}
+fn default_jwt_secret() -> SecretString {
+    SecretString::new(String::new())
+}
 
 #[derive(Clone, Deserialize, Serialize)]
 pub struct JwtConfig {
@@ -450,11 +554,10 @@ impl BeeBotOSConfig {
         let mut config_dir = std::path::PathBuf::from(".");
         for path in &config_paths {
             if std::path::Path::new(path).exists() {
-                config_content = std::fs::read_to_string(path)
-                    .unwrap_or_else(|e| {
-                        eprintln!("[Config] Failed to read {}: {}", path, e);
-                        String::new()
-                    });
+                config_content = std::fs::read_to_string(path).unwrap_or_else(|e| {
+                    eprintln!("[Config] Failed to read {}: {}", path, e);
+                    String::new()
+                });
                 config_dir = std::path::Path::new(path)
                     .parent()
                     .map(|p| {
@@ -484,13 +587,18 @@ impl BeeBotOSConfig {
 
         // 数据库路径归一化：如果是相对路径，则转换为基于配置文件目录的绝对路径
         if cfg.database.url.starts_with("sqlite:") && !cfg.database.url.starts_with("sqlite://") {
-            let path_part = cfg.database.url.strip_prefix("sqlite:").unwrap_or(&cfg.database.url);
+            let path_part = cfg
+                .database
+                .url
+                .strip_prefix("sqlite:")
+                .unwrap_or(&cfg.database.url);
             let path = std::path::Path::new(path_part);
             let abs_path = if path.is_relative() {
-                let gateway_dir = config_dir.parent()
-                    .unwrap_or(&config_dir);
+                let gateway_dir = config_dir.parent().unwrap_or(&config_dir);
                 std::env::current_dir()
-                    .map_err(|e| ConfigError::Message(format!("Failed to get current directory: {}", e)))?
+                    .map_err(|e| {
+                        ConfigError::Message(format!("Failed to get current directory: {}", e))
+                    })?
                     .join(gateway_dir)
                     .join(path)
             } else {
@@ -802,14 +910,17 @@ mod tests {
                 system_prompt: "You are a helpful assistant.".to_string(),
                 providers: {
                     let mut map = HashMap::new();
-                    map.insert("kimi".to_string(), ModelProviderConfig {
-                        api_key: Some("test-key".to_string()),
-                        base_url: Some("https://api.moonshot.cn".to_string()),
-                        model: Some("moonshot-v1-8k".to_string()),
-                        temperature: 0.7,
-                        deployment: None,
-                        context_window: Some(8192),
-                    });
+                    map.insert(
+                        "kimi".to_string(),
+                        ModelProviderConfig {
+                            api_key: Some("test-key".to_string()),
+                            base_url: Some("https://api.moonshot.cn".to_string()),
+                            model: Some("moonshot-v1-8k".to_string()),
+                            temperature: 0.7,
+                            deployment: None,
+                            context_window: Some(8192),
+                        },
+                    );
                     map
                 },
             },

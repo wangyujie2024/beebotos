@@ -24,6 +24,23 @@ pub mod optimism;
 pub mod polygon;
 
 // Re-export common components
+// Re-export chain clients
+pub use arbitrum::ArbitrumClient;
+// Re-export individual chain configs
+pub use arbitrum::ArbitrumConfig;
+pub use base::{BaseClient, BaseConfig};
+pub use beechain::BeechainClient;
+pub use bsc::BscClient;
+// Re-export chain configs from common::client::chain_configs
+pub use common::client::chain_configs::{BeechainConfig, BscConfig, EthereumConfig, MonadConfig};
+// Chain network types are defined in this module below and automatically exported
+
+// Re-export token utilities
+pub use common::token::{
+    chain_formatters, format_native_amount, format_token_amount, parse_native_amount,
+    parse_token_amount, BeechainPriority, BscPriority, EthereumPriority, TransactionPriority,
+    DEFAULT_TOKEN_DECIMALS, WEI_PER_ETH,
+};
 pub use common::{
     // Batch Operations
     batch::{BatchOperation, BatchRequest, BatchResponse, BatchResultAggregator, TransactionBatch},
@@ -73,40 +90,15 @@ pub use common::{
     // Transaction
     TransactionBuilder,
 };
-
+pub use ethereum::EthereumClient;
+pub use monad::MonadClient;
 // Re-export multi-chain abstraction
 pub use multichain::{
     ChainConnection, ChainConnectionStatus, ChainFailover, ChainLoadBalancer, CrossChainRouter,
     LoadBalanceStrategy, MultiChainConfig, MultiChainManager, MultiChainStatistics,
 };
-
-// Re-export chain configs from common::client::chain_configs
-pub use common::client::chain_configs::{BeechainConfig, BscConfig, EthereumConfig, MonadConfig};
-
-// Re-export individual chain configs
-pub use arbitrum::ArbitrumConfig;
-pub use base::BaseConfig;
-pub use optimism::OptimismConfig;
-pub use polygon::PolygonConfig;
-
-// Re-export chain clients
-pub use arbitrum::ArbitrumClient;
-pub use base::BaseClient;
-pub use beechain::BeechainClient;
-pub use bsc::BscClient;
-pub use ethereum::EthereumClient;
-pub use monad::MonadClient;
-pub use optimism::OptimismClient;
-pub use polygon::PolygonClient;
-
-// Chain network types are defined in this module below and automatically exported
-
-// Re-export token utilities
-pub use common::token::{
-    chain_formatters, format_native_amount, format_token_amount, parse_native_amount,
-    parse_token_amount, BeechainPriority, BscPriority, EthereumPriority, TransactionPriority,
-    DEFAULT_TOKEN_DECIMALS, WEI_PER_ETH,
-};
+pub use optimism::{OptimismClient, OptimismConfig};
+pub use polygon::{PolygonClient, PolygonConfig};
 
 /// Chain identifiers
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -180,46 +172,32 @@ impl ChainFamily {
     /// Get chain family from ChainNetwork
     pub fn from_network(network: ChainNetwork) -> Self {
         match network {
-            ChainNetwork::Ethereum |
-            ChainNetwork::EthereumSepolia => ChainFamily::Ethereum,
-            ChainNetwork::Bsc |
-            ChainNetwork::BscTestnet => ChainFamily::Bsc,
-            ChainNetwork::Polygon |
-            ChainNetwork::PolygonMumbai => ChainFamily::Polygon,
-            ChainNetwork::Arbitrum |
-            ChainNetwork::ArbitrumSepolia => ChainFamily::Arbitrum,
-            ChainNetwork::Optimism |
-            ChainNetwork::OptimismSepolia => ChainFamily::Optimism,
-            ChainNetwork::Base |
-            ChainNetwork::BaseSepolia => ChainFamily::Base,
-            ChainNetwork::Beechain |
-            ChainNetwork::BeechainTestnet => ChainFamily::Beechain,
-            ChainNetwork::Monad |
-            ChainNetwork::MonadTestnet => ChainFamily::Monad,
+            ChainNetwork::Ethereum | ChainNetwork::EthereumSepolia => ChainFamily::Ethereum,
+            ChainNetwork::Bsc | ChainNetwork::BscTestnet => ChainFamily::Bsc,
+            ChainNetwork::Polygon | ChainNetwork::PolygonMumbai => ChainFamily::Polygon,
+            ChainNetwork::Arbitrum | ChainNetwork::ArbitrumSepolia => ChainFamily::Arbitrum,
+            ChainNetwork::Optimism | ChainNetwork::OptimismSepolia => ChainFamily::Optimism,
+            ChainNetwork::Base | ChainNetwork::BaseSepolia => ChainFamily::Base,
+            ChainNetwork::Beechain | ChainNetwork::BeechainTestnet => ChainFamily::Beechain,
+            ChainNetwork::Monad | ChainNetwork::MonadTestnet => ChainFamily::Monad,
         }
     }
 
     /// Get chain family from ChainId
     pub fn from_chain_id(chain_id: ChainId) -> Option<Self> {
         match chain_id {
-            ChainId::Ethereum |
-            ChainId::EthereumSepolia => Some(ChainFamily::Ethereum),
-            ChainId::Bsc |
-            ChainId::BscTestnet => Some(ChainFamily::Bsc),
-            ChainId::Polygon |
-            ChainId::PolygonMumbai |
-            ChainId::PolygonAmoy => Some(ChainFamily::Polygon),
-            ChainId::Arbitrum |
-            ChainId::ArbitrumSepolia |
-            ChainId::ArbitrumNova => Some(ChainFamily::Arbitrum),
-            ChainId::Optimism |
-            ChainId::OptimismSepolia => Some(ChainFamily::Optimism),
-            ChainId::Base |
-            ChainId::BaseSepolia => Some(ChainFamily::Base),
-            ChainId::Beechain |
-            ChainId::BeechainTestnet => Some(ChainFamily::Beechain),
-            ChainId::Monad |
-            ChainId::MonadTestnet => Some(ChainFamily::Monad),
+            ChainId::Ethereum | ChainId::EthereumSepolia => Some(ChainFamily::Ethereum),
+            ChainId::Bsc | ChainId::BscTestnet => Some(ChainFamily::Bsc),
+            ChainId::Polygon | ChainId::PolygonMumbai | ChainId::PolygonAmoy => {
+                Some(ChainFamily::Polygon)
+            }
+            ChainId::Arbitrum | ChainId::ArbitrumSepolia | ChainId::ArbitrumNova => {
+                Some(ChainFamily::Arbitrum)
+            }
+            ChainId::Optimism | ChainId::OptimismSepolia => Some(ChainFamily::Optimism),
+            ChainId::Base | ChainId::BaseSepolia => Some(ChainFamily::Base),
+            ChainId::Beechain | ChainId::BeechainTestnet => Some(ChainFamily::Beechain),
+            ChainId::Monad | ChainId::MonadTestnet => Some(ChainFamily::Monad),
         }
     }
 }
@@ -301,22 +279,19 @@ impl ChainNetwork {
     /// Get the network series
     pub fn network_series(&self) -> &'static str {
         match self {
-            ChainNetwork::Ethereum |
-            ChainNetwork::EthereumSepolia |
-            ChainNetwork::Polygon |
-            ChainNetwork::PolygonMumbai |
-            ChainNetwork::Arbitrum |
-            ChainNetwork::ArbitrumSepolia |
-            ChainNetwork::Optimism |
-            ChainNetwork::OptimismSepolia |
-            ChainNetwork::Base |
-            ChainNetwork::BaseSepolia => "Ethereum series",
-            ChainNetwork::Bsc |
-            ChainNetwork::BscTestnet => "BSC series",
-            ChainNetwork::Beechain |
-            ChainNetwork::BeechainTestnet => "Ethereum series",
-            ChainNetwork::Monad |
-            ChainNetwork::MonadTestnet => "Monad series",
+            ChainNetwork::Ethereum
+            | ChainNetwork::EthereumSepolia
+            | ChainNetwork::Polygon
+            | ChainNetwork::PolygonMumbai
+            | ChainNetwork::Arbitrum
+            | ChainNetwork::ArbitrumSepolia
+            | ChainNetwork::Optimism
+            | ChainNetwork::OptimismSepolia
+            | ChainNetwork::Base
+            | ChainNetwork::BaseSepolia => "Ethereum series",
+            ChainNetwork::Bsc | ChainNetwork::BscTestnet => "BSC series",
+            ChainNetwork::Beechain | ChainNetwork::BeechainTestnet => "Ethereum series",
+            ChainNetwork::Monad | ChainNetwork::MonadTestnet => "Monad series",
         }
     }
 
@@ -389,22 +364,17 @@ impl ChainNetwork {
     /// Get the native token symbol
     pub fn native_token(&self) -> &'static str {
         match self {
-            ChainNetwork::Ethereum |
-            ChainNetwork::EthereumSepolia => "ETH",
-            ChainNetwork::Bsc |
-            ChainNetwork::BscTestnet => "BNB",
-            ChainNetwork::Monad |
-            ChainNetwork::MonadTestnet => "MON",
-            ChainNetwork::Polygon |
-            ChainNetwork::PolygonMumbai => "MATIC",
-            ChainNetwork::Arbitrum |
-            ChainNetwork::ArbitrumSepolia |
-            ChainNetwork::Optimism |
-            ChainNetwork::OptimismSepolia |
-            ChainNetwork::Base |
-            ChainNetwork::BaseSepolia => "ETH",
-            ChainNetwork::Beechain |
-            ChainNetwork::BeechainTestnet => "BKC",
+            ChainNetwork::Ethereum | ChainNetwork::EthereumSepolia => "ETH",
+            ChainNetwork::Bsc | ChainNetwork::BscTestnet => "BNB",
+            ChainNetwork::Monad | ChainNetwork::MonadTestnet => "MON",
+            ChainNetwork::Polygon | ChainNetwork::PolygonMumbai => "MATIC",
+            ChainNetwork::Arbitrum
+            | ChainNetwork::ArbitrumSepolia
+            | ChainNetwork::Optimism
+            | ChainNetwork::OptimismSepolia
+            | ChainNetwork::Base
+            | ChainNetwork::BaseSepolia => "ETH",
+            ChainNetwork::Beechain | ChainNetwork::BeechainTestnet => "BKC",
         }
     }
 
@@ -412,14 +382,14 @@ impl ChainNetwork {
     pub fn is_mainnet(&self) -> bool {
         matches!(
             self,
-            ChainNetwork::Ethereum |
-            ChainNetwork::Bsc |
-            ChainNetwork::Monad |
-            ChainNetwork::Polygon |
-            ChainNetwork::Arbitrum |
-            ChainNetwork::Optimism |
-            ChainNetwork::Base |
-            ChainNetwork::Beechain
+            ChainNetwork::Ethereum
+                | ChainNetwork::Bsc
+                | ChainNetwork::Monad
+                | ChainNetwork::Polygon
+                | ChainNetwork::Arbitrum
+                | ChainNetwork::Optimism
+                | ChainNetwork::Base
+                | ChainNetwork::Beechain
         )
     }
 

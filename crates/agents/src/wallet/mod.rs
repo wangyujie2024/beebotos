@@ -44,7 +44,7 @@ pub struct AgentWallet {
 }
 
 /// Wallet configuration
-/// 
+///
 /// 🟢 P1 FIX: Externalized configuration - all values can be loaded from
 /// configuration files or environment variables, no hardcoded defaults.
 #[derive(Debug, Clone)]
@@ -63,56 +63,60 @@ pub struct WalletConfig {
     pub max_priority_fee_gwei: Option<u64>,
     /// CODE QUALITY FIX: Minimum seconds between transactions (rate limiting)
     pub min_tx_interval_secs: u64,
-    /// CODE QUALITY FIX: Poll interval for incoming transfer checks (default: 15 seconds)
+    /// CODE QUALITY FIX: Poll interval for incoming transfer checks (default:
+    /// 15 seconds)
     pub incoming_transfer_poll_interval_secs: u64,
 }
 
 impl WalletConfig {
     /// 🟢 P1 FIX: Create configuration from environment variables
-    /// 
+    ///
     /// Environment variables:
     /// - `AGENT_WALLET_CHAIN_ID`: Chain ID (required)
-    /// - `AGENT_WALLET_DERIVATION_PATH`: Derivation path (default: "m/44'/60'/0'/0")
+    /// - `AGENT_WALLET_DERIVATION_PATH`: Derivation path (default:
+    ///   "m/44'/60'/0'/0")
     /// - `AGENT_WALLET_ACCOUNT_INDEX`: Default account index (default: 0)
     /// - `AGENT_WALLET_RPC_URL`: RPC endpoint URL (optional)
     /// - `AGENT_WALLET_GAS_LIMIT`: Default gas limit (default: 100000)
     /// - `AGENT_WALLET_MAX_PRIORITY_FEE`: Max priority fee in gwei (optional)
     pub fn from_env() -> Result<Self, AgentWalletError> {
         use std::env;
-        
+
         let chain_id = env::var("AGENT_WALLET_CHAIN_ID")
-            .map_err(|_| AgentWalletError::Config(
-                "AGENT_WALLET_CHAIN_ID environment variable is required".to_string()
-            ))?
+            .map_err(|_| {
+                AgentWalletError::Config(
+                    "AGENT_WALLET_CHAIN_ID environment variable is required".to_string(),
+                )
+            })?
             .parse::<u64>()
-            .map_err(|_| AgentWalletError::Config(
-                "AGENT_WALLET_CHAIN_ID must be a valid u64".to_string()
-            ))?;
-        
+            .map_err(|_| {
+                AgentWalletError::Config("AGENT_WALLET_CHAIN_ID must be a valid u64".to_string())
+            })?;
+
         let derivation_path_prefix = env::var("AGENT_WALLET_DERIVATION_PATH")
             .unwrap_or_else(|_| "m/44'/60'/0'/0".to_string());
-        
+
         let default_account_index = env::var("AGENT_WALLET_ACCOUNT_INDEX")
             .ok()
             .and_then(|s| s.parse().ok())
             .unwrap_or(0);
-        
+
         let rpc_url = env::var("AGENT_WALLET_RPC_URL").ok();
-        
+
         let default_gas_limit = env::var("AGENT_WALLET_GAS_LIMIT")
             .ok()
             .and_then(|s| s.parse().ok())
             .unwrap_or(100_000);
-        
+
         let max_priority_fee_gwei = env::var("AGENT_WALLET_MAX_PRIORITY_FEE")
             .ok()
             .and_then(|s| s.parse().ok());
-        
+
         let incoming_transfer_poll_interval_secs = env::var("AGENT_WALLET_POLL_INTERVAL")
             .ok()
             .and_then(|s| s.parse().ok())
             .unwrap_or(15); // Default: 15 seconds
-        
+
         Ok(Self {
             chain_id,
             derivation_path_prefix,
@@ -124,7 +128,7 @@ impl WalletConfig {
             incoming_transfer_poll_interval_secs,
         })
     }
-    
+
     /// 🟢 P1 FIX: Create configuration with explicit parameters
     pub fn new(
         chain_id: u64,
@@ -142,9 +146,9 @@ impl WalletConfig {
             incoming_transfer_poll_interval_secs: 15, // Default: 15 seconds
         }
     }
-    
+
     /// 🟢 P1 FIX: Create configuration from a config struct/object
-    /// 
+    ///
     /// This allows integration with application configuration systems
     pub fn from_app_config<F>(get_config: F) -> Result<Self, AgentWalletError>
     where
@@ -152,39 +156,38 @@ impl WalletConfig {
     {
         let chain_id = get_config("wallet.chain_id")
             .or_else(|| get_config("blockchain.chain_id"))
-            .ok_or_else(|| AgentWalletError::Config(
-                "Configuration 'wallet.chain_id' is required".to_string()
-            ))?
+            .ok_or_else(|| {
+                AgentWalletError::Config("Configuration 'wallet.chain_id' is required".to_string())
+            })?
             .parse::<u64>()
-            .map_err(|_| AgentWalletError::Config(
-                "wallet.chain_id must be a valid number".to_string()
-            ))?;
-        
-        let derivation_path_prefix = get_config("wallet.derivation_path")
-            .unwrap_or_else(|| "m/44'/60'/0'/0".to_string());
-        
+            .map_err(|_| {
+                AgentWalletError::Config("wallet.chain_id must be a valid number".to_string())
+            })?;
+
+        let derivation_path_prefix =
+            get_config("wallet.derivation_path").unwrap_or_else(|| "m/44'/60'/0'/0".to_string());
+
         let default_account_index = get_config("wallet.account_index")
             .and_then(|s| s.parse().ok())
             .unwrap_or(0);
-        
-        let rpc_url = get_config("wallet.rpc_url")
-            .or_else(|| get_config("blockchain.rpc_url"));
-        
+
+        let rpc_url = get_config("wallet.rpc_url").or_else(|| get_config("blockchain.rpc_url"));
+
         let default_gas_limit = get_config("wallet.gas_limit")
             .and_then(|s| s.parse().ok())
             .unwrap_or(100_000);
-        
-        let max_priority_fee_gwei = get_config("wallet.max_priority_fee_gwei")
-            .and_then(|s| s.parse().ok());
-        
+
+        let max_priority_fee_gwei =
+            get_config("wallet.max_priority_fee_gwei").and_then(|s| s.parse().ok());
+
         let min_tx_interval_secs = get_config("wallet.min_tx_interval_secs")
             .and_then(|s| s.parse().ok())
             .unwrap_or(1); // Default: 1 second
-        
+
         let incoming_transfer_poll_interval_secs = get_config("wallet.poll_interval_secs")
             .and_then(|s| s.parse().ok())
             .unwrap_or(15); // Default: 15 seconds
-        
+
         Ok(Self {
             chain_id,
             derivation_path_prefix,
@@ -196,68 +199,67 @@ impl WalletConfig {
             incoming_transfer_poll_interval_secs,
         })
     }
-    
+
     /// Set RPC URL
     pub fn with_rpc_url(mut self, url: impl Into<String>) -> Self {
         self.rpc_url = Some(url.into());
         self
     }
-    
+
     /// Set default gas limit
     pub fn with_gas_limit(mut self, gas_limit: u64) -> Self {
         self.default_gas_limit = gas_limit;
         self
     }
-    
+
     /// Set max priority fee
     pub fn with_max_priority_fee_gwei(mut self, fee_gwei: u64) -> Self {
         self.max_priority_fee_gwei = Some(fee_gwei);
         self
     }
-    
+
     /// CODE QUALITY FIX: Set minimum transaction interval for rate limiting
     pub fn with_min_tx_interval(mut self, secs: u64) -> Self {
         self.min_tx_interval_secs = secs;
         self
     }
-    
+
     /// Validate the configuration
     pub fn validate(&self) -> Result<(), AgentWalletError> {
         if self.chain_id == 0 {
-            return Err(AgentWalletError::Config(
-                "chain_id cannot be 0".to_string()
-            ));
+            return Err(AgentWalletError::Config("chain_id cannot be 0".to_string()));
         }
-        
+
         if self.derivation_path_prefix.is_empty() {
             return Err(AgentWalletError::Config(
-                "derivation_path_prefix cannot be empty".to_string()
+                "derivation_path_prefix cannot be empty".to_string(),
             ));
         }
-        
+
         // Validate derivation path format (basic check)
         if !self.derivation_path_prefix.starts_with("m/") {
             return Err(AgentWalletError::Config(
-                "derivation_path_prefix must start with 'm/'".to_string()
+                "derivation_path_prefix must start with 'm/'".to_string(),
             ));
         }
-        
+
         Ok(())
     }
 }
 
 /// 🟡 DEPRECATED: Default implementation provided for backward compatibility
-/// 
-/// ⚠️ This will panic in debug mode to prevent accidental use of hardcoded defaults
-/// in production. Use `WalletConfig::from_env()` or `WalletConfig::new()` instead.
+///
+/// ⚠️ This will panic in debug mode to prevent accidental use of hardcoded
+/// defaults in production. Use `WalletConfig::from_env()` or
+/// `WalletConfig::new()` instead.
 impl Default for WalletConfig {
     fn default() -> Self {
         #[cfg(debug_assertions)]
         tracing::warn!(
-            "Using default WalletConfig with hardcoded values. \
-             Consider using WalletConfig::from_env() or WalletConfig::new() instead."
+            "Using default WalletConfig with hardcoded values. Consider using \
+             WalletConfig::from_env() or WalletConfig::new() instead."
         );
-        
+
         Self {
             chain_id: 1, // Ethereum mainnet as safer default
             derivation_path_prefix: "m/44'/60'/0'/0".to_string(),
@@ -357,7 +359,11 @@ impl AgentWallet {
     }
 
     /// 🔧 FIX: Set metrics collector for chain transaction tracking
-    pub fn with_metrics(mut self, metrics: Arc<crate::metrics::MetricsCollector>, agent_id: impl Into<String>) -> Self {
+    pub fn with_metrics(
+        mut self,
+        metrics: Arc<crate::metrics::MetricsCollector>,
+        agent_id: impl Into<String>,
+    ) -> Self {
         self.metrics = Some(metrics);
         self.agent_id = Some(agent_id.into());
         self
@@ -500,8 +506,9 @@ impl AgentWallet {
     /// Send a transaction
     ///
     /// 🔒 P0 FIX: Real on-chain transaction execution
-    /// 
-    /// CODE QUALITY FIX: Rate limiting enforced - minimum interval between transactions
+    ///
+    /// CODE QUALITY FIX: Rate limiting enforced - minimum interval between
+    /// transactions
     #[instrument(skip(self, data), target = "agent::wallet")]
     pub async fn send_transaction(
         &self,
@@ -516,13 +523,14 @@ impl AgentWallet {
                 let elapsed = last_time.elapsed().as_secs();
                 if elapsed < self.config.min_tx_interval_secs {
                     return Err(AgentWalletError::RateLimit(format!(
-                        "Transaction rate limited: {} seconds since last transaction, minimum {} seconds required",
+                        "Transaction rate limited: {} seconds since last transaction, minimum {} \
+                         seconds required",
                         elapsed, self.config.min_tx_interval_secs
                     )));
                 }
             }
         }
-        
+
         let provider = self
             .provider
             .as_ref()
@@ -627,17 +635,19 @@ impl AgentWallet {
     pub fn provider(&self) -> Option<&EvmProvider> {
         self.provider.as_ref()
     }
-    
+
     /// 🟢 P1 FIX: Send transaction and wait for confirmation
-    /// 
-    /// Convenience method that combines send_transaction and wait_for_confirmation.
-    /// This is the recommended way to send transactions that need confirmation.
+    ///
+    /// Convenience method that combines send_transaction and
+    /// wait_for_confirmation. This is the recommended way to send
+    /// transactions that need confirmation.
     ///
     /// # Arguments
     /// * `to` - Destination address
     /// * `value` - Amount to send (in wei)
     /// * `data` - Optional transaction data
-    /// * `confirmation_blocks` - Number of blocks to wait for confirmation (typically 1-12)
+    /// * `confirmation_blocks` - Number of blocks to wait for confirmation
+    ///   (typically 1-12)
     /// * `timeout_secs` - Maximum time to wait for confirmation
     ///
     /// # Returns
@@ -660,7 +670,7 @@ impl AgentWallet {
     ///         60,  // 60 second timeout
     ///     )
     ///     .await?;
-    /// 
+    ///
     /// println!("Transaction confirmed in block {:?}", receipt.block_number);
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// # });
@@ -674,25 +684,29 @@ impl AgentWallet {
         timeout_secs: u64,
     ) -> Result<TransactionReceipt, AgentWalletError> {
         let start_time = std::time::Instant::now();
-        
+
         // Step 1: Send the transaction
         let tx_hash = self.send_transaction(to, value, data).await?;
-        
+
         info!(
             "Transaction sent with hash: {:?}. Waiting for {} block(s) confirmation...",
             tx_hash, confirmation_blocks
         );
-        
+
         // Step 2: Wait for confirmation
         let receipt = self.wait_for_confirmation(tx_hash, timeout_secs).await?;
-        
+
         // Step 3: Verify confirmation blocks if needed
         if confirmation_blocks > 1 {
             // Additional safety: wait for more blocks if requested
-            self.wait_for_additional_confirmations(tx_hash, confirmation_blocks - 1, timeout_secs / 2)
-                .await?;
+            self.wait_for_additional_confirmations(
+                tx_hash,
+                confirmation_blocks - 1,
+                timeout_secs / 2,
+            )
+            .await?;
         }
-        
+
         // 🔧 FIX: Record chain transaction confirmed metric
         if let (Some(metrics), Some(agent_id)) = (&self.metrics, &self.agent_id) {
             let confirm_time_ms = start_time.elapsed().as_millis() as u64;
@@ -717,12 +731,12 @@ impl AgentWallet {
             receipt.block_number,
             if receipt.status { "success" } else { "failed" }
         );
-        
+
         Ok(receipt)
     }
 
     /// 🟢 P1 FIX: Wait for additional block confirmations
-    /// 
+    ///
     /// After initial inclusion, waits for additional blocks to be mined
     /// on top of the transaction block for extra security.
     async fn wait_for_additional_confirmations(
@@ -735,44 +749,49 @@ impl AgentWallet {
             .provider
             .as_ref()
             .ok_or(AgentWalletError::ProviderNotConnected)?;
-        
+
         let start = std::time::Instant::now();
         let timeout = std::time::Duration::from_secs(timeout_secs);
-        
+
         // Get the block number where transaction was included
         let receipt = provider
             .get_transaction_receipt(tx_hash)
             .await
             .map_err(|e| AgentWalletError::Transaction(format!("Failed to get receipt: {}", e)))?
             .ok_or_else(|| AgentWalletError::Transaction("Transaction not found".to_string()))?;
-        
-        let tx_block = receipt.block_number
-            .ok_or_else(|| AgentWalletError::Transaction("Block number not available".to_string()))?;
-        
+
+        let tx_block = receipt.block_number.ok_or_else(|| {
+            AgentWalletError::Transaction("Block number not available".to_string())
+        })?;
+
         let target_block = tx_block + additional_blocks;
-        
+
         info!(
-            "Waiting for additional {} confirmation(s). Current target: block {}, waiting until block {}",
+            "Waiting for additional {} confirmation(s). Current target: block {}, waiting until \
+             block {}",
             additional_blocks, tx_block, target_block
         );
-        
+
         loop {
             if start.elapsed() > timeout {
-                return Err(AgentWalletError::Transaction(
-                    format!("Timeout waiting for {} additional confirmations", additional_blocks)
-                ));
+                return Err(AgentWalletError::Transaction(format!(
+                    "Timeout waiting for {} additional confirmations",
+                    additional_blocks
+                )));
             }
-            
+
             match provider.get_block_number().await {
                 Ok(current_block) => {
                     if current_block >= target_block {
                         info!(
                             "Transaction {:?} now has {} confirmations (current block: {})",
-                            tx_hash, additional_blocks + 1, current_block
+                            tx_hash,
+                            additional_blocks + 1,
+                            current_block
                         );
                         return Ok(());
                     }
-                    
+
                     debug!(
                         "Waiting for confirmations... Current: {}, Target: {}",
                         current_block, target_block
@@ -782,13 +801,13 @@ impl AgentWallet {
                     tracing::warn!("Failed to get block number: {}", e);
                 }
             }
-            
+
             tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
         }
     }
 
     /// 🟢 P1 FIX: Wait for transaction confirmation
-    /// 
+    ///
     /// Polls for transaction receipt until confirmed or timeout
     pub async fn wait_for_confirmation(
         &self,
@@ -799,22 +818,25 @@ impl AgentWallet {
             .provider
             .as_ref()
             .ok_or(AgentWalletError::ProviderNotConnected)?;
-        
+
         let start = std::time::Instant::now();
         let timeout = std::time::Duration::from_secs(timeout_secs);
-        
+
         loop {
             if start.elapsed() > timeout {
-                return Err(AgentWalletError::Transaction(
-                    format!("Transaction confirmation timeout after {}s", timeout_secs)
-                ));
+                return Err(AgentWalletError::Transaction(format!(
+                    "Transaction confirmation timeout after {}s",
+                    timeout_secs
+                )));
             }
-            
+
             // Check for receipt
             match provider.get_transaction_receipt(tx_hash).await {
                 Ok(Some(receipt)) => {
-                    info!("Transaction {} confirmed in block {:?}", 
-                        tx_hash, receipt.block_number);
+                    info!(
+                        "Transaction {} confirmed in block {:?}",
+                        tx_hash, receipt.block_number
+                    );
                     return Ok(TransactionReceipt {
                         tx_hash,
                         block_number: receipt.block_number,
@@ -827,17 +849,19 @@ impl AgentWallet {
                     tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
                 }
                 Err(e) => {
-                    return Err(AgentWalletError::Transaction(
-                        format!("Failed to get receipt: {}", e)
-                    ));
+                    return Err(AgentWalletError::Transaction(format!(
+                        "Failed to get receipt: {}",
+                        e
+                    )));
                 }
             }
         }
     }
-    
+
     /// 🟢 P1 FIX: Subscribe to account events
-    /// 
-    /// Returns a receiver for account-related events (incoming transactions, etc.)
+    ///
+    /// Returns a receiver for account-related events (incoming transactions,
+    /// etc.)
     pub async fn subscribe_account_events(
         &self,
     ) -> Result<tokio::sync::mpsc::Receiver<WalletEvent>, AgentWalletError> {
@@ -845,23 +869,23 @@ impl AgentWallet {
             .provider
             .as_ref()
             .ok_or(AgentWalletError::ProviderNotConnected)?;
-        
+
         let account = self.default_account.read().await;
         let account_info = account.as_ref().ok_or(AgentWalletError::NoDefaultAccount)?;
         let address = account_info.address;
-        
+
         let (tx, rx) = tokio::sync::mpsc::channel(100);
-        
+
         // Spawn background task to poll for events
         let provider_clone = provider.clone();
         let poll_interval_secs = self.config.incoming_transfer_poll_interval_secs;
         tokio::spawn(async move {
             let mut last_block = None;
             let poll_interval = tokio::time::Duration::from_secs(poll_interval_secs);
-            
+
             loop {
                 tokio::time::sleep(poll_interval).await;
-                
+
                 // Get latest block number
                 match provider_clone.get_block_number().await {
                     Ok(current_block) => {
@@ -872,10 +896,13 @@ impl AgentWallet {
                                     &provider_clone,
                                     address,
                                     last,
-                                    current_block
-                                ).await {
+                                    current_block,
+                                )
+                                .await
+                                {
                                     for transfer in transfers {
-                                        let _ = tx.send(WalletEvent::IncomingTransfer(transfer)).await;
+                                        let _ =
+                                            tx.send(WalletEvent::IncomingTransfer(transfer)).await;
                                     }
                                 }
                             }
@@ -888,12 +915,12 @@ impl AgentWallet {
                 }
             }
         });
-        
+
         Ok(rx)
     }
-    
+
     /// Check for incoming transfers to the account
-    /// 
+    ///
     /// ARCHITECTURE FIX: Uses event logs filtering to detect ERC20 transfers
     /// and native token transfers to the specified address.
     async fn check_incoming_transfers(
@@ -903,12 +930,14 @@ impl AgentWallet {
         to_block: u64,
     ) -> Result<Vec<TransferEvent>, AgentWalletError> {
         let mut transfers = Vec::new();
-        
+
         tracing::debug!(
             "Checking for incoming transfers to {:?} from block {} to {}",
-            address, from_block, to_block
+            address,
+            from_block,
+            to_block
         );
-        
+
         // Get native token balance changes by comparing blocks
         // This is a simplified approach - production would use proper event filtering
         match provider.get_balance(address).await {
@@ -916,7 +945,7 @@ impl AgentWallet {
                 // Create a balance change event if we had a previous balance
                 // In production, track this per-account with proper state management
                 transfers.push(TransferEvent {
-                    token: None, // None indicates native token
+                    token: None,         // None indicates native token
                     from: Address::ZERO, // Unknown for now
                     to: address,
                     amount: current_balance,
@@ -928,14 +957,14 @@ impl AgentWallet {
                 tracing::warn!("Failed to get balance for {:?}: {}", address, e);
             }
         }
-        
+
         // TODO: In production, implement ERC20 Transfer event log filtering
         // This would involve:
         // 1. Creating a filter for Transfer events with 'to' = address
         // 2. Querying logs from provider for the block range
         // 3. Parsing event data to extract token address, amount, sender
         // 4. Populating TransferEvent structures
-        
+
         Ok(transfers)
     }
 }
@@ -961,7 +990,10 @@ pub enum WalletEvent {
     /// Transaction confirmed
     TransactionConfirmed(TransactionReceipt),
     /// Account balance changed
-    BalanceChanged { old_balance: U256, new_balance: U256 },
+    BalanceChanged {
+        old_balance: U256,
+        new_balance: U256,
+    },
     /// Connection status changed
     ConnectionStatus { connected: bool },
 }
@@ -984,7 +1016,7 @@ pub struct TransferEvent {
 }
 
 /// Wallet builder for convenient configuration
-/// 
+///
 /// 🟢 P1 FIX: Builder now supports externalized configuration
 pub struct WalletBuilder {
     mnemonic: Option<String>,
@@ -993,7 +1025,7 @@ pub struct WalletBuilder {
 
 impl WalletBuilder {
     /// Create new builder with default config
-    /// 
+    ///
     /// ⚠️ Prefer using `from_env()` or `with_config()` for production use
     pub fn new() -> Self {
         Self {
@@ -1001,7 +1033,7 @@ impl WalletBuilder {
             config: WalletConfig::default(),
         }
     }
-    
+
     /// 🟢 P1 FIX: Create builder from environment variables
     pub fn from_env() -> Result<Self, AgentWalletError> {
         Ok(Self {
@@ -1009,7 +1041,7 @@ impl WalletBuilder {
             config: WalletConfig::from_env()?,
         })
     }
-    
+
     /// 🟢 P1 FIX: Create builder with explicit config
     pub fn with_config(config: WalletConfig) -> Self {
         Self {
@@ -1017,7 +1049,7 @@ impl WalletBuilder {
             config,
         }
     }
-    
+
     /// 🟢 P1 FIX: Create builder from application config
     pub fn from_app_config<F>(get_config: F) -> Result<Self, AgentWalletError>
     where
@@ -1048,13 +1080,13 @@ impl WalletBuilder {
         self.config.rpc_url = Some(url.to_string());
         self
     }
-    
+
     /// 🟢 P1 FIX: Set gas limit
     pub fn gas_limit(mut self, gas_limit: u64) -> Self {
         self.config.default_gas_limit = gas_limit;
         self
     }
-    
+
     /// 🟢 P1 FIX: Set max priority fee
     pub fn max_priority_fee_gwei(mut self, fee_gwei: u64) -> Self {
         self.config.max_priority_fee_gwei = Some(fee_gwei);
@@ -1065,7 +1097,7 @@ impl WalletBuilder {
         let mnemonic = self
             .mnemonic
             .ok_or_else(|| AgentWalletError::Config("Mnemonic required".to_string()))?;
-        
+
         // Validate config before building
         self.config.validate()?;
 
@@ -1076,7 +1108,7 @@ impl WalletBuilder {
         let mnemonic = self
             .mnemonic
             .ok_or_else(|| AgentWalletError::Config("Mnemonic required".to_string()))?;
-        
+
         // Validate config before building
         self.config.validate()?;
 
@@ -1086,10 +1118,10 @@ impl WalletBuilder {
     pub fn generate(self) -> Result<(AgentWallet, String), AgentWalletError> {
         // Validate config before generating
         self.config.validate()?;
-        
+
         AgentWallet::generate(self.config)
     }
-    
+
     /// Get the current config (for inspection/modification)
     pub fn config(&self) -> &WalletConfig {
         &self.config

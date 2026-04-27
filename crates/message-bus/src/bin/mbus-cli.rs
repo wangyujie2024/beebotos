@@ -16,9 +16,9 @@ struct Cli {
 
 fn main() -> anyhow::Result<()> {
     let _cli = Cli::parse();
-    
+
     println!("BeeBotOS Message Bus CLI");
     println!("This is a placeholder implementation.");
-    
+
     Ok(())
 }

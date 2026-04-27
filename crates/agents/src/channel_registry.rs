@@ -78,16 +78,17 @@ impl ChannelRegistry {
         config: &Value,
     ) -> Result<Arc<RwLock<dyn Channel>>> {
         let platform = platform_from_channel_type(channel_type);
-        let instance_id = ChannelInstanceId::new(
-            LEGACY_USER_ID,
-            platform,
-            LEGACY_INSTANCE_NAME,
-        );
+        let instance_id = ChannelInstanceId::new(LEGACY_USER_ID, platform, LEGACY_INSTANCE_NAME);
         let user_channel_id = format!("legacy-{}", channel_type);
 
         let channel = self
             .instance_manager
-            .create_instance(instance_id.clone(), user_channel_id, config, Some(channel_type))
+            .create_instance(
+                instance_id.clone(),
+                user_channel_id,
+                config,
+                Some(channel_type),
+            )
             .await?;
 
         self.legacy_map
@@ -248,12 +249,10 @@ impl ChannelRegistryBuilder {
     }
 
     pub async fn build(self) -> ChannelRegistry {
-        let event_bus = self
-            .event_bus
-            .unwrap_or_else(|| {
-                let (tx, _rx) = mpsc::channel(1000);
-                tx
-            });
+        let event_bus = self.event_bus.unwrap_or_else(|| {
+            let (tx, _rx) = mpsc::channel(1000);
+            tx
+        });
 
         let registry = ChannelRegistry::new(event_bus);
 

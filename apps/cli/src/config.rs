@@ -1,13 +1,12 @@
 //! Configuration management for BeeBotOS CLI
 
-use anyhow::{Context, Result};
-use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-use crate::log_debug;
-use crate::log_info;
-use crate::log_warn;
+use anyhow::{Context, Result};
+use serde::{Deserialize, Serialize};
+
 use crate::secure_storage::{SecureStorage, KEY_API_KEY, KEY_PRIVATE_KEY};
+use crate::{log_debug, log_info, log_warn};
 
 /// CLI configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -66,7 +65,7 @@ impl Config {
     /// Load configuration from file or environment
     pub fn load() -> Result<Self> {
         let config_path = Self::config_path()?;
-        
+
         let mut config = if config_path.exists() {
             let content = std::fs::read_to_string(&config_path)
                 .with_context(|| format!("Failed to read config from {}", config_path.display()))?;
@@ -140,8 +139,8 @@ impl Config {
 
     /// Save configuration to file
     ///
-    /// Note: Sensitive fields (api_key, private_key) are stored in secure storage
-    /// instead of the config file for better security.
+    /// Note: Sensitive fields (api_key, private_key) are stored in secure
+    /// storage instead of the config file for better security.
     pub fn save(&self) -> Result<()> {
         let config_path = Self::config_path()?;
 

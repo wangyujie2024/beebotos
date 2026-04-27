@@ -2,15 +2,18 @@
 //!
 //! Ethereum/Monad/BSC/Beechain contract ABIs and bindings using Alloy.
 //! Uses LRU cache for contract instances to prevent memory leaks.
-//! All BeeBotOS contract bindings are chain-agnostic and can be used on any EVM chain.
+//! All BeeBotOS contract bindings are chain-agnostic and can be used on any EVM
+//! chain.
 
-use crate::ChainError;
+use std::sync::Arc;
+
 use alloy_primitives::{Address, Bytes, B256, U256};
 use alloy_provider::{Provider, RootProvider};
 use alloy_rpc_types::TransactionReceipt;
 use alloy_transport_http::Http;
-use std::sync::Arc;
 use tracing::{debug, error, info, instrument};
+
+use crate::ChainError;
 
 // ============================================================================
 // BeeBotOS Contract Bindings (Chain-agnostic)
@@ -20,6 +23,8 @@ use tracing::{debug, error, info, instrument};
 pub mod bindings;
 
 // Re-export all contract bindings
+// Re-export AgentIdentityInfo from AgentIdentity contract
+pub use bindings::AgentIdentity::AgentIdentityInfo;
 pub use bindings::{
     A2ACommerce,
 
@@ -54,9 +59,6 @@ pub use bindings::{
     Stream,
     TreasuryManager,
 };
-
-// Re-export AgentIdentityInfo from AgentIdentity contract
-pub use bindings::AgentIdentity::AgentIdentityInfo;
 
 // ============================================================================
 // Contract Events Module
@@ -236,7 +238,7 @@ impl TransactionHelper {
     }
 
     /// Wait for transaction confirmation with timeout and max polling limit
-    /// 
+    ///
     /// RELIABILITY FIX: Added max polling iterations to prevent infinite loops
     /// and improved error handling for network issues.
     #[instrument(skip(provider), target = "chain::contracts")]
@@ -249,7 +251,7 @@ impl TransactionHelper {
         const MAX_POLLING_ITERATIONS: u32 = 10000; // Max ~1000 seconds with 100ms sleep
         const POLL_INTERVAL_MS: u64 = 100;
         const MAX_CONSECUTIVE_ERRORS: u32 = 10; // Allow some transient errors
-        
+
         debug!(
             target: "chain::contracts",
             tx_hash = %tx_hash,
@@ -264,7 +266,7 @@ impl TransactionHelper {
 
         loop {
             iterations += 1;
-            
+
             // Check timeout
             if start.elapsed() > timeout {
                 error!(
@@ -274,11 +276,12 @@ impl TransactionHelper {
                     iterations = iterations,
                     "Transaction confirmation timeout"
                 );
-                return Err(ChainError::Provider(
-                    format!("Timeout waiting for confirmation after {} iterations", iterations),
-                ));
+                return Err(ChainError::Provider(format!(
+                    "Timeout waiting for confirmation after {} iterations",
+                    iterations
+                )));
             }
-            
+
             // Check max polling iterations
             if iterations > MAX_POLLING_ITERATIONS {
                 return Err(ChainError::Provider(format!(
@@ -311,7 +314,7 @@ impl TransactionHelper {
                         consecutive_errors = consecutive_errors,
                         "Failed to get transaction receipt"
                     );
-                    
+
                     // Only fail if we have too many consecutive errors
                     if consecutive_errors >= MAX_CONSECUTIVE_ERRORS {
                         return Err(ChainError::Provider(format!(

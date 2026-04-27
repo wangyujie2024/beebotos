@@ -2,17 +2,16 @@
 //!
 //! REST API for unified chat session and message management.
 
+use std::sync::Arc;
+
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::Json;
-use gateway::{
-    error::GatewayError,
-    middleware::{require_any_role, AuthUser},
-};
+use gateway::error::GatewayError;
+use gateway::middleware::{require_any_role, AuthUser};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::sync::Arc;
 use tracing::{error, info, warn};
 
 use crate::AppState;
@@ -108,7 +107,9 @@ pub async fn list_sessions(
         .list_sessions(&user.user_id)
         .await?;
 
-    Ok(Json(sessions.into_iter().map(SessionResponse::from).collect()))
+    Ok(Json(
+        sessions.into_iter().map(SessionResponse::from).collect(),
+    ))
 }
 
 /// Create a new chat session
@@ -162,7 +163,9 @@ pub async fn get_messages(
         .get_messages(&id, &user.user_id)
         .await?;
 
-    Ok(Json(messages.into_iter().map(MessageResponse::from).collect()))
+    Ok(Json(
+        messages.into_iter().map(MessageResponse::from).collect(),
+    ))
 }
 
 /// Update session title
@@ -217,7 +220,9 @@ pub async fn archive_session(
         .archive_session(&id, &user.user_id)
         .await?;
 
-    Ok(Json(json!({ "success": true, "message": "Session archived" })))
+    Ok(Json(
+        json!({ "success": true, "message": "Session archived" }),
+    ))
 }
 
 /// Clear all messages in a session
@@ -249,16 +254,16 @@ pub async fn get_usage(
 ) -> Result<Json<serde_json::Value>, GatewayError> {
     require_any_role(&user, &["user", "admin"])?;
 
-    let total_sessions: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM chat_sessions WHERE user_id = ?1"
-    )
-    .bind(&user.user_id)
-    .fetch_one(&state.db)
-    .await
-    .unwrap_or(0);
+    let total_sessions: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM chat_sessions WHERE user_id = ?1")
+            .bind(&user.user_id)
+            .fetch_one(&state.db)
+            .await
+            .unwrap_or(0);
 
     let total_messages: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM chat_messages m JOIN chat_sessions s ON m.session_id = s.id WHERE s.user_id = ?1"
+        "SELECT COUNT(*) FROM chat_messages m JOIN chat_sessions s ON m.session_id = s.id WHERE \
+         s.user_id = ?1",
     )
     .bind(&user.user_id)
     .fetch_one(&state.db)
@@ -273,7 +278,7 @@ pub async fn get_usage(
          VALUES (?1, ?2, ?3, ?4)
          ON CONFLICT(user_id, date) DO UPDATE SET
          session_count = excluded.session_count,
-         message_count = excluded.message_count"
+         message_count = excluded.message_count",
     )
     .bind(&user.user_id)
     .bind(&today)
@@ -284,20 +289,22 @@ pub async fn get_usage(
 
     let daily: Vec<serde_json::Value> = sqlx::query_as::<_, UsageRow>(
         "SELECT date, session_count, message_count, input_tokens, output_tokens
-         FROM webchat_usage_daily WHERE user_id = ?1 ORDER BY date DESC LIMIT 30"
+         FROM webchat_usage_daily WHERE user_id = ?1 ORDER BY date DESC LIMIT 30",
     )
     .bind(&user.user_id)
     .fetch_all(&state.db)
     .await
     .unwrap_or_default()
     .into_iter()
-    .map(|r| json!({
-        "date": r.date,
-        "session_count": r.session_count,
-        "message_count": r.message_count,
-        "input_tokens": r.input_tokens,
-        "output_tokens": r.output_tokens,
-    }))
+    .map(|r| {
+        json!({
+            "date": r.date,
+            "session_count": r.session_count,
+            "message_count": r.message_count,
+            "input_tokens": r.input_tokens,
+            "output_tokens": r.output_tokens,
+        })
+    })
     .collect();
 
     Ok(Json(json!({
@@ -335,7 +342,7 @@ pub async fn create_side_question(
 
     sqlx::query(
         "INSERT INTO webchat_side_questions (id, session_id, user_id, question, status)
-         VALUES (?1, ?2, ?3, ?4, 'pending')"
+         VALUES (?1, ?2, ?3, ?4, 'pending')",
     )
     .bind(&id)
     .bind(&req.session_id)
@@ -410,14 +417,18 @@ pub async fn import_session(
 ) -> Result<impl IntoResponse, GatewayError> {
     require_any_role(&user, &["user", "admin"])?;
 
-    let session_data = req.data.get("session")
+    let session_data = req
+        .data
+        .get("session")
         .ok_or_else(|| GatewayError::bad_request("Missing 'session' field in import data"))?;
 
-    let title = session_data.get("title")
+    let title = session_data
+        .get("title")
         .and_then(|v| v.as_str())
         .unwrap_or("Imported Chat");
 
-    let channel = session_data.get("channel")
+    let channel = session_data
+        .get("channel")
         .and_then(|v| v.as_str())
         .unwrap_or("webchat");
 

@@ -8,18 +8,20 @@
 //! - Connection health monitoring and auto-reconnect
 //! - Protocol versioning and negotiation
 
-use super::{
-    Message, MessageType, NetworkConfig, NetworkError, NetworkHandler, NetworkStats, PeerInfo,
-};
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
+
+use serde::{Deserialize, Serialize};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{mpsc, RwLock, Semaphore};
 use tokio::time::{timeout, Duration, Instant};
 use tracing::{debug, error, info, warn};
+
+use super::{
+    Message, MessageType, NetworkConfig, NetworkError, NetworkHandler, NetworkStats, PeerInfo,
+};
 
 /// Protocol version
 pub const PROTOCOL_VERSION: &str = "1.0.0";

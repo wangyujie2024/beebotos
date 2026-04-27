@@ -1,7 +1,8 @@
 //! Chain Errors
 
-use crate::compat::B256;
 use thiserror::Error;
+
+use crate::compat::B256;
 
 /// Chain error types
 #[derive(Debug, Clone, Error, PartialEq)]

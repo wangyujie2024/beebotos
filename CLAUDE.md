@@ -45,13 +45,14 @@ cd contracts && forge test                         # Run contract tests
 cd contracts && forge fmt                          # Format contracts
 ```
 
-### Alternative: Using `just` or `make`
-Both `justfile` and `Makefile` are provided with common recipes:
-- `just build` / `make build` - Release build
-- `just test` / `make test` - Run all tests
-- `just check` / `make check` - Full check (fmt + lint + test)
-- `just dev` / `make dev` - Watch mode with cargo-watch
-- `just lint` / `make lint` - Run clippy
+### Alternative: `just` and `make`
+Both `justfile` and `Makefile` provide convenience recipes (`build`, `test`, `lint`, `fmt`, `check`, `dev`, `install`, `coverage`, `contract-build`/`contract-test`, `setup`, etc.). Run `just --list` or `make help` to see the full set. The `make` variant additionally has `test-unit` and `test-integration` for split runs.
+
+### Helper Scripts
+Top-level shell scripts are provided for common dev/run workflows:
+- `beebotos-dev.sh` / `beebotos-dev.ps1` — development workflow helper
+- `beebotos-run.sh` / `beebotos-run.ps1` — service runner
+- `scripts/setup-dev.sh` — dev environment bootstrap (also invoked via `just setup` / `make setup`)
 
 ## Workspace Structure
 
@@ -79,7 +80,12 @@ Both `justfile` and `Makefile` are provided with common recipes:
 ### Other Key Directories
 - `contracts/` - Solidity smart contracts (Foundry project)
 - `proto/` - Protocol Buffer definitions (a2a, agent, brain, kernel, etc.)
-- `tests/` - Integration and E2E tests
+- `tests/` - Tests organized by scope:
+  - `tests/unit/` - Unit tests organized by crate (`agents/`, `brain/`, `kernel/`)
+  - `tests/integration/` - Integration tests (`agent_integration.rs`, `kernel_integration.rs`, etc.)
+  - `tests/e2e/` - End-to-end tests (`agent_lifecycle.rs`, `a2a_protocol.rs`, etc.)
+  - `tests/fixtures/` - Shared test fixtures
+  - Standalone integration tests also exist directly under `tests/` (e.g., `lark_message_test.rs`, `test_channel_registry.rs`, `test_config.rs`)
 - `config/` - Configuration files (TOML)
 - `skills/` - Skill definitions
 - `docs/` - Documentation
@@ -101,10 +107,11 @@ apps/gateway -> crates/gateway-lib -> crates/core
 
 ### Crate Dependency Direction
 - `core` is the foundation - all crates depend on it
-- `gateway-lib` provides shared infrastructure above `core`
+- `gateway-lib` provides shared infrastructure above `core` and is the only crate that directly depends on `axum`
 - `agents` depends on `kernel`, `chain`, and `gateway-lib`
 - `chain` depends on `agents` (circular dependency note: this exists in current code)
 - Apps depend on crates but crates never depend on apps
+- `agents` must not add `wasmtime` directly — use `kernel::wasm` interfaces instead
 
 ## Code Standards
 
@@ -126,19 +133,22 @@ Types: `feat`, `fix`, `docs`, `refactor`, `perf`, `test`, `chore`
 
 ### Git Hooks
 Lefthook is configured (see `lefthook.yml`):
-- **pre-commit**: `cargo fmt --check`, `cargo clippy -- -D warnings`, `cargo test --lib`
-- **pre-push**: `cargo test --workspace`, `cargo fmt --all --check`
+- **pre-commit**: `cargo fmt -- --check`, `cargo clippy -- -D warnings`, `cargo test --lib`
+- **pre-push**: `cargo test --workspace`, `cargo fmt --all -- --check`
 - **commit-msg**: `commitlint`
+
+Note: pre-commit hooks run without `--workspace` and only match `*.rs` files, so they validate the affected crate rather than the full workspace.
 
 ## Configuration
 
 ### Environment Variables
-Sensitive config uses `BEE__{SECTION}__{KEY}` format (maps to TOML hierarchy via config crate):
+Sensitive config uses `BEE__{SECTION}__{KEY}` format — note the **double** underscore separator, which the `config` crate maps to TOML hierarchy:
 ```bash
-BEE__JWT__SECRET=...
-BEE__MODELS__KIMI__API_KEY=...
-BEE__CHANNELS__LARK__APP_SECRET=...
+BEE__JWT__SECRET=...                   # → [jwt] secret = ...
+BEE__MODELS__KIMI__API_KEY=...         # → [models.kimi] api_key = ...
+BEE__CHANNELS__LARK__APP_SECRET=...    # → [channels.lark] app_secret = ...
 ```
+See `.env.example` for the full set of expected variables.
 
 ### Fixed Ports
 - Gateway API: `8000`
@@ -168,7 +178,7 @@ BEE__CHANNELS__LARK__APP_SECRET=...
 ## Important Implementation Details
 
 ### Kernel (`crates/kernel`)
-- Uses `wasmtime` for WASM runtime (optional feature `wasm`)
+- Uses `wasmtime` for WASM runtime (enabled by default via `wasm` feature; `wasmtime` is an optional dependency)
 - Scheduler supports work-stealing and priority-based scheduling
 - 11 capability levels for security (`CapabilityLevel` enum)
 - TEE support available via `security::tee` module
@@ -180,9 +190,18 @@ BEE__CHANNELS__LARK__APP_SECRET=...
 - Device automation support (Android/iOS controllers)
 - Channel system for multi-platform messaging (Lark, WeChat, Discord, Telegram, Slack)
 - State manager for agent lifecycle tracking
+- WASM execution must go through `kernel::wasm` interfaces; do not add `wasmtime` directly to this crate
 
 ### Message Bus
 Unified message bus (`beebotos-message-bus`) used across crates for inter-module communication. Each crate has its own message bus wrapper (e.g., `KernelMessageBus`, `AgentsMessageBus`).
 
 ### Toolchain
-Nightly Rust is required (see `rust-toolchain.toml`). Components: `rustfmt`, `clippy`. Targets include `wasm32-unknown-unknown`.
+Nightly Rust is required (see `rust-toolchain.toml`). Components: `rustfmt`, `clippy`. Targets include `wasm32-unknown-unknown` and Windows targets (`x86_64-pc-windows-gnu`, `x86_64-pc-windows-msvc`).
+
+## Related Documentation
+
+- `AGENTS.md` — extended guide for AI coding assistants (deeper coding-style, NatSpec, deployment, security details). Read this if `CLAUDE.md` lacks the context you need.
+- `readme.md` — project overview, 5-layer architecture diagram, quick start
+- `CONTRIBUTING.md` — contribution workflow
+- `contracts/STRUCTURE.md` — Solidity contract layout
+- `tasks/todo.md` — current in-progress task list (the project follows the "plan → todo.md → verify" workflow)

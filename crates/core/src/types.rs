@@ -3,52 +3,47 @@
 //! 🟡 P1 FIX: Unified primitive types across all modules.
 //! This module re-exports common primitive types to ensure consistency.
 
-use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
 use std::fmt;
-use uuid::Uuid;
 
 // =============================================================================
 // 🟡 P1 FIX: Unified Primitive Types
 // =============================================================================
 // These types are re-exported from alloy-primitives to ensure consistency
 // across chain, agents, and gateway modules.
-
 /// Ethereum address type (20 bytes)
-/// 
+///
 /// Used for:
 /// - Wallet addresses
 /// - Contract addresses
 /// - Token holders
 pub use alloy_primitives::Address;
-
+/// Variable-length byte array
+///
+/// Used for:
+/// - Transaction data
+/// - Contract bytecode
+/// - ABI-encoded data
+pub use alloy_primitives::Bytes;
+/// Fixed-size byte array helper
+pub use alloy_primitives::FixedBytes;
+/// 256-bit fixed-size byte array
+///
+/// Used for:
+/// - Transaction hashes
+/// - Block hashes
+/// - Storage slots
+pub use alloy_primitives::B256;
 /// 256-bit unsigned integer type
-/// 
+///
 /// Used for:
 /// - Token amounts
 /// - Gas prices
 /// - Block numbers
 /// - Timestamps
 pub use alloy_primitives::U256;
-
-/// 256-bit fixed-size byte array
-/// 
-/// Used for:
-/// - Transaction hashes
-/// - Block hashes
-/// - Storage slots
-pub use alloy_primitives::B256;
-
-/// Variable-length byte array
-/// 
-/// Used for:
-/// - Transaction data
-/// - Contract bytecode
-/// - ABI-encoded data
-pub use alloy_primitives::Bytes;
-
-/// Fixed-size byte array helper
-pub use alloy_primitives::FixedBytes;
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 /// Transaction hash type alias
 pub type TxHash = B256;

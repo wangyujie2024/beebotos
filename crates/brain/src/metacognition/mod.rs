@@ -10,11 +10,10 @@ pub use reflection::{
     LearningEntry, ReflectionType, ReflectiveSystem, ReflectiveThought, SelfAssessment,
 };
 
-// Performance monitoring 现在使用 metrics 模块的 MetricsCollector
-pub use crate::metrics::MetricsCollector as PerformanceMonitor;
-
 use crate::cognition::{CognitiveState, Goal};
 use crate::error::BrainResult;
+// Performance monitoring 现在使用 metrics 模块的 MetricsCollector
+pub use crate::metrics::MetricsCollector as PerformanceMonitor;
 
 /// Metacognitive awareness level
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]

@@ -1,12 +1,15 @@
 //! Unified Memory Search Interface
 //!
 //! Provides a common trait for all memory search implementations.
-//! Unifies hybrid_search, hybrid_search_sqlite, markdown_search, and markdown_storage.
+//! Unifies hybrid_search, hybrid_search_sqlite, markdown_search, and
+//! markdown_storage.
+
+use std::collections::HashMap;
+
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 use crate::error::Result;
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use uuid::Uuid;
 
 /// Default weight for vector search results
 pub const DEFAULT_VECTOR_WEIGHT: f32 = 0.7;
@@ -89,7 +92,12 @@ pub trait MemorySearch: Send + Sync {
     async fn keyword_search(&self, keywords: &[String]) -> Result<Vec<SearchResult>>;
 
     /// Add a memory entry to the search index
-    async fn add_entry(&self, id: Uuid, content: &str, metadata: HashMap<String, String>) -> Result<()>;
+    async fn add_entry(
+        &self,
+        id: Uuid,
+        content: &str,
+        metadata: HashMap<String, String>,
+    ) -> Result<()>;
 
     /// Remove a memory entry from the search index
     async fn remove_entry(&self, id: Uuid) -> Result<()>;
@@ -225,4 +233,4 @@ pub mod utils {
 }
 
 // Re-export types from hybrid_search for backward compatibility
-pub use utils::{cosine_similarity, normalize_vector, hash_content};
+pub use utils::{cosine_similarity, hash_content, normalize_vector};

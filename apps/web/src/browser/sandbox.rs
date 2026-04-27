@@ -3,9 +3,11 @@
 //! 提供并发安全的多实例隔离和自动资源回收功能
 //! 兼容 OpenClaw V2026.3.13 沙箱规格
 
-use super::ConnectionStatus;
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+
+use serde::{Deserialize, Serialize};
+
+use super::ConnectionStatus;
 
 /// 沙箱实例
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -232,9 +234,7 @@ impl SandboxManager {
         let cdp_port = self.allocate_port()?;
 
         // 选择颜色
-        let color = options
-            .color
-            .unwrap_or_else(|| Self::generate_color(&id));
+        let color = options.color.unwrap_or_else(|| Self::generate_color(&id));
 
         let now = chrono::Utc::now().to_rfc3339();
 
@@ -329,7 +329,7 @@ impl SandboxManager {
 
         Ok(SandboxStats {
             sandbox_id: id.to_string(),
-            memory_usage_mb: 256.0, // 模拟值
+            memory_usage_mb: 256.0,  // 模拟值
             cpu_usage_percent: 15.5, // 模拟值
             tab_count: 3,            // 模拟值
             network_io_mb: 50.0,     // 模拟值
@@ -367,9 +367,7 @@ impl SandboxManager {
     /// 生成颜色
     fn generate_color(id: &str) -> String {
         // 基于 ID 生成一致的颜色
-        let hash = id
-            .bytes()
-            .fold(0u32, |acc, b| acc.wrapping_add(b as u32));
+        let hash = id.bytes().fold(0u32, |acc, b| acc.wrapping_add(b as u32));
 
         let hue = (hash % 360) as f64;
         let saturation = 70.0;
@@ -407,11 +405,16 @@ pub struct SandboxConnectionInfo {
 #[derive(Clone, Debug)]
 pub enum SandboxError {
     NotFound(String),
-    MaxInstancesReached { max: usize },
+    MaxInstancesReached {
+        max: usize,
+    },
     NoAvailablePorts,
     CreationFailed(String),
     AlreadyExists(String),
-    OperationNotAllowed { sandbox_id: String, operation: String },
+    OperationNotAllowed {
+        sandbox_id: String,
+        operation: String,
+    },
 }
 
 impl std::fmt::Display for SandboxError {
@@ -486,9 +489,7 @@ mod tests {
 
     #[test]
     fn test_resource_limits() {
-        let limits = ResourceLimits::new(1024)
-            .with_cpu(75.0)
-            .with_tabs(20);
+        let limits = ResourceLimits::new(1024).with_cpu(75.0).with_tabs(20);
 
         assert_eq!(limits.memory_limit_mb, 1024);
         assert_eq!(limits.cpu_limit_percent, 75.0);

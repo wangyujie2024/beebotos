@@ -9,11 +9,11 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
+
+use beebotos_kernel::{Kernel, TaskId};
 use tokio::sync::{mpsc, Mutex, RwLock};
 use tokio::task::JoinHandle;
 use tracing::{error, info, instrument, warn};
-
-use beebotos_kernel::{Kernel, TaskId};
 
 use crate::error::AppError;
 use crate::state_machine::AgentLifecycleState;
@@ -38,10 +38,7 @@ pub struct TaskMonitorService {
 #[allow(dead_code)]
 pub enum TaskEvent {
     /// Task started
-    Started {
-        agent_id: String,
-        task_id: TaskId,
-    },
+    Started { agent_id: String, task_id: TaskId },
     /// Task completed successfully
     Completed {
         agent_id: String,
@@ -55,10 +52,7 @@ pub enum TaskEvent {
         error: String,
     },
     /// Task was cancelled
-    Cancelled {
-        agent_id: String,
-        task_id: TaskId,
-    },
+    Cancelled { agent_id: String, task_id: TaskId },
     /// Task timed out
     TimedOut {
         agent_id: String,
@@ -68,8 +62,9 @@ pub enum TaskEvent {
 }
 
 /// Handle to a monitored task
-/// 
-/// This struct is Clone by wrapping the non-Clone JoinHandle in Arc<Mutex<Option<...>>>
+///
+/// This struct is Clone by wrapping the non-Clone JoinHandle in
+/// Arc<Mutex<Option<...>>>
 #[derive(Debug, Clone)]
 pub struct TaskMonitorHandle {
     /// Agent ID
@@ -117,8 +112,8 @@ impl TaskMonitorService {
         );
 
         // Store the processor handle
-        // Note: blocking_lock is used in constructor, but this is typically called in async context
-        // We'll use a different approach - spawn initialization
+        // Note: blocking_lock is used in constructor, but this is typically called in
+        // async context We'll use a different approach - spawn initialization
         let _processor_handle = Mutex::new(Some(processor));
         // This is a workaround - we need to set it properly
 
@@ -142,8 +137,9 @@ impl TaskMonitorService {
     {
         let agent_id: String = agent_id.into();
         let name: String = name.into();
-        
-        let span = tracing::info_span!("spawn_and_monitor", agent_id = %agent_id, task_name = %name);
+
+        let span =
+            tracing::info_span!("spawn_and_monitor", agent_id = %agent_id, task_name = %name);
         let _enter = span.enter();
 
         // Check if already monitoring this agent
@@ -183,7 +179,7 @@ impl TaskMonitorService {
             // Simplified monitoring - just wait for completion signal
             // In real implementation, we'd poll kernel for task status
             tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-            
+
             // Call completion callbacks if provided
             if let Some(cb) = on_complete {
                 cb();
@@ -204,10 +200,10 @@ impl TaskMonitorService {
         }
 
         // Send started event
-        let _ = self.event_tx.send(TaskEvent::Started {
-            agent_id,
-            task_id,
-        }).await;
+        let _ = self
+            .event_tx
+            .send(TaskEvent::Started { agent_id, task_id })
+            .await;
 
         Ok(handle)
     }
@@ -296,17 +292,20 @@ impl TaskMonitorService {
                 info!("Agent {} task started", agent_id);
                 // State should already be Initializing from spawn
             }
-            TaskEvent::Completed { agent_id, duration_ms, .. } => {
-                info!(
-                    "Agent {} task completed in {}ms",
-                    agent_id, duration_ms
-                );
+            TaskEvent::Completed {
+                agent_id,
+                duration_ms,
+                ..
+            } => {
+                info!("Agent {} task completed in {}ms", agent_id, duration_ms);
                 // Transition from Working to Idle
                 if sm_service.get_state(agent_id).await == Some(AgentLifecycleState::Working) {
                     sm_service.complete_task(agent_id, true).await?;
                 }
             }
-            TaskEvent::Failed { agent_id, error, .. } => {
+            TaskEvent::Failed {
+                agent_id, error, ..
+            } => {
                 error!("Agent {} task failed: {}", agent_id, error);
                 // Transition to Error state
                 sm_service.report_error(agent_id, error.clone()).await?;
@@ -316,11 +315,18 @@ impl TaskMonitorService {
                 // Transition to Stopped
                 sm_service.stop_agent(agent_id).await?;
             }
-            TaskEvent::TimedOut { agent_id, timeout_secs, .. } => {
+            TaskEvent::TimedOut {
+                agent_id,
+                timeout_secs,
+                ..
+            } => {
                 error!("Agent {} task timed out after {}s", agent_id, timeout_secs);
                 // Transition to Error with timeout message
                 sm_service
-                    .report_error(agent_id, format!("Task timed out after {} seconds", timeout_secs))
+                    .report_error(
+                        agent_id,
+                        format!("Task timed out after {} seconds", timeout_secs),
+                    )
                     .await?;
             }
         }
@@ -382,7 +388,11 @@ mod tests {
         };
 
         match event {
-            TaskEvent::Completed { agent_id, duration_ms, .. } => {
+            TaskEvent::Completed {
+                agent_id,
+                duration_ms,
+                ..
+            } => {
                 assert_eq!(agent_id, "test-agent");
                 assert_eq!(duration_ms, 1000);
             }

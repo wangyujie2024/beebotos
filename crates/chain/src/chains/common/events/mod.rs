@@ -8,6 +8,8 @@ pub mod manager;
 pub mod processor;
 pub mod stream;
 
+use std::fmt::Debug;
+
 pub use filter::EventFilter;
 pub use listener::{EventListener, MultiListener, SubscriptionType};
 pub use manager::{
@@ -16,11 +18,10 @@ pub use manager::{
 };
 // Note: SubscriptionConfig is defined in manager.rs, not here
 pub use processor::{EventHandler, EventProcessor};
+use serde::{Deserialize, Serialize};
 pub use stream::{BatchedEventStream, EventStream, EventStreamConfig, FilteredEventStream};
 
 use crate::compat::{Address, B256};
-use serde::{Deserialize, Serialize};
-use std::fmt::Debug;
 
 /// Generic event for EVM chains
 #[derive(Debug, Clone, Serialize, Deserialize)]

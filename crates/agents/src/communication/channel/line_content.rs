@@ -1,13 +1,12 @@
 //! LINE Content Parser
 //!
 //! Parses and formats content from LINE messages.
-//! Supports various message types including text, stickers, images, and templates.
+//! Supports various message types including text, stickers, images, and
+//! templates.
 
-
-use crate::communication::channel::content::{
-    ContentType as UnifiedContentType, PlatformContent,
-};
 use serde::{Deserialize, Serialize};
+
+use crate::communication::channel::content::{ContentType as UnifiedContentType, PlatformContent};
 
 /// LINE message types
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -49,10 +48,7 @@ pub enum LineMessage {
         content_provider: Option<ContentProvider>,
     },
     /// File message
-    File {
-        file_name: String,
-        file_size: i64,
-    },
+    File { file_name: String, file_size: i64 },
     /// Location message
     Location {
         title: String,
@@ -125,18 +121,11 @@ pub enum Template {
         actions: Vec<Action>,
     },
     /// Confirm template
-    Confirm {
-        text: String,
-        actions: Vec<Action>,
-    },
+    Confirm { text: String, actions: Vec<Action> },
     /// Carousel template
-    Carousel {
-        columns: Vec<CarouselColumn>,
-    },
+    Carousel { columns: Vec<CarouselColumn> },
     /// Image carousel template
-    ImageCarousel {
-        columns: Vec<ImageCarouselColumn>,
-    },
+    ImageCarousel { columns: Vec<ImageCarouselColumn> },
 }
 
 /// Carousel column
@@ -170,10 +159,7 @@ pub enum Action {
         fill_in_text: Option<String>,
     },
     /// Message action
-    Message {
-        label: String,
-        text: String,
-    },
+    Message { label: String, text: String },
     /// URI action
     Uri {
         label: String,
@@ -190,17 +176,11 @@ pub enum Action {
         min: Option<String>,
     },
     /// Camera action
-    Camera {
-        label: String,
-    },
+    Camera { label: String },
     /// Camera roll action
-    CameraRoll {
-        label: String,
-    },
+    CameraRoll { label: String },
     /// Location action
-    Location {
-        label: String,
-    },
+    Location { label: String },
     /// Rich menu switch action
     RichMenuSwitch {
         label: String,
@@ -237,9 +217,15 @@ pub enum Source {
     #[serde(rename = "user")]
     User { user_id: String },
     #[serde(rename = "group")]
-    Group { group_id: String, user_id: Option<String> },
+    Group {
+        group_id: String,
+        user_id: Option<String>,
+    },
     #[serde(rename = "room")]
-    Room { room_id: String, user_id: Option<String> },
+    Room {
+        room_id: String,
+        user_id: Option<String>,
+    },
 }
 
 /// Parsed content result
@@ -305,17 +291,27 @@ impl LineContentParser {
     /// Parse LINE message
     pub fn parse_message(&self, message: &LineMessage) -> ParsedContent {
         match message {
-            LineMessage::Text { text, emojis: _, mention } => {
-                self.parse_text_message(text, mention.as_ref())
-            }
-            LineMessage::Sticker { package_id, sticker_id, .. } => ParsedContent {
+            LineMessage::Text {
+                text,
+                emojis: _,
+                mention,
+            } => self.parse_text_message(text, mention.as_ref()),
+            LineMessage::Sticker {
+                package_id,
+                sticker_id,
+                ..
+            } => ParsedContent {
                 stickers: vec![StickerInfo {
                     package_id: package_id.clone(),
                     sticker_id: sticker_id.clone(),
                 }],
                 ..Default::default()
             },
-            LineMessage::Image { original_content_url, preview_image_url, .. } => ParsedContent {
+            LineMessage::Image {
+                original_content_url,
+                preview_image_url,
+                ..
+            } => ParsedContent {
                 media_urls: vec![MediaUrl {
                     type_: "image".to_string(),
                     url: original_content_url.clone(),
@@ -323,7 +319,11 @@ impl LineContentParser {
                 }],
                 ..Default::default()
             },
-            LineMessage::Video { original_content_url, preview_image_url, .. } => ParsedContent {
+            LineMessage::Video {
+                original_content_url,
+                preview_image_url,
+                ..
+            } => ParsedContent {
                 media_urls: vec![MediaUrl {
                     type_: "video".to_string(),
                     url: original_content_url.clone(),
@@ -331,7 +331,12 @@ impl LineContentParser {
                 }],
                 ..Default::default()
             },
-            LineMessage::Location { title, address, latitude, longitude } => ParsedContent {
+            LineMessage::Location {
+                title,
+                address,
+                latitude,
+                longitude,
+            } => ParsedContent {
                 location: Some(LocationInfo {
                     title: title.clone(),
                     address: address.clone(),
@@ -379,7 +384,10 @@ impl LineContentParser {
             if !parts.is_empty() {
                 let cmd_name = parts[0].trim_start_matches('/').to_string();
                 let args = parts[1..].iter().map(|s| s.to_string()).collect();
-                commands.push(Command { name: cmd_name, args });
+                commands.push(Command {
+                    name: cmd_name,
+                    args,
+                });
             }
         }
 
@@ -416,7 +424,11 @@ impl LineContentParser {
     }
 
     /// Build sticker message
-    pub fn build_sticker(&self, package_id: impl Into<String>, sticker_id: impl Into<String>) -> LineMessage {
+    pub fn build_sticker(
+        &self,
+        package_id: impl Into<String>,
+        sticker_id: impl Into<String>,
+    ) -> LineMessage {
         LineMessage::Sticker {
             package_id: package_id.into(),
             sticker_id: sticker_id.into(),
@@ -509,7 +521,11 @@ impl LineContentParser {
     }
 
     /// Create message action
-    pub fn create_message_action(&self, label: impl Into<String>, text: impl Into<String>) -> Action {
+    pub fn create_message_action(
+        &self,
+        label: impl Into<String>,
+        text: impl Into<String>,
+    ) -> Action {
         Action::Message {
             label: label.into(),
             text: text.into(),
@@ -608,12 +624,8 @@ mod tests {
     fn test_build_buttons_template() {
         let parser = LineContentParser::new();
         let action = parser.create_message_action("Click me", "clicked");
-        let msg = parser.build_buttons_template(
-            "Alt text",
-            Some("Title"),
-            "Body text",
-            vec![action],
-        );
+        let msg =
+            parser.build_buttons_template("Alt text", Some("Title"), "Body text", vec![action]);
 
         match msg {
             LineMessage::Template { alt_text, .. } => assert_eq!(alt_text, "Alt text"),

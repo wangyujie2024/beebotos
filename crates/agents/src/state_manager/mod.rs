@@ -5,12 +5,11 @@
 
 pub mod persistence;
 
-pub use persistence::{StatePersistence, PersistedAgentConfig};
-
 use std::collections::HashMap;
 use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
+pub use persistence::{PersistedAgentConfig, StatePersistence};
 use serde::{Deserialize, Serialize};
 use tokio::sync::{mpsc, RwLock};
 use tracing::{info, warn};
@@ -362,7 +361,7 @@ impl AgentStateManager {
         let reason = format!("{:?}", transition);
         let record_clone = record.clone();
         drop(registry); // Release lock before publishing
-        
+
         self.publish_event(StateChangeEvent {
             agent_id: agent_id.to_string(),
             old_state,
@@ -380,7 +379,8 @@ impl AgentStateManager {
                 // This allows the system to continue operating even if persistence fails
                 // while alerting callers to the issue
                 return Err(AgentError::platform(format!(
-                    "State changed to {:?} but persistence failed: {}. Consider checking storage availability.",
+                    "State changed to {:?} but persistence failed: {}. Consider checking storage \
+                     availability.",
                     new_state, e
                 )));
             }
@@ -422,7 +422,7 @@ impl AgentStateManager {
     }
 
     /// Update metadata for an agent
-    /// 
+    ///
     /// 🔒 P0 FIX: Added to support AgentRuntimeManager storing instance info
     pub async fn update_metadata(
         &self,
@@ -544,14 +544,16 @@ impl AgentStateManager {
 
     /// Publish state change event to all subscribers
     ///
-    /// ARCHITECTURE FIX: Now fully integrates with AgentEventBus for state change events.
-    /// Events are published to both in-memory subscribers and the central event bus.
-    /// 
-    /// CODE QUALITY FIX: Automatically removes dead subscribers to prevent memory leaks.
+    /// ARCHITECTURE FIX: Now fully integrates with AgentEventBus for state
+    /// change events. Events are published to both in-memory subscribers
+    /// and the central event bus.
+    ///
+    /// CODE QUALITY FIX: Automatically removes dead subscribers to prevent
+    /// memory leaks.
     async fn publish_event(&self, event: StateChangeEvent) {
         // CODE QUALITY FIX: Clean up dead subscribers while sending
         let mut dead_indices = Vec::new();
-        
+
         {
             let subscribers = self.subscribers.read().await;
             for (index, tx) in subscribers.iter().enumerate() {
@@ -561,7 +563,7 @@ impl AgentStateManager {
                 }
             }
         }
-        
+
         // Remove dead subscribers if any
         if !dead_indices.is_empty() {
             let mut subscribers = self.subscribers.write().await;
@@ -585,18 +587,19 @@ impl AgentStateManager {
                 reason: event.reason.clone(),
                 metadata: std::collections::HashMap::new(),
             };
-            
+
             // TODO: Fix event publishing - use AgentLifecycle event type
-            // event_bus.emit(beebotos_core::event::Event::AgentLifecycle { ... }).await;
+            // event_bus.emit(beebotos_core::event::Event::AgentLifecycle { ...
+            // }).await;
         }
     }
-    
+
     /// CODE QUALITY FIX: Get subscriber count for monitoring
     pub async fn subscriber_count(&self) -> usize {
         let subscribers = self.subscribers.read().await;
         subscribers.len()
     }
-    
+
     /// CODE QUALITY FIX: Clear all subscribers (useful for testing or shutdown)
     pub async fn clear_subscribers(&self) {
         let mut subscribers = self.subscribers.write().await;
@@ -610,8 +613,6 @@ impl Default for AgentStateManager {
         Self::new(None)
     }
 }
-
-
 
 /// State manager handle for sharing across components
 pub type StateManagerHandle = Arc<AgentStateManager>;
@@ -643,7 +644,7 @@ pub enum AgentHealth {
 /// 🟢 P1 FIX: Enhanced state manager operations
 impl AgentStateManager {
     /// 🟢 P1 FIX: Batch state transition for multiple agents
-    /// 
+    ///
     /// Useful for operations like "pause all agents" or "shutdown all"
     pub async fn batch_transition(
         &self,
@@ -651,19 +652,19 @@ impl AgentStateManager {
         transition: StateTransition,
     ) -> Vec<(String, Result<AgentState>)> {
         let mut results = Vec::with_capacity(agent_ids.len());
-        
+
         for agent_id in agent_ids {
             let result = self.transition(agent_id, transition.clone()).await;
             results.push((agent_id.clone(), result));
         }
-        
+
         results
     }
-    
+
     /// 🟢 P1 FIX: Get system-wide statistics
     pub async fn get_system_stats(&self) -> SystemStats {
         let registry = self.registry.read().await;
-        
+
         let total_agents = registry.len();
         let healthy_agents = registry
             .values()
@@ -677,11 +678,11 @@ impl AgentStateManager {
             .values()
             .filter(|r| matches!(r.state, AgentState::Working { .. }))
             .count();
-        
+
         let total_tasks: u64 = registry.values().map(|r| r.stats.total_tasks).sum();
         let total_successful: u64 = registry.values().map(|r| r.stats.successful_tasks).sum();
         let total_failed: u64 = registry.values().map(|r| r.stats.failed_tasks).sum();
-        
+
         SystemStats {
             total_agents,
             healthy_agents,
@@ -697,46 +698,46 @@ impl AgentStateManager {
             },
         }
     }
-    
+
     /// 🟢 P1 FIX: Create state snapshot for recovery
     pub async fn create_snapshot(&self) -> StateSnapshot {
         let registry = self.registry.read().await;
         let version = registry.len() as u64 + 1; // Simple versioning
-        
+
         StateSnapshot {
             timestamp: Utc::now(),
             agent_states: registry.clone(),
             version,
         }
     }
-    
+
     /// 🟢 P1 FIX: Restore from snapshot
     pub async fn restore_snapshot(&self, snapshot: StateSnapshot) -> Result<()> {
         let mut registry = self.registry.write().await;
-        
+
         // Clear current state
         registry.clear();
-        
+
         // Restore from snapshot
         for (agent_id, record) in snapshot.agent_states {
             registry.insert(agent_id, record);
         }
-        
+
         info!(
             "Restored state snapshot v{} from {}",
             snapshot.version, snapshot.timestamp
         );
-        
+
         Ok(())
     }
-    
+
     /// 🟢 P1 FIX: Calculate agent health based on recent performance
     pub async fn get_agent_health(&self, agent_id: &str) -> Result<AgentHealth> {
         let registry = self.registry.read().await;
         let record = registry
             .get(agent_id)
             .ok_or_else(|| AgentError::AgentNotFound(agent_id.to_string()))?;
-        
+
         // Check current state
         match &record.state {
             AgentState::Error { message } => {
@@ -751,7 +752,7 @@ impl AgentStateManager {
             }
             _ => {}
         }
-        
+
         // Check error rate
         if record.stats.total_tasks > 10 {
             let error_rate = record.stats.failed_tasks as f64 / record.stats.total_tasks as f64;
@@ -761,7 +762,7 @@ impl AgentStateManager {
                 });
             }
         }
-        
+
         // Check if stale (no recent activity)
         if let Some(last_task) = record.stats.last_task_at {
             let stale_duration = Utc::now() - last_task;
@@ -771,40 +772,43 @@ impl AgentStateManager {
                 });
             }
         }
-        
+
         Ok(AgentHealth::Healthy)
     }
-    
+
     /// 🟢 P1 FIX: Get all agents with their health status
     pub async fn get_all_health(&self) -> HashMap<String, AgentHealth> {
         let agent_ids = self.list_agents().await;
         let mut health_map = HashMap::new();
-        
+
         for agent_id in agent_ids {
             if let Ok(health) = self.get_agent_health(&agent_id).await {
                 health_map.insert(agent_id, health);
             }
         }
-        
+
         health_map
     }
-    
+
     /// 🟢 P1 FIX: Auto-recovery for failed agents
-    /// 
+    ///
     /// Attempts to restart agents in error state
     pub async fn attempt_recovery(&self, agent_id: &str) -> Result<AgentState> {
         let health = self.get_agent_health(agent_id).await?;
-        
+
         match health {
             AgentHealth::Unhealthy { reason } => {
-                info!("Attempting recovery for agent {} (reason: {})", agent_id, reason);
-                
+                info!(
+                    "Attempting recovery for agent {} (reason: {})",
+                    agent_id, reason
+                );
+
                 // Transition through recovery flow: Error -> Initializing -> Idle
                 self.transition(agent_id, StateTransition::Start).await?;
-                
+
                 // Note: The actual recovery logic would be implemented by the caller
                 // This just handles the state transitions
-                
+
                 Ok(self.get_state(agent_id).await?)
             }
             _ => {
@@ -813,9 +817,9 @@ impl AgentStateManager {
             }
         }
     }
-    
+
     /// 🟢 P1 FIX: Clean up stale agents
-    /// 
+    ///
     /// Removes agents that have been stopped for a long time
     pub async fn cleanup_stopped_agents(&self, max_age_hours: i64) -> Result<usize> {
         let registry = self.registry.read().await;
@@ -829,13 +833,13 @@ impl AgentStateManager {
             .map(|r| r.agent_id.clone())
             .collect();
         drop(registry);
-        
+
         let count = to_cleanup.len();
         for agent_id in to_cleanup {
             info!("Cleaning up stale agent: {}", agent_id);
             self.unregister_agent(&agent_id).await?;
         }
-        
+
         Ok(count)
     }
 }
@@ -953,11 +957,11 @@ mod tests {
             .await;
         assert!(result.is_err());
     }
-    
+
     #[tokio::test]
     async fn test_system_stats() {
         let manager = AgentStateManager::new(None);
-        
+
         // Register multiple agents
         for i in 0..3 {
             manager
@@ -965,87 +969,149 @@ mod tests {
                 .await
                 .unwrap();
         }
-        
+
         // Complete workflow for first agent
-        manager.transition("agent-0", StateTransition::Start).await.unwrap();
-        manager.transition("agent-0", StateTransition::InitializationComplete).await.unwrap();
-        manager.transition("agent-0", StateTransition::BeginTask { task_id: "t1".to_string() }).await.unwrap();
-        manager.transition("agent-0", StateTransition::CompleteTask { success: true }).await.unwrap();
-        
+        manager
+            .transition("agent-0", StateTransition::Start)
+            .await
+            .unwrap();
+        manager
+            .transition("agent-0", StateTransition::InitializationComplete)
+            .await
+            .unwrap();
+        manager
+            .transition(
+                "agent-0",
+                StateTransition::BeginTask {
+                    task_id: "t1".to_string(),
+                },
+            )
+            .await
+            .unwrap();
+        manager
+            .transition("agent-0", StateTransition::CompleteTask { success: true })
+            .await
+            .unwrap();
+
         // Get stats
         let stats = manager.get_system_stats().await;
-        
+
         assert_eq!(stats.total_agents, 3);
         assert_eq!(stats.total_tasks, 1);
         assert_eq!(stats.total_successful, 1);
         assert_eq!(stats.success_rate, 1.0);
     }
-    
+
     #[tokio::test]
     async fn test_batch_transition() {
         let manager = AgentStateManager::new(None);
-        
+
         // Register agents
         for i in 0..3 {
-            manager.register_agent(format!("agent-{}", i), HashMap::new()).await.unwrap();
+            manager
+                .register_agent(format!("agent-{}", i), HashMap::new())
+                .await
+                .unwrap();
         }
-        
+
         // Batch start all agents
         let agent_ids: Vec<String> = (0..3).map(|i| format!("agent-{}", i)).collect();
-        let results = manager.batch_transition(&agent_ids, StateTransition::Start).await;
-        
+        let results = manager
+            .batch_transition(&agent_ids, StateTransition::Start)
+            .await;
+
         assert_eq!(results.len(), 3);
         for (id, result) in results {
             assert!(result.is_ok(), "Failed to start {}", id);
         }
-        
+
         // Verify all in Initializing state
         for i in 0..3 {
             let state = manager.get_state(&format!("agent-{}", i)).await.unwrap();
             assert_eq!(state, AgentState::Initializing);
         }
     }
-    
+
     #[tokio::test]
     async fn test_snapshot_and_restore() {
         let manager = AgentStateManager::new(None);
-        
+
         // Setup initial state
-        manager.register_agent("agent-1", HashMap::new()).await.unwrap();
-        manager.transition("agent-1", StateTransition::Start).await.unwrap();
-        manager.transition("agent-1", StateTransition::InitializationComplete).await.unwrap();
-        
+        manager
+            .register_agent("agent-1", HashMap::new())
+            .await
+            .unwrap();
+        manager
+            .transition("agent-1", StateTransition::Start)
+            .await
+            .unwrap();
+        manager
+            .transition("agent-1", StateTransition::InitializationComplete)
+            .await
+            .unwrap();
+
         // Create snapshot
         let snapshot = manager.create_snapshot().await;
         assert_eq!(snapshot.agent_states.len(), 1);
-        
+
         // Modify state
-        manager.transition("agent-1", StateTransition::BeginTask { task_id: "t1".to_string() }).await.unwrap();
-        
+        manager
+            .transition(
+                "agent-1",
+                StateTransition::BeginTask {
+                    task_id: "t1".to_string(),
+                },
+            )
+            .await
+            .unwrap();
+
         // Restore snapshot
         manager.restore_snapshot(snapshot).await.unwrap();
-        
+
         // Verify restored state
         let state = manager.get_state("agent-1").await.unwrap();
         assert_eq!(state, AgentState::Idle);
     }
-    
+
     #[tokio::test]
     async fn test_agent_health() {
         let manager = AgentStateManager::new(None);
-        
-        manager.register_agent("healthy-agent", HashMap::new()).await.unwrap();
-        manager.transition("healthy-agent", StateTransition::Start).await.unwrap();
-        manager.transition("healthy-agent", StateTransition::InitializationComplete).await.unwrap();
-        
+
+        manager
+            .register_agent("healthy-agent", HashMap::new())
+            .await
+            .unwrap();
+        manager
+            .transition("healthy-agent", StateTransition::Start)
+            .await
+            .unwrap();
+        manager
+            .transition("healthy-agent", StateTransition::InitializationComplete)
+            .await
+            .unwrap();
+
         let health = manager.get_agent_health("healthy-agent").await.unwrap();
         assert_eq!(health, AgentHealth::Healthy);
-        
+
         // Test error state
-        manager.register_agent("error-agent", HashMap::new()).await.unwrap();
-        manager.transition("error-agent", StateTransition::Start).await.unwrap();
-        manager.transition("error-agent", StateTransition::Error { message: "test error".to_string() }).await.unwrap();
-        
+        manager
+            .register_agent("error-agent", HashMap::new())
+            .await
+            .unwrap();
+        manager
+            .transition("error-agent", StateTransition::Start)
+            .await
+            .unwrap();
+        manager
+            .transition(
+                "error-agent",
+                StateTransition::Error {
+                    message: "test error".to_string(),
+                },
+            )
+            .await
+            .unwrap();
+
         let health = manager.get_agent_health("error-agent").await.unwrap();
         assert!(matches!(health, AgentHealth::Unhealthy { .. }));
     }

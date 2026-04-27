@@ -8,16 +8,14 @@
 //!
 //! 🔒 P1 FIX: Enhanced state machine HTTP API.
 
-use axum::extract::{Path, State};
-use axum::Json;
-use serde::Deserialize;
-use serde_json::json;
 use std::sync::Arc;
 
-use gateway::{
-    error::GatewayError,
-    middleware::{require_any_role, AuthUser},
-};
+use axum::extract::{Path, State};
+use axum::Json;
+use gateway::error::GatewayError;
+use gateway::middleware::{require_any_role, AuthUser};
+use serde::Deserialize;
+use serde_json::json;
 
 use crate::handlers::common::check_ownership;
 use crate::state_machine::AgentLifecycleState;

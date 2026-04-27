@@ -1,6 +1,7 @@
 //! Error Integration Module
 //!
-//! 🔧 FIX: Integration between AgentError and BeeBotOSError for unified error handling.
+//! 🔧 FIX: Integration between AgentError and BeeBotOSError for unified error
+//! handling.
 //!
 //! This module provides conversions between local AgentError and the unified
 //! BeeBotOSError from beebotos_core.
@@ -9,16 +10,13 @@
 //! This module provides extension traits and helper functions.
 
 use beebotos_core::{BeeBotOSError, ErrorContext};
+
 use crate::error::AgentError;
 
 /// 🔧 FIX: Extension trait for AgentError to add BeeBotOSError features
 pub trait AgentErrorExt {
     /// Convert to BeeBotOSError with additional context
-    fn to_beebotos_error_with_context(
-        self,
-        operation: &str,
-        resource: &str,
-    ) -> BeeBotOSError;
+    fn to_beebotos_error_with_context(self, operation: &str, resource: &str) -> BeeBotOSError;
 
     /// Get suggested HTTP status code
     fn http_status(&self) -> u16;
@@ -28,11 +26,7 @@ pub trait AgentErrorExt {
 }
 
 impl AgentErrorExt for AgentError {
-    fn to_beebotos_error_with_context(
-        self,
-        operation: &str,
-        resource: &str,
-    ) -> BeeBotOSError {
+    fn to_beebotos_error_with_context(self, operation: &str, resource: &str) -> BeeBotOSError {
         let base: BeeBotOSError = self.into();
         base.with_context(
             ErrorContext::new()
@@ -102,14 +96,15 @@ macro_rules! unified_bail {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use beebotos_core::ErrorCode;
+
+    use super::*;
 
     #[test]
     fn test_error_conversion() {
         let agent_err = AgentError::AgentNotFound("test agent".to_string());
         let beebotos_err: BeeBotOSError = agent_err.into();
-        
+
         assert!(matches!(beebotos_err.code, ErrorCode::NotFound));
         // BeeBotOSError::not_found formats message as "resource 'id' not found"
         assert_eq!(beebotos_err.message, "agent 'test agent' not found");

@@ -1,10 +1,11 @@
 //! Multi-Chain Configuration Module
 //!
-//! Provides support for multiple blockchain networks (Ethereum, BSC, Monad, etc.)
-//! with per-chain contract address configuration.
+//! Provides support for multiple blockchain networks (Ethereum, BSC, Monad,
+//! etc.) with per-chain contract address configuration.
+
+use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 /// Supported blockchain networks
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -270,17 +271,17 @@ impl ChainConfig {
     /// Get transaction explorer URL for a hash
     #[allow(dead_code)]
     pub fn tx_explorer_url(&self, tx_hash: &str) -> Option<String> {
-        self.network.explorer_url().map(|base| {
-            format!("{}/tx/{}", base, tx_hash)
-        })
+        self.network
+            .explorer_url()
+            .map(|base| format!("{}/tx/{}", base, tx_hash))
     }
 
     /// Get address explorer URL
     #[allow(dead_code)]
     pub fn address_explorer_url(&self, address: &str) -> Option<String> {
-        self.network.explorer_url().map(|base| {
-            format!("{}/address/{}", base, address)
-        })
+        self.network
+            .explorer_url()
+            .map(|base| format!("{}/address/{}", base, address))
     }
 }
 
@@ -308,7 +309,7 @@ impl MultiChainConfig {
     pub fn add_chain(&mut self, config: ChainConfig) {
         let network = config.network;
         self.chains.insert(network, config);
-        
+
         // Set as default if it's the first enabled chain
         if self.default_chain.is_none() {
             self.default_chain = Some(network);
@@ -339,10 +340,7 @@ impl MultiChainConfig {
 
     /// Get all enabled chains
     pub fn enabled_chains(&self) -> Vec<&ChainConfig> {
-        self.chains
-            .values()
-            .filter(|c| c.enabled)
-            .collect()
+        self.chains.values().filter(|c| c.enabled).collect()
     }
 
     /// Get chain by chain ID
@@ -355,7 +353,7 @@ impl MultiChainConfig {
     /// Remove a chain
     pub fn remove_chain(&mut self, network: &ChainNetwork) {
         self.chains.remove(network);
-        
+
         // Reset default if needed
         if self.default_chain == Some(*network) {
             self.default_chain = self.chains.keys().next().copied();
@@ -418,7 +416,7 @@ pub mod presets {
     }
 
     /// Beechain mainnet preset
-    /// 
+    ///
     /// High-performance EVM-compatible L1 with parallel execution:
     /// - TPS: 10,000
     /// - Block time: 0.4s
@@ -456,8 +454,9 @@ pub mod presets {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::str::FromStr;
+
+    use super::*;
 
     #[test]
     fn test_chain_network_chain_id() {
@@ -496,19 +495,19 @@ mod tests {
     #[test]
     fn test_multi_chain_config() {
         let mut config = MultiChainConfig::new();
-        
+
         let eth = presets::ethereum();
         config.add_chain(eth);
-        
+
         let monad = presets::monad_testnet();
         config.add_chain(monad);
-        
+
         let beechain = presets::beechain();
         config.add_chain(beechain);
-        
+
         assert_eq!(config.chains.len(), 3);
         assert!(config.get_default().is_some());
-        
+
         let enabled = config.enabled_chains();
         assert_eq!(enabled.len(), 3);
     }
@@ -516,10 +515,10 @@ mod tests {
     #[test]
     fn test_chain_config_explorer_urls() {
         let config = presets::ethereum();
-        
+
         assert!(config.tx_explorer_url("0xabc").is_some());
         assert!(config.address_explorer_url("0x123").is_some());
-        
+
         let beechain_config = presets::beechain();
         assert!(beechain_config.tx_explorer_url("0xabc").is_some());
         assert!(beechain_config.address_explorer_url("0x123").is_some());
@@ -533,20 +532,20 @@ mod tests {
         assert!(!ChainNetwork::Beechain.is_testnet());
         assert!(ChainNetwork::BeechainTestnet.is_testnet());
     }
-    
+
     #[test]
     fn test_beechain_config() {
         let config = presets::beechain();
-        
+
         assert_eq!(config.network.chain_id(), 3188);
         assert_eq!(config.confirmation_blocks, 2); // Fast finality: 0.8s / 0.4s = 2 blocks
         assert_eq!(config.gas_price_multiplier, 1.05); // Low premium due to high TPS
-        
+
         assert_eq!(
             config.effective_rpc_url(),
             Some("https://rpc.beechain.ai".to_string())
         );
-        
+
         assert_eq!(
             config.tx_explorer_url("0xabc123"),
             Some("https://scan.beechain.ai/tx/0xabc123".to_string())

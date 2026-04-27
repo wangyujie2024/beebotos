@@ -292,7 +292,7 @@ impl BaseChannelConfig {
     /// Create base config from environment with given prefix
     pub fn from_env(prefix: &str) -> Option<Self> {
         use std::env;
-        
+
         let connection_mode = env::var(format!("{}_CONNECTION_MODE", prefix))
             .ok()
             .and_then(|m| match m.as_str() {

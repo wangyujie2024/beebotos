@@ -1,6 +1,7 @@
 //! ACP 2.0 (Agent Collaboration Protocol) Implementation
 //!
-//! ACP 2.0 is an advanced protocol for multi-agent collaboration, extending A2A with:
+//! ACP 2.0 is an advanced protocol for multi-agent collaboration, extending A2A
+//! with:
 //! - Agent Capability Profiles (standardized capability description)
 //! - Session-based collaboration lifecycle
 //! - Service discovery and negotiation
@@ -29,7 +30,6 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use tokio::sync::{mpsc, Mutex, RwLock};
@@ -43,8 +43,9 @@ use crate::types::AgentId;
 pub const ACP20_VERSION: &str = "2.0.0";
 
 /// Agent Capability Profile
-/// 
-/// Standardized description of an agent's capabilities, constraints, and preferences
+///
+/// Standardized description of an agent's capabilities, constraints, and
+/// preferences
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentCapabilityProfile {
     /// Unique profile ID
@@ -257,7 +258,7 @@ pub struct TimeoutSettings {
 }
 
 /// ACP 2.0 Session
-/// 
+///
 /// A collaboration session between multiple agents
 #[derive(Debug, Clone)]
 pub struct AcpSession {
@@ -464,21 +465,48 @@ pub struct Acp20Protocol {
 #[derive(Debug, Clone)]
 pub enum AcpEvent {
     /// Session created
-    SessionCreated { session_id: String, creator: AgentId },
+    SessionCreated {
+        session_id: String,
+        creator: AgentId,
+    },
     /// Participant joined
-    ParticipantJoined { session_id: String, participant: AgentId },
+    ParticipantJoined {
+        session_id: String,
+        participant: AgentId,
+    },
     /// Participant left
-    ParticipantLeft { session_id: String, participant: AgentId },
+    ParticipantLeft {
+        session_id: String,
+        participant: AgentId,
+    },
     /// Task assigned
-    TaskAssigned { session_id: String, task: TaskAssignment },
+    TaskAssigned {
+        session_id: String,
+        task: TaskAssignment,
+    },
     /// Task completed
-    TaskCompleted { session_id: String, task_id: String, result: serde_json::Value },
+    TaskCompleted {
+        session_id: String,
+        task_id: String,
+        result: serde_json::Value,
+    },
     /// Session state changed
-    SessionStateChanged { session_id: String, from: SessionState, to: SessionState },
+    SessionStateChanged {
+        session_id: String,
+        from: SessionState,
+        to: SessionState,
+    },
     /// Message received
-    MessageReceived { session_id: String, from: AgentId, message: A2AMessage },
+    MessageReceived {
+        session_id: String,
+        from: AgentId,
+        message: A2AMessage,
+    },
     /// Error occurred
-    Error { session_id: Option<String>, error: AcpError },
+    Error {
+        session_id: Option<String>,
+        error: AcpError,
+    },
 }
 
 /// ACP Errors
@@ -623,9 +651,12 @@ pub enum ResponseType {
 
 impl Acp20Protocol {
     /// Create new ACP 2.0 protocol handler
-    pub fn new(agent_id: AgentId, profile: AgentCapabilityProfile) -> (Self, mpsc::Receiver<AcpEvent>) {
+    pub fn new(
+        agent_id: AgentId,
+        profile: AgentCapabilityProfile,
+    ) -> (Self, mpsc::Receiver<AcpEvent>) {
         let (event_sender, event_receiver) = mpsc::channel(1000);
-        
+
         let protocol = Self {
             agent_id,
             profile,
@@ -652,7 +683,7 @@ impl Acp20Protocol {
     ) -> Result<AcpSession, AcpError> {
         let session_id = Uuid::new_v4().to_string();
         let now = Utc::now();
-        
+
         // Create participants list (including self)
         let mut participants = vec![SessionParticipant {
             agent_id: self.agent_id.clone(),
@@ -711,10 +742,13 @@ impl Acp20Protocol {
         }
 
         // Emit event
-        let _ = self.event_sender.send(AcpEvent::SessionCreated {
-            session_id: session_id.clone(),
-            creator: self.agent_id.clone(),
-        }).await;
+        let _ = self
+            .event_sender
+            .send(AcpEvent::SessionCreated {
+                session_id: session_id.clone(),
+                creator: self.agent_id.clone(),
+            })
+            .await;
 
         info!("Created ACP 2.0 session: {}", session_id);
         Ok(session)
@@ -727,12 +761,17 @@ impl Acp20Protocol {
         agent_profile: Option<AgentCapabilityProfile>,
     ) -> Result<AcpSession, AcpError> {
         let mut sessions = self.sessions.write().await;
-        
-        let session = sessions.get_mut(session_id)
+
+        let session = sessions
+            .get_mut(session_id)
             .ok_or_else(|| AcpError::SessionNotFound(session_id.to_string()))?;
 
         // Check if already joined
-        if session.participants.iter().any(|p| p.agent_id == self.agent_id) {
+        if session
+            .participants
+            .iter()
+            .any(|p| p.agent_id == self.agent_id)
+        {
             return Ok(session.clone());
         }
 
@@ -754,10 +793,13 @@ impl Acp20Protocol {
         session.last_activity = Utc::now();
 
         // Emit event
-        let _ = self.event_sender.send(AcpEvent::ParticipantJoined {
-            session_id: session_id.to_string(),
-            participant: self.agent_id.clone(),
-        }).await;
+        let _ = self
+            .event_sender
+            .send(AcpEvent::ParticipantJoined {
+                session_id: session_id.to_string(),
+                participant: self.agent_id.clone(),
+            })
+            .await;
 
         info!("Joined ACP 2.0 session: {}", session_id);
         Ok(session.clone())
@@ -766,18 +808,22 @@ impl Acp20Protocol {
     /// Leave a session
     pub async fn leave_session(&self, session_id: &str) -> Result<(), AcpError> {
         let mut sessions = self.sessions.write().await;
-        
-        let session = sessions.get_mut(session_id)
+
+        let session = sessions
+            .get_mut(session_id)
             .ok_or_else(|| AcpError::SessionNotFound(session_id.to_string()))?;
 
         session.participants.retain(|p| p.agent_id != self.agent_id);
         session.last_activity = Utc::now();
 
         // Emit event
-        let _ = self.event_sender.send(AcpEvent::ParticipantLeft {
-            session_id: session_id.to_string(),
-            participant: self.agent_id.clone(),
-        }).await;
+        let _ = self
+            .event_sender
+            .send(AcpEvent::ParticipantLeft {
+                session_id: session_id.to_string(),
+                participant: self.agent_id.clone(),
+            })
+            .await;
 
         info!("Left ACP 2.0 session: {}", session_id);
         Ok(())
@@ -793,8 +839,9 @@ impl Acp20Protocol {
         deadline: Option<DateTime<Utc>>,
     ) -> Result<TaskAssignment, AcpError> {
         let mut sessions = self.sessions.write().await;
-        
-        let session = sessions.get_mut(session_id)
+
+        let session = sessions
+            .get_mut(session_id)
             .ok_or_else(|| AcpError::SessionNotFound(session_id.to_string()))?;
 
         // Verify assignee is a participant
@@ -819,12 +866,18 @@ impl Acp20Protocol {
         session.last_activity = Utc::now();
 
         // Emit event
-        let _ = self.event_sender.send(AcpEvent::TaskAssigned {
-            session_id: session_id.to_string(),
-            task: task.clone(),
-        }).await;
+        let _ = self
+            .event_sender
+            .send(AcpEvent::TaskAssigned {
+                session_id: session_id.to_string(),
+                task: task.clone(),
+            })
+            .await;
 
-        debug!("Assigned task {} to {} in session {}", task.task_id, assignee, session_id);
+        debug!(
+            "Assigned task {} to {} in session {}",
+            task.task_id, assignee, session_id
+        );
         Ok(task)
     }
 
@@ -837,11 +890,15 @@ impl Acp20Protocol {
         result: Option<serde_json::Value>,
     ) -> Result<(), AcpError> {
         let mut sessions = self.sessions.write().await;
-        
-        let session = sessions.get_mut(session_id)
+
+        let session = sessions
+            .get_mut(session_id)
             .ok_or_else(|| AcpError::SessionNotFound(session_id.to_string()))?;
 
-        let task = session.context.task_assignments.iter_mut()
+        let task = session
+            .context
+            .task_assignments
+            .iter_mut()
             .find(|t| t.task_id == task_id)
             .ok_or_else(|| AcpError::A2AError(format!("Task {} not found", task_id)))?;
 
@@ -850,11 +907,14 @@ impl Acp20Protocol {
         session.last_activity = Utc::now();
 
         if status == TaskAssignmentStatus::Completed {
-            let _ = self.event_sender.send(AcpEvent::TaskCompleted {
-                session_id: session_id.to_string(),
-                task_id: task_id.to_string(),
-                result: result.unwrap_or(serde_json::Value::Null),
-            }).await;
+            let _ = self
+                .event_sender
+                .send(AcpEvent::TaskCompleted {
+                    session_id: session_id.to_string(),
+                    task_id: task_id.to_string(),
+                    result: result.unwrap_or(serde_json::Value::Null),
+                })
+                .await;
         }
 
         Ok(())
@@ -867,23 +927,31 @@ impl Acp20Protocol {
         message: A2AMessage,
     ) -> Result<(), AcpError> {
         let sessions = self.sessions.read().await;
-        
-        let session = sessions.get(session_id)
+
+        let session = sessions
+            .get(session_id)
             .ok_or_else(|| AcpError::SessionNotFound(session_id.to_string()))?;
 
         // Verify sender is a participant
-        if !session.participants.iter().any(|p| p.agent_id == self.agent_id) {
+        if !session
+            .participants
+            .iter()
+            .any(|p| p.agent_id == self.agent_id)
+        {
             return Err(AcpError::NotAuthorized(
-                "Not a participant in this session".to_string()
+                "Not a participant in this session".to_string(),
             ));
         }
 
         // Emit event
-        let _ = self.event_sender.send(AcpEvent::MessageReceived {
-            session_id: session_id.to_string(),
-            from: self.agent_id.clone(),
-            message,
-        }).await;
+        let _ = self
+            .event_sender
+            .send(AcpEvent::MessageReceived {
+                session_id: session_id.to_string(),
+                from: self.agent_id.clone(),
+                message,
+            })
+            .await;
 
         Ok(())
     }
@@ -895,19 +963,23 @@ impl Acp20Protocol {
         new_state: SessionState,
     ) -> Result<(), AcpError> {
         let mut sessions = self.sessions.write().await;
-        
-        let session = sessions.get_mut(session_id)
+
+        let session = sessions
+            .get_mut(session_id)
             .ok_or_else(|| AcpError::SessionNotFound(session_id.to_string()))?;
 
         let old_state = session.state;
         session.state = new_state;
         session.last_activity = Utc::now();
 
-        let _ = self.event_sender.send(AcpEvent::SessionStateChanged {
-            session_id: session_id.to_string(),
-            from: old_state,
-            to: new_state,
-        }).await;
+        let _ = self
+            .event_sender
+            .send(AcpEvent::SessionStateChanged {
+                session_id: session_id.to_string(),
+                from: old_state,
+                to: new_state,
+            })
+            .await;
 
         Ok(())
     }
@@ -927,10 +999,11 @@ impl Acp20Protocol {
     /// Register an agent in the service registry
     pub async fn register_agent(&self, profile: AgentCapabilityProfile) {
         let mut registry = self.service_registry.write().await;
-        
+
         // Index capabilities
         for capability in &profile.capabilities {
-            registry.capabilities
+            registry
+                .capabilities
                 .entry(capability.id.clone())
                 .or_default()
                 .push(profile.agent_id.clone());
@@ -941,12 +1014,18 @@ impl Acp20Protocol {
     }
 
     /// Find agents by capability
-    pub async fn find_agents_by_capability(&self, capability_id: &str) -> Vec<AgentCapabilityProfile> {
+    pub async fn find_agents_by_capability(
+        &self,
+        capability_id: &str,
+    ) -> Vec<AgentCapabilityProfile> {
         let registry = self.service_registry.read().await;
-        
-        registry.capabilities.get(capability_id)
+
+        registry
+            .capabilities
+            .get(capability_id)
             .map(|agent_ids| {
-                agent_ids.iter()
+                agent_ids
+                    .iter()
                     .filter_map(|id| registry.agents.get(id).cloned())
                     .collect()
             })
@@ -990,12 +1069,18 @@ impl Acp20Protocol {
         response: NegotiationResponse,
     ) -> Result<(), AcpError> {
         let mut engine = self.collaboration_engine.lock().await;
-        
-        let negotiation = engine.negotiations.iter_mut()
-            .find(|n| n.id == negotiation_id)
-            .ok_or_else(|| AcpError::A2AError(format!("Negotiation {} not found", negotiation_id)))?;
 
-        negotiation.responses.insert(self.agent_id.clone(), response);
+        let negotiation = engine
+            .negotiations
+            .iter_mut()
+            .find(|n| n.id == negotiation_id)
+            .ok_or_else(|| {
+                AcpError::A2AError(format!("Negotiation {} not found", negotiation_id))
+            })?;
+
+        negotiation
+            .responses
+            .insert(self.agent_id.clone(), response);
         Ok(())
     }
 }
@@ -1082,9 +1167,9 @@ mod tests {
     async fn test_acp20_protocol_creation() {
         let agent_id = AgentId::from_string("test-agent");
         let profile = create_test_profile("test-agent");
-        
+
         let (protocol, _receiver) = Acp20Protocol::new(agent_id, profile);
-        
+
         assert_eq!(protocol.profile().protocol_version, ACP20_VERSION);
     }
 
@@ -1092,9 +1177,9 @@ mod tests {
     async fn test_create_session() {
         let agent_id = AgentId::from_string("test-agent");
         let profile = create_test_profile("test-agent");
-        
+
         let (protocol, _receiver) = Acp20Protocol::new(agent_id.clone(), profile);
-        
+
         let goals = vec![SessionGoal {
             goal_id: "goal-1".to_string(),
             description: "Test goal".to_string(),
@@ -1102,13 +1187,12 @@ mod tests {
             status: GoalStatus::NotStarted,
             completion_criteria: vec!["Done".to_string()],
         }];
-        
-        let session = protocol.create_session(
-            SessionType::PeerToPeer,
-            vec![],
-            goals,
-        ).await.unwrap();
-        
+
+        let session = protocol
+            .create_session(SessionType::PeerToPeer, vec![], goals)
+            .await
+            .unwrap();
+
         assert_eq!(session.session_type, SessionType::PeerToPeer);
         assert_eq!(session.participants.len(), 1);
         assert_eq!(session.participants[0].agent_id, agent_id);
@@ -1119,41 +1203,50 @@ mod tests {
     async fn test_assign_and_update_task() {
         let agent_id = AgentId::from_string("test-agent");
         let profile = create_test_profile("test-agent");
-        
+
         let (protocol, mut receiver) = Acp20Protocol::new(agent_id.clone(), profile);
-        
-        let session = protocol.create_session(
-            SessionType::Direct,
-            vec![],
-            vec![],
-        ).await.unwrap();
-        
-        let task = protocol.assign_task(
-            &session.session_id,
-            agent_id.clone(),
-            "Test task",
-            vec![],
-            None,
-        ).await.unwrap();
-        
+
+        let session = protocol
+            .create_session(SessionType::Direct, vec![], vec![])
+            .await
+            .unwrap();
+
+        let task = protocol
+            .assign_task(
+                &session.session_id,
+                agent_id.clone(),
+                "Test task",
+                vec![],
+                None,
+            )
+            .await
+            .unwrap();
+
         assert_eq!(task.description, "Test task");
         assert_eq!(task.status, TaskAssignmentStatus::Pending);
-        
+
         // Update task status
-        protocol.update_task_status(
-            &session.session_id,
-            &task.task_id,
-            TaskAssignmentStatus::Completed,
-            Some(serde_json::json!({"result": "success"})),
-        ).await.unwrap();
-        
+        protocol
+            .update_task_status(
+                &session.session_id,
+                &task.task_id,
+                TaskAssignmentStatus::Completed,
+                Some(serde_json::json!({"result": "success"})),
+            )
+            .await
+            .unwrap();
+
         // Check event was emitted (skip SessionCreated and TaskAssigned events)
         use tokio::time::{timeout, Duration};
         let result = timeout(Duration::from_secs(5), async {
             loop {
                 let event = receiver.recv().await.unwrap();
                 match event {
-                    AcpEvent::TaskCompleted { session_id, task_id, .. } => {
+                    AcpEvent::TaskCompleted {
+                        session_id,
+                        task_id,
+                        ..
+                    } => {
                         assert_eq!(session_id, session.session_id);
                         assert_eq!(task_id, task.task_id);
                         break;
@@ -1165,8 +1258,9 @@ mod tests {
                     other => panic!("Expected TaskCompleted event, got {:?}", other),
                 }
             }
-        }).await;
-        
+        })
+        .await;
+
         assert!(result.is_ok(), "Timeout waiting for TaskCompleted event");
     }
 
@@ -1174,12 +1268,12 @@ mod tests {
     async fn test_service_registry() {
         let agent_id = AgentId::from_string("test-agent");
         let profile = create_test_profile("test-agent");
-        
+
         let (protocol, _receiver) = Acp20Protocol::new(agent_id, profile.clone());
-        
+
         // Register agent
         protocol.register_agent(profile).await;
-        
+
         // Find by capability
         let agents = protocol.find_agents_by_capability("test_capability").await;
         assert_eq!(agents.len(), 1);

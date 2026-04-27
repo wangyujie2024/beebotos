@@ -5,14 +5,15 @@
 
 pub mod gateway;
 
-use crate::{
-    Message, MessageBus, SubscriptionId,
-};
 use std::collections::HashMap;
 use std::sync::Arc;
+
 use tokio::sync::mpsc;
 
-/// Adapter for Core EventBus (simplified version without beebotos_core dependency)
+use crate::{Message, MessageBus, SubscriptionId};
+
+/// Adapter for Core EventBus (simplified version without beebotos_core
+/// dependency)
 ///
 /// This is a placeholder adapter for demonstration. The full implementation
 /// would integrate with beebotos_core::event::EventBus
@@ -34,10 +35,7 @@ impl<B: MessageBus> CoreEventBusAdapter<B> {
     }
 
     /// Subscribe to events (legacy API)
-    pub async fn subscribe(
-        &self,
-        _name: &str,
-    ) -> crate::Result<mpsc::UnboundedReceiver<Message>> {
+    pub async fn subscribe(&self, _name: &str) -> crate::Result<mpsc::UnboundedReceiver<Message>> {
         let topic_pattern = "core/event/+";
         let (_sub_id, mut stream) = self.inner.subscribe(topic_pattern).await?;
 
@@ -226,7 +224,9 @@ impl MigrationGuide {
                 println!("   let adapter = GatewayEventAdapter::new(bus);");
                 println!();
                 println!("2. Publish WebSocket events:");
-                println!("   adapter.publish_ws_connected(\"conn-123\", \"192.168.1.1:12345\").await?;");
+                println!(
+                    "   adapter.publish_ws_connected(\"conn-123\", \"192.168.1.1:12345\").await?;"
+                );
                 println!();
                 println!("3. Subscribe to events:");
                 println!("   let (sub_id, rx) = adapter.subscribe_websocket().await?;");
@@ -316,9 +316,15 @@ mod tests {
         let mut rx = adapter.subscribe("test").await.unwrap();
 
         // Emit event
-        adapter.emit("task_started", serde_json::json!({
-            "task_id": "task-123",
-        })).await.unwrap();
+        adapter
+            .emit(
+                "task_started",
+                serde_json::json!({
+                    "task_id": "task-123",
+                }),
+            )
+            .await
+            .unwrap();
 
         // Should receive through the bus
         let received = rx.recv().await;
@@ -337,7 +343,7 @@ mod tests {
         let mapping = MigrationGuide::get_api_mapping("agents");
         assert!(mapping.contains_key("AgentEventBus::emit"));
         assert!(mapping.contains_key("AgentEventBus::subscribe"));
-        
+
         let gateway_mapping = MigrationGuide::get_api_mapping("gateway");
         assert!(gateway_mapping.contains_key("Gateway::on_ws_connect"));
     }

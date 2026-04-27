@@ -2,10 +2,12 @@
 //!
 //! Provides abstraction layer for database access.
 
-use async_trait::async_trait;
-use serde::{de::DeserializeOwned, Serialize};
-use sqlx::{SqlitePool, Row};
 use std::fmt::Debug;
+
+use async_trait::async_trait;
+use serde::de::DeserializeOwned;
+use serde::Serialize;
+use sqlx::{Row, SqlitePool};
 use tracing::{debug, error, instrument};
 
 use crate::error::{GatewayError, Result};
@@ -56,7 +58,16 @@ pub struct FilterCondition {
 /// Filter operators
 #[derive(Debug, Clone)]
 pub enum FilterOperator {
-    Eq, Ne, Gt, Gte, Lt, Lte, Like, In, IsNull, IsNotNull,
+    Eq,
+    Ne,
+    Gt,
+    Gte,
+    Lt,
+    Lte,
+    Like,
+    In,
+    IsNull,
+    IsNotNull,
 }
 
 /// Filter values
@@ -161,12 +172,14 @@ impl<T: Entity> Repository<T> for PgRepository<T> {
 
         match row {
             Some(row) => {
-                let json: serde_json::Value = row.try_get("data")
+                let json: serde_json::Value = row
+                    .try_get("data")
                     .or_else(|_| row.try_get("json"))
                     .map_err(|e| GatewayError::internal(format!("Failed to deserialize: {}", e)))?;
 
-                let entity: T = serde_json::from_value(json)
-                    .map_err(|e| GatewayError::internal(format!("Failed to parse entity: {}", e)))?;
+                let entity: T = serde_json::from_value(json).map_err(|e| {
+                    GatewayError::internal(format!("Failed to parse entity: {}", e))
+                })?;
 
                 Ok(Some(entity))
             }
@@ -184,7 +197,8 @@ impl<T: Entity> Repository<T> for PgRepository<T> {
 
         let mut entities = Vec::new();
         for row in rows {
-            let json: serde_json::Value = row.try_get("data")
+            let json: serde_json::Value = row
+                .try_get("data")
                 .map_err(|e| GatewayError::internal(format!("Failed to deserialize: {}", e)))?;
 
             let entity: T = serde_json::from_value(json)
@@ -213,7 +227,8 @@ impl<T: Entity> Repository<T> for PgRepository<T> {
 
         let mut items = Vec::new();
         for row in rows {
-            let json: serde_json::Value = row.try_get("data")
+            let json: serde_json::Value = row
+                .try_get("data")
                 .map_err(|e| GatewayError::internal(format!("Failed to deserialize: {}", e)))?;
 
             let entity: T = serde_json::from_value(json)
@@ -248,7 +263,8 @@ impl<T: Entity> Repository<T> for PgRepository<T> {
 
     async fn insert(&self, entity: &T) -> Result<T> {
         let query = format!(
-            "INSERT INTO {} (id, data, created_at, updated_at) VALUES (?1, ?2, datetime('now'), datetime('now'))",
+            "INSERT INTO {} (id, data, created_at, updated_at) VALUES (?1, ?2, datetime('now'), \
+             datetime('now'))",
             self.table_name
         );
 
@@ -429,9 +445,11 @@ impl<T: Entity> Repository<T> for MockRepository<T> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use serde::Deserialize;
     use std::collections::HashMap;
+
+    use serde::Deserialize;
+
+    use super::*;
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
     struct TestEntity {
@@ -441,9 +459,15 @@ mod tests {
 
     impl Entity for TestEntity {
         type Id = String;
-        fn id(&self) -> &Self::Id { &self.id }
-        fn entity_name() -> &'static str { "test_entities" }
-        fn field_names() -> Vec<&'static str> { vec!["id", "name"] }
+        fn id(&self) -> &Self::Id {
+            &self.id
+        }
+        fn entity_name() -> &'static str {
+            "test_entities"
+        }
+        fn field_names() -> Vec<&'static str> {
+            vec!["id", "name"]
+        }
     }
 
     #[test]

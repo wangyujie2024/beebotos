@@ -126,3 +126,9 @@ clippy.toml*:*
 * - 副本*
 * - copy*
 *.copy.md
+.worktrees/
+
+.superpowers/
+docs/superpowers/
+tests/
+skills/

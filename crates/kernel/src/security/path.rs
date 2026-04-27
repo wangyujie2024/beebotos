@@ -3,8 +3,9 @@
 //! Provides safe path handling to prevent directory traversal attacks
 //! and enforce sandbox boundaries.
 
-use crate::error::{KernelError, Result};
 use std::path::{Component, Path, PathBuf};
+
+use crate::error::{KernelError, Result};
 
 /// Path validation options
 #[derive(Debug, Clone)]
@@ -66,6 +67,7 @@ impl PathValidationOptions {
 /// # Examples
 /// ```
 /// use std::path::PathBuf;
+///
 /// use beebotos_kernel::security::path::validate_path;
 ///
 /// // Safe path

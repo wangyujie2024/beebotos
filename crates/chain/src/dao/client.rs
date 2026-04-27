@@ -2,6 +2,13 @@
 //!
 //! Full implementation of DAO operations using Alloy contracts.
 
+use std::sync::Arc;
+
+use alloy_primitives::Bytes;
+use alloy_provider::Provider as AlloyProvider;
+use alloy_rpc_types::TransactionReceipt;
+use tracing::{debug, error, info, instrument};
+
 use crate::compat::{Address, B256, U256};
 use crate::config::ChainConfig;
 use crate::constants::{
@@ -11,11 +18,6 @@ use crate::constants::{
 use crate::contracts::AgentDAO;
 use crate::dao::{DAOInterface, Proposal, ProposalId, VoteType};
 use crate::{ChainError, Result};
-use alloy_primitives::Bytes;
-use alloy_provider::Provider as AlloyProvider;
-use alloy_rpc_types::TransactionReceipt;
-use std::sync::Arc;
-use tracing::{debug, error, info, instrument};
 
 /// Proposal type
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -609,7 +611,8 @@ impl<P: AlloyProvider + Clone> DAOClient<P> {
         Ok(receipt.transaction_hash)
     }
 
-    /// Get proposal state (0=Pending, 1=Active, 2=Canceled, 3=Defeated, 4=Succeeded, 5=Queued, 6=Expired, 7=Executed)
+    /// Get proposal state (0=Pending, 1=Active, 2=Canceled, 3=Defeated,
+    /// 4=Succeeded, 5=Queued, 6=Expired, 7=Executed)
     #[instrument(skip(self), target = "chain::dao", fields(proposal_id))]
     pub async fn get_proposal_state(&self, proposal_id: ProposalId) -> Result<u8> {
         debug!(

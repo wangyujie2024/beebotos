@@ -1,4 +1,5 @@
-//! Unified inbound and outbound message router for multi-user multi-agent channels.
+//! Unified inbound and outbound message router for multi-user multi-agent
+//! channels.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -67,10 +68,12 @@ impl InboundMessageRouter {
             .user_channel_store
             .find_by_platform_user(platform, platform_user_id)
             .await?
-            .ok_or_else(|| AgentError::not_found(format!(
-                "user channel not found for platform {:?} user {}",
-                platform, platform_user_id
-            )))?;
+            .ok_or_else(|| {
+                AgentError::not_found(format!(
+                    "user channel not found for platform {:?} user {}",
+                    platform, platform_user_id
+                ))
+            })?;
 
         let bindings = self
             .agent_binding_store
@@ -102,7 +105,10 @@ impl InboundMessageRouter {
         let agent_ids: Vec<String> = targets.into_iter().map(|b| b.agent_id).collect();
 
         if agent_ids.len() == 1 {
-            Ok((user_channel, RoutingDecision::SingleAgent(agent_ids.into_iter().next().unwrap())))
+            Ok((
+                user_channel,
+                RoutingDecision::SingleAgent(agent_ids.into_iter().next().unwrap()),
+            ))
         } else {
             Ok((user_channel, RoutingDecision::Broadcast(agent_ids)))
         }
@@ -150,23 +156,22 @@ fn matches_rules(rules: &RoutingRules, message: &Message) -> bool {
     true
 }
 
-/// Outbound router: delivers agent replies back to the correct channel instance.
+/// Outbound router: delivers agent replies back to the correct channel
+/// instance.
 pub struct OutboundMessageRouter {
     instance_manager: Arc<crate::communication::channel_instance_manager::ChannelInstanceManager>,
 }
 
 impl OutboundMessageRouter {
     pub fn new(
-        instance_manager: Arc<crate::communication::channel_instance_manager::ChannelInstanceManager>,
+        instance_manager: Arc<
+            crate::communication::channel_instance_manager::ChannelInstanceManager,
+        >,
     ) -> Self {
         Self { instance_manager }
     }
 
-    pub async fn send_reply(
-        &self,
-        reply_route: &ReplyRoute,
-        message: &Message,
-    ) -> Result<()> {
+    pub async fn send_reply(&self, reply_route: &ReplyRoute, message: &Message) -> Result<()> {
         self.instance_manager
             .send_message(
                 &reply_route.channel_instance_id,
@@ -199,7 +204,10 @@ impl AgentMessageDispatcher {
 
     /// Register an agent message queue.
     pub async fn register_agent(&self, agent_id: &str, tx: mpsc::Sender<UserMessageContext>) {
-        self.agent_queues.write().await.insert(agent_id.to_string(), tx.clone());
+        self.agent_queues
+            .write()
+            .await
+            .insert(agent_id.to_string(), tx.clone());
         self.flush_pending(agent_id, &tx).await;
     }
 
@@ -228,7 +236,8 @@ impl AgentMessageDispatcher {
                 // (e.g. channel_event_bus → AgentResolver) handle the message.
                 tracing::warn!(
                     "No user channel found for {}:{}, skipping dispatcher path",
-                    platform, platform_user_id
+                    platform,
+                    platform_user_id
                 );
                 return Ok(());
             }
@@ -295,7 +304,11 @@ impl AgentMessageDispatcher {
         // Agent offline: persist message for later delivery.
         tracing::info!("Agent {} is offline, persisting message", agent_id);
         if let Err(e) = self.offline_store.enqueue(agent_id, &ctx).await {
-            tracing::warn!("Failed to persist offline message for agent {}: {}", agent_id, e);
+            tracing::warn!(
+                "Failed to persist offline message for agent {}: {}",
+                agent_id,
+                e
+            );
         }
     }
 
@@ -303,7 +316,11 @@ impl AgentMessageDispatcher {
     async fn flush_pending(&self, agent_id: &str, tx: &mpsc::Sender<UserMessageContext>) {
         match self.offline_store.dequeue_all(agent_id).await {
             Ok(msgs) if !msgs.is_empty() => {
-                tracing::info!("Flushing {} pending messages to agent {}", msgs.len(), agent_id);
+                tracing::info!(
+                    "Flushing {} pending messages to agent {}",
+                    msgs.len(),
+                    agent_id
+                );
                 for ctx in msgs {
                     if let Err(e) = tx.send(ctx).await {
                         tracing::warn!("Agent {} queue error while flushing: {}", agent_id, e);
@@ -312,7 +329,11 @@ impl AgentMessageDispatcher {
                 }
             }
             Ok(_) => {}
-            Err(e) => tracing::warn!("Failed to flush pending messages for agent {}: {}", agent_id, e),
+            Err(e) => tracing::warn!(
+                "Failed to flush pending messages for agent {}: {}",
+                agent_id,
+                e
+            ),
         }
     }
 }
@@ -351,7 +372,8 @@ mod tests {
         let mut msg = Message::new(uuid::Uuid::new_v4(), PlatformType::Lark, "hello");
         assert!(!super::matches_rules(&rules, &msg));
 
-        msg.metadata.insert("mentioned".to_string(), "true".to_string());
+        msg.metadata
+            .insert("mentioned".to_string(), "true".to_string());
         assert!(super::matches_rules(&rules, &msg));
     }
 }

@@ -22,6 +22,7 @@
 //! - Data sealing with VM-specific keys
 
 use std::sync::atomic::{AtomicBool, Ordering};
+
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use super::provider::utils;

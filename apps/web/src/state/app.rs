@@ -8,20 +8,20 @@
 //! - WebChat API 服务集成
 //! - Gateway 连接服务
 
+use leptos::prelude::*;
+
+use crate::api::llm_provider_service::LlmProviderService;
 use crate::api::{
     AgentService, ApiClient, AuthService, BrowserApiService, DaoService, LlmConfigService,
     SettingsService, SkillService, TreasuryService, WebchatApiService,
 };
-use crate::state::{
-    agent::{provide_agent_state, AgentState},
-    auth::{AuthState},
-    browser::{provide_browser_state, BrowserState},
-    dao::{provide_dao_state, DaoState},
-    gateway::{provide_gateway_state, GatewayConnectionState},
-    notification::{provide_notification_state, NotificationState},
-    webchat::{provide_webchat_state, WebchatState},
-};
-use leptos::prelude::*;
+use crate::state::agent::{provide_agent_state, AgentState};
+use crate::state::auth::AuthState;
+use crate::state::browser::{provide_browser_state, BrowserState};
+use crate::state::dao::{provide_dao_state, DaoState};
+use crate::state::gateway::{provide_gateway_state, GatewayConnectionState};
+use crate::state::notification::{provide_notification_state, NotificationState};
+use crate::state::webchat::{provide_webchat_state, WebchatState};
 
 /// Global application state
 ///
@@ -165,6 +165,11 @@ impl AppState {
         LlmConfigService::new(self.api_client())
     }
 
+    /// Get LLM provider admin service
+    pub fn llm_provider_service(&self) -> LlmProviderService {
+        LlmProviderService::new(self.api_client())
+    }
+
     /// Set online status
     pub fn set_online(&self, online: bool) {
         self.is_online.set(online);
@@ -253,8 +258,8 @@ impl Default for AppState {
 
 /// Provide all application states to context
 ///
-/// This function provides both the composed AppState and individual domain states
-/// to allow components to subscribe to only the state they need.
+/// This function provides both the composed AppState and individual domain
+/// states to allow components to subscribe to only the state they need.
 pub fn provide_app_state() {
     // Create a single auth state instance and provide it
     let auth_state = AuthState::new();
@@ -323,15 +328,13 @@ pub fn use_app_state() -> AppState {
 /// These hooks should be preferred over use_app_state() when only
 /// one domain state is needed to avoid unnecessary re-renders.
 pub mod hooks {
-    pub use crate::state::{
-        agent::use_agent_state,
-        auth::use_auth_state,
-        browser::use_browser_state,
-        dao::use_dao_state,
-        gateway::use_gateway_state,
-        notification::use_notification_state,
-        webchat::use_webchat_state,
-    };
+    pub use crate::state::agent::use_agent_state;
+    pub use crate::state::auth::use_auth_state;
+    pub use crate::state::browser::use_browser_state;
+    pub use crate::state::dao::use_dao_state;
+    pub use crate::state::gateway::use_gateway_state;
+    pub use crate::state::notification::use_notification_state;
+    pub use crate::state::webchat::use_webchat_state;
 }
 
 #[cfg(test)]

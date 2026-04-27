@@ -1,7 +1,8 @@
 //! 会话列表组件
 
-use crate::webchat::ChatSession;
 use leptos::prelude::*;
+
+use crate::webchat::ChatSession;
 
 /// 会话列表组件
 #[component]

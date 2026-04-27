@@ -12,6 +12,11 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info, warn};
 
+// Import common webhook utilities
+use super::common::{
+    MetadataBuilder, SignatureVerification as CommonSigVerification, SignatureVerifier,
+    TokenVerifier,
+};
 use crate::communication::channel::telegram_channel::{
     TelegramCallbackQuery, TelegramInlineQuery, TelegramMessage,
 };
@@ -20,12 +25,6 @@ use crate::communication::webhook::{
 };
 use crate::communication::{AgentMessageDispatcher, Message, MessageType, PlatformType};
 use crate::error::{AgentError, Result};
-
-// Import common webhook utilities
-use super::common::{
-    MetadataBuilder, SignatureVerification as CommonSigVerification,
-    SignatureVerifier, TokenVerifier,
-};
 
 /// Telegram webhook payload
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -411,19 +410,24 @@ impl WebhookHandler for TelegramWebhookHandler {
 
     async fn handle_event(&self, event: WebhookEvent) -> Result<()> {
         match event.event_type {
-            WebhookEventType::MessageReceived | WebhookEventType::MessageEdited | WebhookEventType::BotMentioned => {
+            WebhookEventType::MessageReceived
+            | WebhookEventType::MessageEdited
+            | WebhookEventType::BotMentioned => {
                 if let Some(msg) = &event.message {
                     info!(
                         "Received message from Telegram: {} (type: {:?})",
                         msg.content, msg.message_type
                     );
 
-                    // P0 FIX: Removed dispatcher.dispatch() to avoid duplicate processing.
-                    // Messages are now routed exclusively through channel_event_bus →
+                    // P0 FIX: Removed dispatcher.dispatch() to avoid duplicate
+                    // processing. Messages are now routed
+                    // exclusively through channel_event_bus →
                     // MessageProcessor → AgentResolver path in webhook_handler.
                     // if let Some(dispatcher) = &self.dispatcher {
-                    //     // For Telegram, use bot token prefix as platform_user_id to support multi-bot.
-                    //     let platform_user_id = self.telegram_config.bot_token.split(':').next()
+                    //     // For Telegram, use bot token prefix as
+                    // platform_user_id to support multi-bot.
+                    //     let platform_user_id =
+                    // self.telegram_config.bot_token.split(':').next()
                     //         .unwrap_or("telegram_default")
                     //         .to_string();
                     //     let target_channel_id = msg.metadata.get("chat_id")
@@ -534,9 +538,7 @@ impl TelegramWebhookResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::communication::channel::telegram_channel::{
-        TelegramChat, TelegramPhotoSize,
-    };
+    use crate::communication::channel::telegram_channel::{TelegramChat, TelegramPhotoSize};
 
     #[test]
     fn test_parse_message_type() {

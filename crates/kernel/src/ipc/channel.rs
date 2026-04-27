@@ -2,9 +2,10 @@
 //!
 //! Thread-safe inter-process communication channel with bounded capacity.
 
-use crate::error::{KernelError, Result};
 use std::collections::VecDeque;
 use std::sync::{Arc, Condvar, Mutex};
+
+use crate::error::{KernelError, Result};
 
 /// IPC channel sender endpoint
 #[derive(Clone)]

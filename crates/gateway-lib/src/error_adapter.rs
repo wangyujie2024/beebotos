@@ -1,7 +1,7 @@
 //! Error Adapter
 //!
-//! Provides conversion between GatewayError and BeeBotOSError (unified error type).
-//! This enables gradual migration from GatewayError to BeeBotOSError.
+//! Provides conversion between GatewayError and BeeBotOSError (unified error
+//! type). This enables gradual migration from GatewayError to BeeBotOSError.
 
 use beebotos_core::{BeeBotOSError, ErrorCode, ErrorContext, Severity};
 
@@ -20,10 +20,9 @@ impl From<GatewayError> for BeeBotOSError {
             GatewayError::NotFound { resource, id } => {
                 BeeBotOSError::not_found(resource, id).with_severity(Severity::Info)
             }
-            GatewayError::RateLimited { .. } => BeeBotOSError::new(
-                ErrorCode::RateLimited,
-                "Rate limit exceeded",
-            ),
+            GatewayError::RateLimited { .. } => {
+                BeeBotOSError::new(ErrorCode::RateLimited, "Rate limit exceeded")
+            }
             GatewayError::BadRequest { message, .. } => {
                 BeeBotOSError::validation(message).with_severity(Severity::Warning)
             }
@@ -32,22 +31,28 @@ impl From<GatewayError> for BeeBotOSError {
                 format!("Validation failed: {} errors", errors.len()),
             )
             .with_details(format!("{:?}", errors)),
-            GatewayError::Internal { message, correlation_id } => BeeBotOSError::new(
-                ErrorCode::Unknown,
+            GatewayError::Internal {
                 message,
-            )
-            .with_details(format!("Correlation ID: {}", correlation_id))
-            .with_severity(Severity::Error),
-            GatewayError::ServiceUnavailable { service, reason } => BeeBotOSError::upstream(
-                service,
-                format!("Service unavailable: {}", reason),
-            ),
-            GatewayError::Timeout { upstream, timeout_secs } => BeeBotOSError::new(
+                correlation_id,
+            } => BeeBotOSError::new(ErrorCode::Unknown, message)
+                .with_details(format!("Correlation ID: {}", correlation_id))
+                .with_severity(Severity::Error),
+            GatewayError::ServiceUnavailable { service, reason } => {
+                BeeBotOSError::upstream(service, format!("Service unavailable: {}", reason))
+            }
+            GatewayError::Timeout {
+                upstream,
+                timeout_secs,
+            } => BeeBotOSError::new(
                 ErrorCode::Timeout,
                 format!("Request to {} timed out after {}s", upstream, timeout_secs),
             ),
             GatewayError::Config { message } => BeeBotOSError::configuration(message),
-            GatewayError::Upstream { service, status, message } => BeeBotOSError::new(
+            GatewayError::Upstream {
+                service,
+                status,
+                message,
+            } => BeeBotOSError::new(
                 ErrorCode::Upstream,
                 format!("Upstream '{}' returned {}: {}", service, status, message),
             ),
@@ -89,14 +94,19 @@ impl From<BeeBotOSError> for GatewayError {
                 err.context.resource.as_deref().unwrap_or("Resource"),
                 err.message
             )),
-            ErrorCode::Agent => GatewayError::Agent { message: err.message },
+            ErrorCode::Agent => GatewayError::Agent {
+                message: err.message,
+            },
             ErrorCode::Task => GatewayError::bad_request(err.message),
             ErrorCode::Kernel => GatewayError::ServiceUnavailable {
                 service: "kernel".to_string(),
                 reason: err.message,
             },
             ErrorCode::Timeout => GatewayError::Timeout {
-                upstream: err.context.operation.unwrap_or_else(|| "unknown".to_string()),
+                upstream: err
+                    .context
+                    .operation
+                    .unwrap_or_else(|| "unknown".to_string()),
                 timeout_secs: 30,
             },
             ErrorCode::InvalidInput | ErrorCode::Schema | ErrorCode::Constraint => {
@@ -106,12 +116,10 @@ impl From<BeeBotOSError> for GatewayError {
                 }
             }
             ErrorCode::Authentication => GatewayError::unauthorized(err.message),
-            ErrorCode::Authorization | ErrorCode::PermissionDenied => {
-                GatewayError::Forbidden {
-                    message: err.message,
-                    resource: err.context.resource.unwrap_or_default(),
-                }
-            }
+            ErrorCode::Authorization | ErrorCode::PermissionDenied => GatewayError::Forbidden {
+                message: err.message,
+                resource: err.context.resource.unwrap_or_default(),
+            },
             ErrorCode::Transaction | ErrorCode::Contract | ErrorCode::Wallet => {
                 GatewayError::Upstream {
                     service: "blockchain".to_string(),
@@ -126,7 +134,10 @@ impl From<BeeBotOSError> for GatewayError {
             },
             ErrorCode::Upstream | ErrorCode::RateLimited | ErrorCode::Unavailable => {
                 GatewayError::ServiceUnavailable {
-                    service: err.context.resource.unwrap_or_else(|| "upstream".to_string()),
+                    service: err
+                        .context
+                        .resource
+                        .unwrap_or_else(|| "upstream".to_string()),
                     reason: err.message,
                 }
             }
@@ -142,10 +153,10 @@ impl From<BeeBotOSError> for GatewayError {
 pub trait BeeBotOSErrorExt {
     /// Get HTTP status code
     fn http_status(&self) -> u16;
-    
+
     /// Check if should be logged
     fn should_log(&self) -> bool;
-    
+
     /// Get log level
     fn log_level(&self) -> &'static str;
 }
@@ -154,11 +165,11 @@ impl BeeBotOSErrorExt for BeeBotOSError {
     fn http_status(&self) -> u16 {
         self.code.http_status()
     }
-    
+
     fn should_log(&self) -> bool {
         !matches!(self.severity, Severity::Debug)
     }
-    
+
     fn log_level(&self) -> &'static str {
         match self.severity {
             Severity::Debug => "debug",
@@ -180,7 +191,7 @@ mod tests {
     fn test_gateway_to_beebotos() {
         let gateway_err = GatewayError::not_found("agent", "123");
         let beebotos_err: BeeBotOSError = gateway_err.into();
-        
+
         assert_eq!(beebotos_err.code, ErrorCode::NotFound);
         assert!(beebotos_err.message.contains("agent"));
         assert!(beebotos_err.message.contains("123"));
@@ -190,7 +201,7 @@ mod tests {
     fn test_beebotos_to_gateway() {
         let beebotos_err = BeeBotOSError::authentication("Invalid token");
         let gateway_err: GatewayError = beebotos_err.into();
-        
+
         match gateway_err {
             GatewayError::Unauthorized { message, .. } => {
                 assert_eq!(message, "Invalid token");
@@ -201,10 +212,12 @@ mod tests {
 
     #[test]
     fn test_roundtrip() {
-        let original = GatewayError::Agent { message: "Test".to_string() };
+        let original = GatewayError::Agent {
+            message: "Test".to_string(),
+        };
         let converted: BeeBotOSError = original.clone().into();
         let back: GatewayError = converted.into();
-        
+
         match back {
             GatewayError::Agent { message } => assert_eq!(message, "Test"),
             _ => panic!("Expected Agent error"),
@@ -215,7 +228,7 @@ mod tests {
     fn test_http_status() {
         let err = BeeBotOSError::not_found("x", "y");
         assert_eq!(err.http_status(), 404);
-        
+
         let err = BeeBotOSError::authentication("fail");
         assert_eq!(err.http_status(), 401);
     }

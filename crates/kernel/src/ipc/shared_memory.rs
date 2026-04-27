@@ -1,11 +1,12 @@
 //! Shared Memory
 //!
-//! Provides inter-process shared memory regions with proper memory mapping and unmapping.
-//! Implements memory-mapped I/O for efficient IPC.
+//! Provides inter-process shared memory regions with proper memory mapping and
+//! unmapping. Implements memory-mapped I/O for efficient IPC.
 
-use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::Arc;
+
+use parking_lot::RwLock;
 
 use crate::error::{KernelError, Result};
 // Memory isolation imports not needed for current implementation
@@ -28,7 +29,8 @@ pub struct SharedMemory {
     owner: u64,
 }
 
-// SAFETY: SharedMemory owns the allocated memory and manages access through proper synchronization
+// SAFETY: SharedMemory owns the allocated memory and manages access through
+// proper synchronization
 unsafe impl Send for SharedMemory {}
 unsafe impl Sync for SharedMemory {}
 
@@ -47,7 +49,8 @@ impl std::fmt::Debug for SharedMemory {
 impl SharedMemory {
     /// Create a new shared memory region
     ///
-    /// Allocates physical pages using the system allocator aligned to page boundary.
+    /// Allocates physical pages using the system allocator aligned to page
+    /// boundary.
     pub fn new(id: u64, size: usize, owner: u64) -> Result<Self> {
         if size == 0 {
             return Err(KernelError::invalid_argument(

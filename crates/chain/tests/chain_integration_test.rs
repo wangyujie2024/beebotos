@@ -90,7 +90,8 @@ fn test_wallet_creation() {
 /// Test HD wallet from mnemonic
 #[test]
 fn test_hd_wallet() {
-    let test_mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+    let test_mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon \
+                         abandon abandon about";
     let hd_wallet = HDWallet::from_mnemonic(test_mnemonic).unwrap();
 
     // Derive first account
@@ -118,7 +119,8 @@ fn test_mnemonic_generation() {
 /// Test HD wallet derivation paths
 #[test]
 fn test_derivation_paths() {
-    let test_mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+    let test_mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon \
+                         abandon abandon about";
     let wallet = HDWallet::from_mnemonic(test_mnemonic).unwrap();
 
     // Derive multiple accounts

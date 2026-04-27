@@ -9,7 +9,11 @@ async fn main() {
     ];
     for url in urls {
         println!("Testing: {}", url);
-        match SqlitePoolOptions::new().max_connections(1).connect(url).await {
+        match SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect(url)
+            .await
+        {
             Ok(_) => println!("  SUCCESS"),
             Err(e) => println!("  FAILED: {}", e),
         }

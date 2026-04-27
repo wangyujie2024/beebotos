@@ -1,7 +1,8 @@
 //! 沙箱列表组件
 
-use crate::browser::sandbox::BrowserSandbox;
 use leptos::prelude::*;
+
+use crate::browser::sandbox::BrowserSandbox;
 
 /// 沙箱列表组件
 #[component]
@@ -80,7 +81,7 @@ fn SandboxListItem(
             <div class="sandbox-info">
                 <div class="sandbox-name">{sandbox.name.clone()}</div>
                 <div class="sandbox-meta">
-                    {format!("Port: {} | Memory: {} MB", 
+                    {format!("Port: {} | Memory: {} MB",
                         sandbox.cdp_port,
                         sandbox.resource_limits.memory_limit_mb
                     )}

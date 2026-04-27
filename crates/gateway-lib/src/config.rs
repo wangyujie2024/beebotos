@@ -6,12 +6,13 @@
 //! - Validation and defaults
 //! - Secrets protection
 
-use secrecy::{ExposeSecret, Secret};
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::env;
 use std::net::SocketAddr;
 use std::path::Path;
+
+use secrecy::{ExposeSecret, Secret};
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::{info, warn};
 use validator::Validate;
@@ -476,18 +477,17 @@ impl Default for JwtConfig {
         // Auto-generated secrets are ONLY allowed in debug/development builds
         if !cfg!(debug_assertions) {
             panic!(
-                "SECURITY ERROR: JWT_SECRET must be explicitly configured in production.\n\
-                 Set the JWT_SECRET environment variable with a strong secret (at least 32 characters).\n\
-                 Do NOT use auto-generated secrets in production builds."
+                "SECURITY ERROR: JWT_SECRET must be explicitly configured in production.\nSet the \
+                 JWT_SECRET environment variable with a strong secret (at least 32 \
+                 characters).\nDo NOT use auto-generated secrets in production builds."
             );
         }
 
         // Generate a random secret for development only
         let dev_secret = format!("dev-secret-{}", uuid::Uuid::new_v4());
         warn!(
-            "SECURITY WARNING: Using auto-generated JWT secret. \n\
-             This is ONLY acceptable in development. \n\
-             For production, set JWT_SECRET environment variable."
+            "SECURITY WARNING: Using auto-generated JWT secret. \nThis is ONLY acceptable in \
+             development. \nFor production, set JWT_SECRET environment variable."
         );
 
         Self {

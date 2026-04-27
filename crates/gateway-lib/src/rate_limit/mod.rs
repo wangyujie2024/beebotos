@@ -7,9 +7,10 @@
 //!
 //! All implementations use async-aware synchronization primitives.
 
-use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Duration;
+
+use serde::{Deserialize, Serialize};
 
 pub mod sliding_window;
 pub mod token_bucket;
@@ -137,7 +138,8 @@ impl RateLimitResult {
 /// DashMap is already thread-safe, so the extra RwLock was unnecessary overhead
 #[derive(Clone)]
 pub struct RateLimitManager {
-    /// Route-specific limiters - using DashMap directly for lock-free concurrent access
+    /// Route-specific limiters - using DashMap directly for lock-free
+    /// concurrent access
     limiters: Arc<dashmap::DashMap<String, Arc<dyn RateLimiter>>>,
     /// Default fallback limiter
     default_limiter: Arc<dyn RateLimiter>,
@@ -387,8 +389,9 @@ impl RateLimiter for NoopRateLimiter {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use tokio::time::{sleep, Duration};
+
+    use super::*;
 
     #[tokio::test]
     async fn test_fixed_window_basic() {

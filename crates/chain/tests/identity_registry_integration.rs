@@ -4,10 +4,8 @@
 
 use alloy_primitives::{Address, FixedBytes, B256, U256};
 use beebotos_chain::config::ChainConfig;
-use beebotos_chain::identity::{
-    registry::{AgentId, AgentInfo, IdentityRegistrationBuilder},
-    IdentityRegistry,
-};
+use beebotos_chain::identity::registry::{AgentId, AgentInfo, IdentityRegistrationBuilder};
+use beebotos_chain::identity::IdentityRegistry;
 
 /// Create a test chain configuration
 fn test_config() -> ChainConfig {

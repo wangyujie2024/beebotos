@@ -1,8 +1,9 @@
 //! Agent implementation
 //!
 //! Core Agent struct and task execution logic.
-//! 
-//! 🆕 PLANNING FIX: Integrated planning module for autonomous task planning and execution.
+//!
+//! 🆕 PLANNING FIX: Integrated planning module for autonomous task planning and
+//! execution.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -12,7 +13,7 @@ use tokio::sync::RwLock;
 use tokio::time::timeout;
 use tracing::{error, info, warn};
 
-use crate::device::{Device, DeviceAutomation, AppLifecycle};
+use crate::device::{AppLifecycle, Device, DeviceAutomation};
 use crate::error::AgentError;
 use crate::planning::{
     ExecutionResult, Plan, PlanContext, PlanExecutor, PlanId, PlanStatus, PlanStep, PlanStrategy,
@@ -20,8 +21,10 @@ use crate::planning::{
 };
 use crate::task::{Artifact, Task, TaskResult, TaskType};
 use crate::{
-    a2a, communication, events, mcp, queue, skills, state_manager, types, wallet, AgentConfig,
+    a2a, communication, events, llm, mcp, queue, skills, state_manager, types, wallet, AgentConfig,
 };
+use crate::llm::{Message as LlmMessage, Role as LlmRole};
+use crate::tools::{ExecTool, ProcessTool, ReadFileTool, SearchFilesTool, WebFetchTool, WriteFileTool};
 
 pub struct Agent {
     pub(crate) config: AgentConfig,
@@ -32,6 +35,8 @@ pub struct Agent {
     pub(crate) queue_manager: Option<Arc<queue::QueueManager>>,
     pub(crate) skill_registry: Option<Arc<skills::SkillRegistry>>,
     pub(crate) llm_interface: Option<Arc<dyn communication::LLMCallInterface>>,
+    /// 🆕 TOOL-CALLING FIX: Direct LLM client with tool support
+    pub(crate) llm_client: Option<Arc<llm::LLMClient>>,
     // 🔒 P0 FIX: Wallet integration for on-chain transactions
     pub(crate) wallet: Option<Arc<wallet::AgentWallet>>,
     // 🟢 P1 FIX: 统一事件总线 - 复用 core::EventBus
@@ -68,6 +73,7 @@ impl Agent {
             queue_manager: None,
             skill_registry: None,
             llm_interface: None,
+            llm_client: None,
             state: state_manager::AgentState::Registered,
             wallet: None,    // 🔒 P0 FIX: Initialize wallet as None
             event_bus: None, // 🟢 P1 FIX: Initialize event bus as None
@@ -98,12 +104,18 @@ impl Agent {
         self
     }
 
-    pub fn with_outbound_router(mut self, router: Arc<communication::OutboundMessageRouter>) -> Self {
+    pub fn with_outbound_router(
+        mut self,
+        router: Arc<communication::OutboundMessageRouter>,
+    ) -> Self {
         self.outbound_router = Some(router);
         self
     }
 
-    pub fn with_message_rx(mut self, rx: tokio::sync::mpsc::Receiver<communication::UserMessageContext>) -> Self {
+    pub fn with_message_rx(
+        mut self,
+        rx: tokio::sync::mpsc::Receiver<communication::UserMessageContext>,
+    ) -> Self {
         self.message_rx = Some(rx);
         self
     }
@@ -117,11 +129,15 @@ impl Agent {
     }
 
     /// Takes ownership of the message receiver (can only be called once).
-    pub fn take_message_rx(&mut self) -> Option<tokio::sync::mpsc::Receiver<communication::UserMessageContext>> {
+    pub fn take_message_rx(
+        &mut self,
+    ) -> Option<tokio::sync::mpsc::Receiver<communication::UserMessageContext>> {
         self.message_rx.take()
     }
 
-    pub fn message_rx_ref(&self) -> Option<&tokio::sync::mpsc::Receiver<communication::UserMessageContext>> {
+    pub fn message_rx_ref(
+        &self,
+    ) -> Option<&tokio::sync::mpsc::Receiver<communication::UserMessageContext>> {
         self.message_rx.as_ref()
     }
 
@@ -145,6 +161,61 @@ impl Agent {
     ) -> Self {
         self.llm_interface = Some(interface);
         self
+    }
+
+    /// 🆕 TOOL-CALLING FIX: Set LLM client with tool support
+    pub fn with_llm_client(mut self, client: Arc<llm::LLMClient>) -> Self {
+        self.llm_client = Some(client);
+        self
+    }
+
+    /// 🆕 TOOL-CALLING FIX: Register all built-in tools on the LLM client
+    pub async fn register_tools(
+        &self,
+        skill_registry: Option<Arc<skills::SkillRegistry>>,
+    ) -> Result<(), AgentError> {
+        let Some(ref client) = self.llm_client else {
+            return Ok(());
+        };
+
+        // Register general-purpose tools
+        client
+            .register_tool("read_file", Box::new(ReadFileTool::new()))
+            .await;
+        client
+            .register_tool("write_file", Box::new(WriteFileTool::new()))
+            .await;
+        client
+            .register_tool("search_files", Box::new(SearchFilesTool::new()))
+            .await;
+        client
+            .register_tool("web_fetch", Box::new(WebFetchTool::new()))
+            .await;
+        client
+            .register_tool("exec", Box::new(ExecTool::new()))
+            .await;
+        client
+            .register_tool("process", Box::new(ProcessTool::new()))
+            .await;
+
+        // Register skill tools if registry is available
+        if let Some(registry) = skill_registry {
+            client
+                .register_tool(
+                    "list_skills",
+                    Box::new(skills::tools::list_skills::ListSkillsTool::new(registry.clone())),
+                )
+                .await;
+            client
+                .register_tool(
+                    "read_skill",
+                    Box::new(skills::tools::read_skill::ReadSkillTool::new(registry.clone())),
+                )
+                .await;
+        }
+
+        info!("Registered all tools on LLM client for agent {}", self.config.id);
+        Ok(())
     }
 
     /// 🔒 P0 FIX: Set wallet for on-chain transactions
@@ -299,7 +370,9 @@ impl Agent {
                 Device::Android(d) => d.connect().await,
             }
         } else {
-            Err(AgentError::InvalidConfig("No device configured".to_string()))
+            Err(AgentError::InvalidConfig(
+                "No device configured".to_string(),
+            ))
         }
     }
 
@@ -321,7 +394,8 @@ impl Agent {
             mcp.initialize_all().await?;
         }
 
-        // Channel lifecycle is managed globally by ChannelInstanceManager, not per-agent.
+        // Channel lifecycle is managed globally by ChannelInstanceManager, not
+        // per-agent.
 
         self.state = state_manager::AgentState::Idle;
         Ok(())
@@ -370,8 +444,9 @@ impl Agent {
     }
 
     /// Process a task with full implementation
-    /// 
-    /// 🆕 PLANNING FIX: Enhanced with automatic complexity detection and planning integration
+    ///
+    /// 🆕 PLANNING FIX: Enhanced with automatic complexity detection and
+    /// planning integration
     async fn process_task(&self, task: Task) -> Result<TaskResult, AgentError> {
         info!("Processing task {} of type {}", task.id, task.task_type);
 
@@ -380,7 +455,7 @@ impl Agent {
         // 🆕 PLANNING FIX: Check if this is a planning-related task or needs planning
         // Clone task ID before moving task
         let task_id = task.id.clone();
-        
+
         let result = match &task.task_type {
             TaskType::LlmChat => self.handle_llm_task(&task).await,
             TaskType::SkillExecution => self.handle_skill_task(&task).await,
@@ -437,16 +512,18 @@ impl Agent {
 
     async fn handle_llm_task(&self, task: &Task) -> Result<(String, Vec<Artifact>), AgentError> {
         // 🆕 PLANNING FIX: 基于实际消息内容判断复杂度，复杂任务使用 planning 执行
-        let (message_text, skill_hint) = if let Ok(json) = serde_json::from_str::<serde_json::Value>(&task.input) {
-            let msg = json.get("message")
-                .and_then(|m| m.as_str())
-                .map(|s| s.to_string())
-                .unwrap_or_else(|| task.input.clone());
-            let hint = json.get("skill_hint").cloned();
-            (msg, hint)
-        } else {
-            (task.input.clone(), None)
-        };
+        let (message_text, skill_hint) =
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&task.input) {
+                let msg = json
+                    .get("message")
+                    .and_then(|m| m.as_str())
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| task.input.clone());
+                let hint = json.get("skill_hint").cloned();
+                (msg, hint)
+            } else {
+                (task.input.clone(), None)
+            };
 
         let char_count = message_text.chars().count();
         let has_explicit_planning_param = task.parameters.contains_key("multi_step")
@@ -465,12 +542,17 @@ impl Agent {
             || message_text.contains("方案")
             || message_text.contains("攻略")
             || message_text.contains("流程");
-        let has_multi_step_indicators =
-            (message_text.contains("先") || message_text.contains("首先"))
-            && (message_text.contains("再") || message_text.contains("然后") || message_text.contains("最后") || message_text.contains("接着"));
+        let has_multi_step_indicators = (message_text.contains("先")
+            || message_text.contains("首先"))
+            && (message_text.contains("再")
+                || message_text.contains("然后")
+                || message_text.contains("最后")
+                || message_text.contains("接着"));
 
         // 中文文本密度高，适当降低阈值
-        let is_chinese = message_text.chars().any(|c| ('\u{4e00}'..='\u{9fff}').contains(&c));
+        let is_chinese = message_text
+            .chars()
+            .any(|c| ('\u{4e00}'..='\u{9fff}').contains(&c));
         let planning_threshold = if is_chinese { 50 } else { 120 };
         let long_threshold = if is_chinese { 120 } else { 300 };
 
@@ -479,22 +561,40 @@ impl Agent {
         // 设置 6 字符下限防止单字误触发（如"计"）。
         // 🆕 FIX: 但生成类 skill（travel/writer 等）不走 planning，一次性生成更高效。
         let is_generative_skill = skill_hint.as_ref().map_or(false, |hint| {
-            let name = hint.get("name").and_then(|v| v.as_str()).unwrap_or("").to_lowercase();
-            name.contains("travel") || name.contains("planner")
-                || name.contains("writer") || name.contains("creator")
-                || name.contains("story") || name.contains("email")
-                || name.contains("master") || name.contains("game")
+            let name = hint
+                .get("name")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_lowercase();
+            name.contains("travel")
+                || name.contains("planner")
+                || name.contains("writer")
+                || name.contains("creator")
+                || name.contains("story")
+                || name.contains("email")
+                || name.contains("master")
+                || name.contains("game")
         });
 
         let is_complex = has_explicit_planning_param
             || (has_planning_keywords && char_count >= 6 && !is_generative_skill)
             || has_multi_step_indicators
-            || (char_count > planning_threshold && (has_planning_keywords || has_multi_step_indicators))
+            || (char_count > planning_threshold
+                && (has_planning_keywords || has_multi_step_indicators))
             || char_count > long_threshold;
 
         if self.is_planning_ready() && is_complex {
-            info!("🧠 Complex LLM task detected (message length: {}), using planning for task {}", message_text.len(), task.id);
+            info!(
+                "🧠 Complex LLM task detected (message length: {}), using planning for task {}",
+                message_text.len(),
+                task.id
+            );
             return self.execute_with_planning(task.clone()).await;
+        }
+
+        // 🆕 TOOL-CALLING FIX: Use LLM client with tools if available
+        if self.llm_client.is_some() {
+            return self.handle_llm_task_with_tools(task).await;
         }
 
         let llm = self
@@ -503,66 +603,93 @@ impl Agent {
             .ok_or_else(|| AgentError::InvalidConfig("LLM interface not configured".into()))?;
 
         // Parse structured input JSON to extract current message and context metadata
-        let (input_text, mut extra_params, image_urls, history, gateway_memory_context) = if let Ok(json) = serde_json::from_str::<serde_json::Value>(&task.input) {
-            let message = json.get("message")
-                .and_then(|m| m.as_str())
-                .unwrap_or(&task.input)
-                .to_string();
-            let mut params = task.parameters.clone();
-            if let Some(platform) = json.get("platform").and_then(|p| p.as_str()) {
-                params.insert("platform".to_string(), platform.to_string());
-            }
-            if let Some(channel_id) = json.get("channel_id").and_then(|c| c.as_str()) {
-                params.insert("channel_id".to_string(), channel_id.to_string());
-            }
-            if let Some(user_id) = json.get("user_id").and_then(|u| u.as_str()) {
-                params.insert("user_id".to_string(), user_id.to_string());
-            }
-            if let Some(session_id) = json.get("session_id").and_then(|s| s.as_str()) {
-                params.insert("session_id".to_string(), session_id.to_string());
-            }
-            let images: Vec<String> = json.get("images")
-                .and_then(|v| v.as_array())
-                .map(|arr| arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect())
-                .unwrap_or_default();
-            let history: Vec<(String, String)> = json.get("history")
-                .and_then(|v| v.as_array())
-                .map(|arr| {
-                    arr.iter()
-                        .filter_map(|v| {
-                            let role = v.get("role").and_then(|r| r.as_str())?;
-                            let content = v.get("content").and_then(|c| c.as_str())?;
-                            Some((role.to_string(), content.to_string()))
-                        })
-                        .collect()
-                })
-                .unwrap_or_default();
-            let memory_context = json.get("memory_context")
-                .and_then(|m| m.as_str())
-                .map(|s| s.to_string());
-            (message, params, images, history, memory_context)
-        } else {
-            (task.input.clone(), task.parameters.clone(), Vec::new(), Vec::new(), None)
-        };
+        let (input_text, mut extra_params, image_urls, history, gateway_memory_context) =
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&task.input) {
+                let message = json
+                    .get("message")
+                    .and_then(|m| m.as_str())
+                    .unwrap_or(&task.input)
+                    .to_string();
+                let mut params = task.parameters.clone();
+                if let Some(platform) = json.get("platform").and_then(|p| p.as_str()) {
+                    params.insert("platform".to_string(), platform.to_string());
+                }
+                if let Some(channel_id) = json.get("channel_id").and_then(|c| c.as_str()) {
+                    params.insert("channel_id".to_string(), channel_id.to_string());
+                }
+                if let Some(user_id) = json.get("user_id").and_then(|u| u.as_str()) {
+                    params.insert("user_id".to_string(), user_id.to_string());
+                }
+                if let Some(session_id) = json.get("session_id").and_then(|s| s.as_str()) {
+                    params.insert("session_id".to_string(), session_id.to_string());
+                }
+                let images: Vec<String> = json
+                    .get("images")
+                    .and_then(|v| v.as_array())
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                let history: Vec<(String, String)> = json
+                    .get("history")
+                    .and_then(|v| v.as_array())
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|v| {
+                                let role = v.get("role").and_then(|r| r.as_str())?;
+                                let content = v.get("content").and_then(|c| c.as_str())?;
+                                Some((role.to_string(), content.to_string()))
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                let memory_context = json
+                    .get("memory_context")
+                    .and_then(|m| m.as_str())
+                    .map(|s| s.to_string());
+                (message, params, images, history, memory_context)
+            } else {
+                (
+                    task.input.clone(),
+                    task.parameters.clone(),
+                    Vec::new(),
+                    Vec::new(),
+                    None,
+                )
+            };
 
         let mut metadata = std::collections::HashMap::new();
         if !image_urls.is_empty() {
-            metadata.insert("image_urls".to_string(), serde_json::to_string(&image_urls).unwrap_or_default());
+            metadata.insert(
+                "image_urls".to_string(),
+                serde_json::to_string(&image_urls).unwrap_or_default(),
+            );
         }
 
         // Build message list with memory context, history, and current message
         let mut messages: Vec<communication::Message> = Vec::new();
 
-        // 🆕 FIX: 当 gateway 传入 skill_hint 时，使用其 prompt_template 作为核心 persona。
-        // 若 gateway 已通过 memory_context 注入 skill prompt（当前标准行为），则 persona 只做轻量标识，
-        // 避免同一份 prompt_template 在 persona message 和 memory message 中重复出现，浪费 token。
+        // 🆕 FIX: 当 gateway 传入 skill_hint 时，使用其 prompt_template 作为核心
+        // persona。 若 gateway 已通过 memory_context 注入 skill
+        // prompt（当前标准行为），则 persona 只做轻量标识，
+        // 避免同一份 prompt_template 在 persona message 和 memory message
+        // 中重复出现，浪费 token。
         let persona = if let Some(ref hint) = skill_hint {
-            let name = hint.get("name").and_then(|v| v.as_str()).unwrap_or(&self.config.name);
-            let prompt_template = hint.get("prompt_template").and_then(|v| v.as_str()).unwrap_or("");
+            let name = hint
+                .get("name")
+                .and_then(|v| v.as_str())
+                .unwrap_or(&self.config.name);
+            let prompt_template = hint
+                .get("prompt_template")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
             if !prompt_template.is_empty() {
                 // 检查 gateway 是否已把 skill prompt 注入 memory_context
-                let gateway_has_skill_prompt = gateway_memory_context.as_ref()
-                    .map_or(false, |m| m.contains(prompt_template.trim().split('\n').next().unwrap_or("")));
+                let gateway_has_skill_prompt = gateway_memory_context.as_ref().map_or(false, |m| {
+                    m.contains(prompt_template.trim().split('\n').next().unwrap_or(""))
+                });
                 if gateway_has_skill_prompt {
                     // Gateway 已注入完整 skill prompt，persona 只做轻量标识
                     format!("你是 {}。请保持友好、专业、有帮助的态度回答问题。", name)
@@ -571,14 +698,19 @@ impl Agent {
                     format!("[角色] {}\n\n{}", name, prompt_template)
                 }
             } else {
-                let desc = hint.get("description").and_then(|v| v.as_str()).unwrap_or(&self.config.description);
-                format!("你是 {}（{}）。请保持友好、专业、有帮助的态度回答问题。", name, desc)
+                let desc = hint
+                    .get("description")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or(&self.config.description);
+                format!(
+                    "你是 {}（{}）。请保持友好、专业、有帮助的态度回答问题。",
+                    name, desc
+                )
             }
         } else {
             format!(
                 "你是 {}（{}）。请保持友好、专业、有帮助的态度回答问题。",
-                self.config.name,
-                self.config.description
+                self.config.name, self.config.description
             )
         };
         messages.push(communication::Message::new(
@@ -587,41 +719,79 @@ impl Agent {
             persona,
         ));
 
-        // 🟢 P1 FIX: Use gateway-provided memory_context if available (avoids redundant search + dirty query)
+        // 🟢 P1 FIX: Use gateway-provided memory_context if available (avoids redundant
+        // search + dirty query)
         if let Some(ref gateway_memory) = gateway_memory_context {
             if !gateway_memory.is_empty() {
-                info!("Using gateway-provided memory context ({} chars) for agent {}", gateway_memory.len(), self.config.id);
+                info!(
+                    "Using gateway-provided memory context ({} chars) for agent {}",
+                    gateway_memory.len(),
+                    self.config.id
+                );
                 messages.push(communication::Message::new(
                     uuid::Uuid::new_v4(),
                     communication::PlatformType::Custom,
-                    format!("[系统提示：以下是该用户的历史记忆，回答时必须结合这些信息]\n{}", gateway_memory),
+                    format!(
+                        "[系统提示：以下是该用户的历史记忆，回答时必须结合这些信息]\n{}",
+                        gateway_memory
+                    ),
                 ));
             }
         } else if let Some(ref memory) = self.memory_system {
-            // Fallback: local search using ONLY input_text (never concatenate history — prevents self-referential duplication)
+            // Fallback: local search using ONLY input_text (never concatenate history —
+            // prevents self-referential duplication)
             let query = input_text.clone();
 
             // 🆕 FIX (方案B): fallback 记忆检索也采用独立预算
             let char_count = query.chars().count();
             let is_simple = char_count <= 10;
             let is_complex = char_count > 30
-                || query.contains("计划") || query.contains("规划") || query.contains("步骤")
-                || query.contains("安排") || query.contains("攻略") || query.contains("对比")
-                || query.contains("分析") || query.contains("总结");
-            let search_limit = if is_complex { 6 } else if char_count > 15 { 4 } else { 2 };
-            let max_memory_chars = if is_simple { 400 } else if is_complex { 1200 } else { 800 };
+                || query.contains("计划")
+                || query.contains("规划")
+                || query.contains("步骤")
+                || query.contains("安排")
+                || query.contains("攻略")
+                || query.contains("对比")
+                || query.contains("分析")
+                || query.contains("总结");
+            let search_limit = if is_complex {
+                6
+            } else if char_count > 15 {
+                4
+            } else {
+                2
+            };
+            let max_memory_chars = if is_simple {
+                400
+            } else if is_complex {
+                1200
+            } else {
+                800
+            };
 
             match memory.search(&query).await {
                 Ok(results) => {
-                    info!("Agent {} local memory search returned {} results (limit={}) for query '{}'..", self.config.id, results.len(), search_limit, query.chars().take(40).collect::<String>());
+                    info!(
+                        "Agent {} local memory search returned {} results (limit={}) for query \
+                         '{}'..",
+                        self.config.id,
+                        results.len(),
+                        search_limit,
+                        query.chars().take(40).collect::<String>()
+                    );
                     let input_lower = input_text.to_lowercase();
                     let mut total_chars = 0;
-                    let memory_context: String = results.iter()
+                    let memory_context: String = results
+                        .iter()
                         .filter(|r| {
                             // Skip memories that are essentially the current query being repeated
-                            let is_self_referential = r.content.to_lowercase().contains(&input_lower);
+                            let is_self_referential =
+                                r.content.to_lowercase().contains(&input_lower);
                             if is_self_referential {
-                                info!("Filtering out self-referential memory: {}", r.content.chars().take(40).collect::<String>());
+                                info!(
+                                    "Filtering out self-referential memory: {}",
+                                    r.content.chars().take(40).collect::<String>()
+                                );
                             }
                             !is_self_referential
                         })
@@ -631,7 +801,10 @@ impl Agent {
                             if total_chars + entry.len() > max_memory_chars {
                                 if total_chars == 0 {
                                     // First entry already too long, truncate it
-                                    let truncated = format!("- {}...", &r.content[..r.content.len().min(max_memory_chars - 4)]);
+                                    let truncated = format!(
+                                        "- {}...",
+                                        &r.content[..r.content.len().min(max_memory_chars - 4)]
+                                    );
                                     total_chars += truncated.len();
                                     return Some(truncated);
                                 }
@@ -643,11 +816,17 @@ impl Agent {
                         .collect::<Vec<_>>()
                         .join("\n");
                     if !memory_context.is_empty() {
-                        info!("Injecting memory context ({} chars) into agent LLM prompt", memory_context.len());
+                        info!(
+                            "Injecting memory context ({} chars) into agent LLM prompt",
+                            memory_context.len()
+                        );
                         messages.push(communication::Message::new(
                             uuid::Uuid::new_v4(),
                             communication::PlatformType::Custom,
-                            format!("[系统提示：以下是该用户的历史记忆，回答时必须结合这些信息]\n{}", memory_context),
+                            format!(
+                                "[系统提示：以下是该用户的历史记忆，回答时必须结合这些信息]\n{}",
+                                memory_context
+                            ),
                         ));
                     }
                 }
@@ -689,10 +868,19 @@ impl Agent {
         };
         extra_params.insert("max_tokens".to_string(), dynamic_max_tokens);
 
-        // 🟢 P2 FIX: Check LLM response cache for simple text queries (no images, < 500 chars)
+        // 🟢 P2 FIX: Check LLM response cache for simple text queries (no images, < 500
+        // chars)
         let cache_key = if image_urls.is_empty() && input_text.len() < 500 {
-            let memory_hash = gateway_memory_context.as_ref().map(|m| m.len().to_string()).unwrap_or_else(|| "0".to_string());
-            Some(format!("{}|{}|{}", self.config.id, input_text.trim(), memory_hash))
+            let memory_hash = gateway_memory_context
+                .as_ref()
+                .map(|m| m.len().to_string())
+                .unwrap_or_else(|| "0".to_string());
+            Some(format!(
+                "{}|{}|{}",
+                self.config.id,
+                input_text.trim(),
+                memory_hash
+            ))
         } else {
             None
         };
@@ -701,7 +889,12 @@ impl Agent {
             let cache = self.llm_response_cache.read().await;
             if let Some((cached_response, timestamp)) = cache.get(key) {
                 if timestamp.elapsed() < Duration::from_secs(300) {
-                    info!("P2 CACHE HIT: agent {} returning cached response for '{}' (age {:?})", self.config.id, input_text.chars().take(40).collect::<String>(), timestamp.elapsed());
+                    info!(
+                        "P2 CACHE HIT: agent {} returning cached response for '{}' (age {:?})",
+                        self.config.id,
+                        input_text.chars().take(40).collect::<String>(),
+                        timestamp.elapsed()
+                    );
                     return Ok((cached_response.clone(), vec![]));
                 }
             }
@@ -720,150 +913,158 @@ impl Agent {
             // Simple eviction: if cache grows beyond 100 entries, clear oldest half
             if cache.len() > 100 {
                 let mut entries: Vec<_> = cache.drain().collect();
-                entries.sort_by(|a, b| b.1.1.cmp(&a.1.1)); // newest first
+                entries.sort_by(|a, b| b.1 .1.cmp(&a.1 .1)); // newest first
                 let keep = entries.len() / 2;
                 for (k, v) in entries.into_iter().take(keep) {
                     cache.insert(k, v);
                 }
             }
             drop(cache);
-            info!("P2 CACHE STORE: agent {} cached response for '{}'", self.config.id, input_text.chars().take(40).collect::<String>());
+            info!(
+                "P2 CACHE STORE: agent {} cached response for '{}'",
+                self.config.id,
+                input_text.chars().take(40).collect::<String>()
+            );
         }
 
         Ok((response, vec![]))
     }
 
-    /// 🟢 P2 FIX: Helper to execute a registered skill (shared by handle_skill_task and planning)
+    /// 🆕 TOOL-CALLING FIX: Handle LLM task using the new tool-calling framework.
+    /// Builds messages with skills prompt and uses LLMClient's automatic tool loop.
+    async fn handle_llm_task_with_tools(
+        &self,
+        task: &Task,
+    ) -> Result<(String, Vec<Artifact>), AgentError> {
+        let client = self
+            .llm_client
+            .as_ref()
+            .ok_or_else(|| AgentError::InvalidConfig("LLM client not configured".into()))?;
+
+        // Extract input text
+        let input_text = if let Ok(json) = serde_json::from_str::<serde_json::Value>(&task.input) {
+            json.get("message")
+                .and_then(|m| m.as_str())
+                .unwrap_or(&task.input)
+                .to_string()
+        } else {
+            task.input.clone()
+        };
+
+        // Build system message with skills prompt
+        let mut system_content = format!(
+            "你是 {}（{}）。请保持友好、专业、有帮助的态度回答问题。",
+            self.config.name, self.config.description
+        );
+
+        // Inject available skills prompt if registry exists
+        if let Some(ref registry) = self.skill_registry {
+            let skills_prompt = skills::build_skills_prompt(registry).await;
+            if !skills_prompt.is_empty() {
+                system_content.push_str("\n\n");
+                system_content.push_str(&skills_prompt);
+                system_content.push_str(
+                    "\n\n在回复之前：扫描 <available_skills> 中的 <description> 条目。\
+                     如果恰好有一个技能明显适用：使用 read_skill 工具读取其 SKILL.md，然后遵循它。\
+                     如果多个可能适用：选择最具体的一个，然后读取/遵循它。\
+                     如果没有明显适用的：不要读取任何 SKILL.md。\
+                     约束：永远不要预先读取多个技能；只在选择后读取。"
+                );
+            }
+        }
+
+        // Build messages for LLM
+        let messages = vec![
+            LlmMessage::system(system_content),
+            LlmMessage::user(input_text),
+        ];
+
+        let response = client
+            .chat_with_tools_and_messages(messages)
+            .await
+            .map_err(|e| AgentError::Execution(format!("LLM tool-call failed: {}", e)))?;
+
+        Ok((response, vec![]))
+    }
+
+    /// 🆕 REFACTOR: Execute a registered skill via LLM with skill prompt as
+    /// system message. WASM execution removed; all skills are now
+    /// Markdown-based and executed through the LLM.
     async fn execute_registered_skill(
         &self,
         registered_skill: &skills::RegisteredSkill,
         input: &str,
         parameters: Option<HashMap<String, String>>,
-    ) -> Result<skills::executor::SkillExecutionResult, AgentError> {
-        let context = skills::executor::SkillContext {
-            input: input.to_string(),
-            parameters: parameters.unwrap_or_default(),
+    ) -> Result<(String, u64), AgentError> {
+        let start_time = std::time::Instant::now();
+
+        let llm = self
+            .llm_interface
+            .as_ref()
+            .ok_or_else(|| AgentError::InvalidConfig("LLM interface not configured".into()))?;
+
+        let manifest = &registered_skill.skill.manifest;
+        let system_prompt = if !manifest.prompt_template.is_empty() {
+            let mut prompt = manifest.prompt_template.clone();
+            if !manifest.description.is_empty() && !prompt.contains(&manifest.description) {
+                prompt.push_str(&format!("\n\nAbout this skill: {}", manifest.description));
+            }
+            if !manifest.examples.is_empty() {
+                prompt.push_str(&format!("\n\nExamples:\n{}", manifest.examples));
+            }
+            prompt
+        } else {
+            format!(
+                "You are acting as the skill '{}'. {}\n\nSkill capabilities:\n{}\n\nExecute \
+                 the following task using this skill persona.",
+                registered_skill.skill.name,
+                manifest.description,
+                manifest
+                    .capabilities
+                    .iter()
+                    .map(|c| format!("- {}", c))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            )
         };
 
-        let start_time = std::time::Instant::now();
-        
-        // 🆕 FIX: Skip WASM attempt for markdown-based builtin skills that have no WASM binary.
-        // This avoids pointless fs::read calls and confusing "WASM unavailable" logs.
-        let wasm_path_empty = registered_skill.skill.wasm_path.as_os_str().is_empty();
-        
-        // 🆕 FIX: Try WASM execution if kernel and wasm_engine are available
-        let _wasm_attempted = if !wasm_path_empty {
-            if let Some(kernel) = self.kernel.as_ref() {
-                if let Some(engine) = kernel.wasm_engine() {
-                    let wasm_bytes = tokio::fs::read(&registered_skill.skill.wasm_path).await;
-                    if let Ok(bytes) = wasm_bytes {
-                        let module = engine.compile_cached(&registered_skill.skill.id, &bytes);
-                        if let Ok(m) = module {
-                            let instance = engine.instantiate_with_host(&m, &self.config.id);
-                            if let Ok(mut inst) = instance {
-                                let input_bytes = context.input.as_bytes();
-                                if inst.write_memory(0, input_bytes).is_ok() {
-                                    const MAX_OUTPUT_SIZE: usize = 65536;
-                                    let call_result = inst.call_typed::<(i32, i32), i32>(
-                                        &registered_skill.skill.manifest.entry_point,
-                                        (0i32, input_bytes.len() as i32),
-                                    );
-                                    if let Ok(output_ptr) = call_result {
-                                        let output_addr = output_ptr as usize;
-                                        if let Ok(len_bytes) = inst.read_memory(output_addr, 4) {
-                                            let output_len = u32::from_le_bytes([
-                                                len_bytes[0], len_bytes[1], len_bytes[2], len_bytes[3],
-                                            ]) as usize;
-                                            if output_len <= MAX_OUTPUT_SIZE {
-                                                if let Ok(output_bytes) = inst.read_memory(output_addr + 4, output_len) {
-                                                    if let Ok(output) = String::from_utf8(output_bytes) {
-                                                        return Ok(skills::executor::SkillExecutionResult {
-                                                            task_id: registered_skill.skill.id.clone(),
-                                                            success: true,
-                                                            output,
-                                                            structured_output: None,
-                                                            execution_time_ms: start_time.elapsed().as_millis() as u64,
-                                                        });
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                true
-            } else {
-                false
-            }
-        } else {
-            false
-        };
-        
-        // 🆕 FIX: If WASM execution is unavailable or fails, fall back to LLM with skill description as system prompt
-        if !wasm_path_empty {
-            info!("Skill '{}' WASM unavailable or failed, falling back to LLM execution", registered_skill.skill.name);
-        } else {
-            info!("Skill '{}' has no WASM binary, using LLM fallback", registered_skill.skill.name);
-        }
-        
-        if let Some(llm) = &self.llm_interface {
-            // 🆕 FIX: Use skill's custom prompt_template if available, otherwise fall back to generic template
-            let manifest = &registered_skill.skill.manifest;
-            let system_prompt = if !manifest.prompt_template.is_empty() {
-                let mut prompt = manifest.prompt_template.clone();
-                if !manifest.description.is_empty() && !prompt.contains(&manifest.description) {
-                    prompt.push_str(&format!("\n\nAbout this skill: {}", manifest.description));
-                }
-                if !manifest.examples.is_empty() {
-                    prompt.push_str(&format!("\n\nExamples:\n{}", manifest.examples));
-                }
-                prompt
-            } else {
+        let param_context = if let Some(ref params) = parameters {
+            if !params.is_empty() {
                 format!(
-                    "You are acting as the skill '{}'. {}\n\nSkill capabilities:\n{}\n\nExecute the following task using this skill persona.",
-                    registered_skill.skill.name,
-                    manifest.description,
-                    manifest.capabilities.iter().map(|c| format!("- {}", c)).collect::<Vec<_>>().join("\n")
+                    "\n\nParameters:\n{}",
+                    params
+                        .iter()
+                        .map(|(k, v)| format!("- {}: {}", k, v))
+                        .collect::<Vec<_>>()
+                        .join("\n")
                 )
-            };
-            let messages = vec![
-                communication::Message::new(
-                    uuid::Uuid::new_v4(),
-                    communication::PlatformType::Custom,
-                    system_prompt,
-                ),
-                communication::Message::new(
-                    uuid::Uuid::new_v4(),
-                    communication::PlatformType::Custom,
-                    context.input.clone(),
-                ),
-            ];
-            
-            match llm.call_llm(messages, None).await {
-                Ok(response) => {
-                    return Ok(skills::executor::SkillExecutionResult {
-                        task_id: registered_skill.skill.id.clone(),
-                        success: true,
-                        output: response,
-                        structured_output: None,
-                        execution_time_ms: start_time.elapsed().as_millis() as u64,
-                    });
-                }
-                Err(e) => {
-                    warn!("LLM fallback for skill '{}' also failed: {}", registered_skill.skill.name, e);
-                }
+            } else {
+                String::new()
             }
-        }
-        
-        // Last resort: try legacy skill executor
-        let executor = skills::SkillExecutor::new().map_err(|e| {
-            AgentError::Execution(format!("Failed to create skill executor: {}", e))
-        })?;
-        executor.execute(&registered_skill.skill, context).await
-            .map_err(|e| AgentError::Execution(format!("Skill execution failed: {}", e)))
+        } else {
+            String::new()
+        };
+
+        let messages = vec![
+            communication::Message::new(
+                uuid::Uuid::new_v4(),
+                communication::PlatformType::Custom,
+                system_prompt,
+            ),
+            communication::Message::new(
+                uuid::Uuid::new_v4(),
+                communication::PlatformType::Custom,
+                format!("{}{}", input, param_context),
+            ),
+        ];
+
+        let response = llm
+            .call_llm(messages, None)
+            .await
+            .map_err(|e| AgentError::Execution(format!("LLM skill execution failed: {}", e)))?;
+
+        let execution_time_ms = start_time.elapsed().as_millis() as u64;
+        Ok((response, execution_time_ms))
     }
 
     async fn handle_skill_task(&self, task: &Task) -> Result<(String, Vec<Artifact>), AgentError> {
@@ -878,19 +1079,25 @@ impl Agent {
             .ok_or_else(|| AgentError::InvalidConfig("Skill registry not configured".into()))?;
 
         let registered_skill = registry
-            .get(skill_name).await
+            .get(skill_name)
+            .await
             .ok_or_else(|| AgentError::SkillNotFound(skill_name.clone()))?;
 
-        let result = self.execute_registered_skill(&registered_skill, &task.input, Some(task.parameters.clone())).await?;
-        let execution_time_ms = result.execution_time_ms;
+        let (output, execution_time_ms) = self
+            .execute_registered_skill(
+                &registered_skill,
+                &task.input,
+                Some(task.parameters.clone()),
+            )
+            .await?;
 
         let _ = registry.record_usage(skill_name).await;
 
-        let artifacts = if !result.output.is_empty() {
+        let artifacts = if !output.is_empty() {
             vec![Artifact {
                 id: uuid::Uuid::new_v4().to_string(),
                 artifact_type: "skill_output".to_string(),
-                content: result.output.clone().into_bytes(),
+                content: output.into_bytes(),
                 mime_type: "text/plain".to_string(),
             }]
         } else {
@@ -1113,13 +1320,12 @@ impl Agent {
     /// Analyze task complexity to determine execution strategy
     pub async fn analyze_task_complexity(&self, task: &Task) -> TaskComplexity {
         // Heuristic rules for complexity detection
-        let is_complex = 
-            task.input.len() > 200 ||                              // Long description
+        let is_complex = task.input.len() > 200 ||                              // Long description
             task.parameters.contains_key("multi_step") ||          // Explicit multi-step flag
             task.parameters.contains_key("dependencies") ||        // Has dependencies
             task.parameters.contains_key("plan") ||                // Explicit planning request
-            matches!(task.task_type, 
-                TaskType::PlanCreation | 
+            matches!(task.task_type,
+                TaskType::PlanCreation |
                 TaskType::PlanExecution |
                 TaskType::PlanAdaptation
             );
@@ -1141,7 +1347,8 @@ impl Agent {
             TaskComplexity::Complex => true,
             TaskComplexity::Simple => {
                 // Check for explicit planning override
-                task.parameters.get("use_planning")
+                task.parameters
+                    .get("use_planning")
                     .map(|v| v == "true" || v == "1")
                     .unwrap_or(false)
             }
@@ -1149,10 +1356,14 @@ impl Agent {
     }
 
     /// Execute task using planning
-    pub async fn execute_with_planning(&self, task: Task) -> Result<(String, Vec<Artifact>), AgentError> {
-        let planning_engine = self.planning_engine.as_ref().ok_or_else(|| {
-            AgentError::InvalidConfig("Planning engine not configured".into())
-        })?;
+    pub async fn execute_with_planning(
+        &self,
+        task: Task,
+    ) -> Result<(String, Vec<Artifact>), AgentError> {
+        let planning_engine = self
+            .planning_engine
+            .as_ref()
+            .ok_or_else(|| AgentError::InvalidConfig("Planning engine not configured".into()))?;
 
         info!("Using planning for task: {}", task.id);
 
@@ -1165,21 +1376,31 @@ impl Agent {
         // 3. Create plan using the actual message text as goal
         let goal = serde_json::from_str::<serde_json::Value>(&task.input)
             .ok()
-            .and_then(|json| json.get("message").and_then(|m| m.as_str()).map(|s| s.to_string()))
+            .and_then(|json| {
+                json.get("message")
+                    .and_then(|m| m.as_str())
+                    .map(|s| s.to_string())
+            })
             .unwrap_or_else(|| task.input.clone());
         let plan = planning_engine
             .create_plan(&goal, &context, Some(strategy))
             .await
             .map_err(|e| AgentError::Planning(format!("Failed to create plan: {}", e)))?;
 
-        // 🆕 FIX: Store the original user goal so skill matching can use domain keywords
-        // without polluting every step description (which bloats LLM prompts).
+        // 🆕 FIX: Store the original user goal so skill matching can use domain
+        // keywords without polluting every step description (which bloats LLM
+        // prompts).
         {
             let mut g = self.current_plan_goal.write().await;
             *g = Some(goal.clone());
         }
 
-        info!("Created plan {} with {} steps for task {}", plan.id, plan.steps.len(), task.id);
+        info!(
+            "Created plan {} with {} steps for task {}",
+            plan.id,
+            plan.steps.len(),
+            task.id
+        );
 
         // 4. Store active plan
         {
@@ -1190,18 +1411,25 @@ impl Agent {
         // 5. Execute plan with timeout protection
         // 🆕 FIX: 动态计算超时：每步 30s + 15s 缓冲，上限 180s
         let step_count = plan.steps.len().max(1);
-        let plan_timeout_secs = task.parameters.get("timeout_secs")
+        let plan_timeout_secs = task
+            .parameters
+            .get("timeout_secs")
             .and_then(|v| v.parse::<u64>().ok())
             .unwrap_or_else(|| (step_count as u64 * 30 + 15).min(180));
         let plan_timeout = Duration::from_secs(plan_timeout_secs);
-        
+
         let result = match timeout(plan_timeout, self.execute_plan_internal(&plan)).await {
             Ok(r) => r,
             Err(_) => {
-                error!("⏱️ Plan execution timed out after {}s for task {}", plan_timeout.as_secs(), task.id);
-                return Err(AgentError::Execution(
-                    format!("Plan execution timed out after {}s", plan_timeout.as_secs())
-                ));
+                error!(
+                    "⏱️ Plan execution timed out after {}s for task {}",
+                    plan_timeout.as_secs(),
+                    task.id
+                );
+                return Err(AgentError::Execution(format!(
+                    "Plan execution timed out after {}s",
+                    plan_timeout.as_secs()
+                )));
             }
         };
 
@@ -1214,15 +1442,18 @@ impl Agent {
         match result {
             Ok(exec_result) => {
                 if exec_result.success {
-                    let output = exec_result.data
+                    let output = exec_result
+                        .data
                         .and_then(|d| d.get("output").cloned())
                         .and_then(|o| o.as_str().map(|s| s.to_string()))
                         .unwrap_or_else(|| "Plan executed successfully".to_string());
-                    
+
                     Ok((output, vec![]))
                 } else {
                     Err(AgentError::Execution(
-                        exec_result.error.unwrap_or_else(|| "Plan execution failed".to_string())
+                        exec_result
+                            .error
+                            .unwrap_or_else(|| "Plan execution failed".to_string()),
                     ))
                 }
             }
@@ -1233,7 +1464,7 @@ impl Agent {
     /// Create plan context from task
     async fn create_plan_context(&self, task: &Task) -> Result<PlanContext, AgentError> {
         let mut context = PlanContext::new(&self.config.id);
-        
+
         // Add available tools
         let tools = self.get_available_tools().await;
         context.available_tools = tools;
@@ -1245,7 +1476,10 @@ impl Agent {
 
         // Add constraints from task parameters
         if let Some(constraints) = task.parameters.get("constraints") {
-            context.constraints = constraints.split(',').map(|s| s.trim().to_string()).collect();
+            context.constraints = constraints
+                .split(',')
+                .map(|s| s.trim().to_string())
+                .collect();
         }
 
         Ok(context)
@@ -1289,34 +1523,47 @@ impl Agent {
     }
 
     /// Execute plan with step handlers
-    /// 
+    ///
     /// 🆕 OPTIMIZATION: Supports both sequential and parallel execution
     /// 🆕 OPTIMIZATION: Respects step dependencies when executing in parallel
     /// 🆕 FIX: Hard cap on step count to prevent LLM storm and timeout
     async fn execute_plan_internal(&self, plan: &Plan) -> Result<ExecutionResult, AgentError> {
-        const MAX_PLAN_STEPS: usize = 5;  // 🆕 FIX: 从 3 提升到 5，减少暴力截断
-        
+        const MAX_PLAN_STEPS: usize = 5; // 🆕 FIX: 从 3 提升到 5，减少暴力截断
+
         // 🆕 FIX: Reject or truncate plans with too many steps
         if plan.steps.len() > MAX_PLAN_STEPS {
-            warn!("Plan {} has {} steps, exceeding max {}. Truncating to first {} steps.", 
-                  plan.id, plan.steps.len(), MAX_PLAN_STEPS, MAX_PLAN_STEPS);
-            // Note: Truncation requires rebuilding dependencies, so we fall back to sequential
-            // execution on a truncated view. For safety, we execute sequentially.
+            warn!(
+                "Plan {} has {} steps, exceeding max {}. Truncating to first {} steps.",
+                plan.id,
+                plan.steps.len(),
+                MAX_PLAN_STEPS,
+                MAX_PLAN_STEPS
+            );
+            // Note: Truncation requires rebuilding dependencies, so we fall back to
+            // sequential execution on a truncated view. For safety, we execute
+            // sequentially.
             let mut truncated_plan = plan.clone();
             truncated_plan.steps.truncate(MAX_PLAN_STEPS);
             truncated_plan.dependencies.clear();
             for i in 1..truncated_plan.steps.len() {
-                let _ = truncated_plan.add_step_with_deps(truncated_plan.steps[i].clone(), vec![i - 1]);
+                let _ =
+                    truncated_plan.add_step_with_deps(truncated_plan.steps[i].clone(), vec![i - 1]);
             }
-            return self.execute_plan_sequential_or_dependency_aware(&truncated_plan).await;
+            return self
+                .execute_plan_sequential_or_dependency_aware(&truncated_plan)
+                .await;
         }
-        
+
         // Check if parallel execution is enabled via plan metadata
-        let enable_parallel = plan.metadata.get("enable_parallel")
+        let enable_parallel = plan
+            .metadata
+            .get("enable_parallel")
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
-        
-        let max_concurrency = plan.metadata.get("max_concurrency")
+
+        let max_concurrency = plan
+            .metadata
+            .get("max_concurrency")
             .and_then(|v| v.as_u64())
             .unwrap_or(3) as usize; // 🆕 FIX: Reduced default from 5 to 3
 
@@ -1324,56 +1571,65 @@ impl Agent {
         // Simple chain dependencies (0->1->2->...) MUST run sequentially to avoid
         // wasting LLM calls on steps that depend on prior outputs.
         let has_simple_chain_deps = plan.dependencies.len() + 1 == plan.steps.len()
-            && plan.dependencies.iter().all(|(k, v)| v.len() == 1 && v[0] + 1 == *k);
+            && plan
+                .dependencies
+                .iter()
+                .all(|(k, v)| v.len() == 1 && v[0] + 1 == *k);
 
         if enable_parallel && plan.dependencies.is_empty() {
             // Parallel execution only for truly independent steps
             self.execute_plan_parallel(plan, max_concurrency).await
         } else if enable_parallel && has_simple_chain_deps {
             // 🆕 FIX: Chain dependencies → sequential execution, NOT parallel
-            info!("Plan {} has chain dependencies ({} steps), executing sequentially to avoid LLM waste", 
-                  plan.id, plan.steps.len());
+            info!(
+                "Plan {} has chain dependencies ({} steps), executing sequentially to avoid LLM \
+                 waste",
+                plan.id,
+                plan.steps.len()
+            );
             self.execute_plan_sequential_or_dependency_aware(plan).await
         } else {
             // Sequential execution (or dependency-aware)
             self.execute_plan_sequential_or_dependency_aware(plan).await
         }
     }
-    
+
     /// Execute plan steps in parallel
-    /// 
+    ///
     /// 🆕 OPTIMIZATION: Uses futures::future::join_all for concurrent execution
     async fn execute_plan_parallel(
-        &self, 
+        &self,
         plan: &Plan,
         max_concurrency: usize,
     ) -> Result<ExecutionResult, AgentError> {
         let start_time = std::time::Instant::now();
-        use tokio::sync::Semaphore;
         use futures::future::join_all;
-        
+        use tokio::sync::Semaphore;
+
         let semaphore = Arc::new(Semaphore::new(max_concurrency));
-        
+
         // Create futures for all steps
         let mut futures = Vec::new();
         for (step_idx, step) in plan.steps.iter().enumerate() {
             let step = step.clone();
             let semaphore = semaphore.clone();
-            
+
             futures.push(async move {
                 let _permit = semaphore.acquire().await.unwrap();
                 let result = self.execute_step_by_type(&step).await;
                 (step_idx, result)
             });
         }
-        
+
         // Execute all futures concurrently
         let results = join_all(futures).await;
-        
+
         // Check if all succeeded
         let all_success = results.iter().all(|(_, r)| matches!(r, Ok(r) if r.success));
-        let any_failed = results.iter().any(|(_, r)| matches!(r, Ok(r) if !r.success));
-        
+        let any_failed = results
+            .iter()
+            .any(|(_, r)| matches!(r, Ok(r) if !r.success));
+
         // Collect outputs from successful steps, and find first failure if needed
         let mut final_output = "Plan executed successfully".to_string();
         for (_, result) in &results {
@@ -1401,21 +1657,24 @@ impl Agent {
             attempts: 1,
         })
     }
-    
+
     /// Execute plan steps sequentially or with dependency awareness
-    /// 
+    ///
     /// 🆕 OPTIMIZATION: Supports dependency-aware execution
     async fn execute_plan_sequential_or_dependency_aware(
-        &self, 
+        &self,
         plan: &Plan,
     ) -> Result<ExecutionResult, AgentError> {
         let start_time = std::time::Instant::now();
-        
+
         // If no dependencies, execute sequentially
         if plan.dependencies.is_empty() {
             let mut final_output = "Plan executed successfully".to_string();
             for (step_idx, step) in plan.steps.iter().enumerate() {
-                info!("Executing plan {} step {}: {}", plan.id, step_idx, step.description);
+                info!(
+                    "Executing plan {} step {}: {}",
+                    plan.id, step_idx, step.description
+                );
 
                 let step_result = self.execute_step_by_type(step).await;
 
@@ -1450,7 +1709,7 @@ impl Agent {
             return self.execute_plan_with_dependencies(plan).await;
         }
     }
-    
+
     /// Execute step based on its type
     async fn execute_step_by_type(&self, step: &PlanStep) -> Result<ExecutionResult, AgentError> {
         match step.step_type {
@@ -1461,50 +1720,59 @@ impl Agent {
             StepType::Validation => self.execute_validation_step(step).await,
         }
     }
-    
+
     /// Execute plan with dependency awareness
-    /// 
+    ///
     /// 🆕 OPTIMIZATION: Executes steps in waves based on dependencies
-    async fn execute_plan_with_dependencies(&self, plan: &Plan) -> Result<ExecutionResult, AgentError> {
+    async fn execute_plan_with_dependencies(
+        &self,
+        plan: &Plan,
+    ) -> Result<ExecutionResult, AgentError> {
         let start_time = std::time::Instant::now();
 
-        
         let mut completed: std::collections::HashSet<usize> = std::collections::HashSet::new();
         let total_steps = plan.steps.len();
         let mut last_output = "Plan executed successfully".to_string();
-        
+
         while completed.len() < total_steps {
             // Find steps that are ready (all dependencies completed)
-            let ready: Vec<usize> = plan.steps.iter().enumerate()
+            let ready: Vec<usize> = plan
+                .steps
+                .iter()
+                .enumerate()
                 .filter(|(i, _)| !completed.contains(i))
                 .filter(|(i, _)| {
-                    plan.dependencies.get(i)
+                    plan.dependencies
+                        .get(i)
                         .map(|deps| deps.iter().all(|d| completed.contains(d)))
                         .unwrap_or(true)
                 })
                 .map(|(i, _)| i)
                 .collect();
-            
+
             if ready.is_empty() {
                 // Deadlock detected
                 return Err(AgentError::Planning(
-                    "Deadlock detected in plan dependencies".to_string()
+                    "Deadlock detected in plan dependencies".to_string(),
                 ));
             }
-            
+
             // Execute ready steps in parallel using join_all
             use futures::future::join_all;
-            
-            let futures: Vec<_> = ready.into_iter().map(|step_idx| {
-                let step = plan.steps[step_idx].clone();
-                async move {
-                    let result = self.execute_step_by_type(&step).await;
-                    (step_idx, result)
-                }
-            }).collect();
-            
+
+            let futures: Vec<_> = ready
+                .into_iter()
+                .map(|step_idx| {
+                    let step = plan.steps[step_idx].clone();
+                    async move {
+                        let result = self.execute_step_by_type(&step).await;
+                        (step_idx, result)
+                    }
+                })
+                .collect();
+
             let results = join_all(futures).await;
-            
+
             // Process results
             for (step_idx, result) in results {
                 match result {
@@ -1524,7 +1792,7 @@ impl Agent {
                 }
             }
         }
-        
+
         Ok(ExecutionResult {
             success: true,
             data: Some(serde_json::json!({ "output": last_output })),
@@ -1535,42 +1803,108 @@ impl Agent {
     }
 
     /// 🆕 FIX: Smart skill search for plan steps using keyword domain mapping.
-    /// Maps step descriptions to relevant skills based on semantic keyword overlap
-    /// rather than simple string containment.
+    /// Maps step descriptions to relevant skills based on semantic keyword
+    /// overlap rather than simple string containment.
     async fn search_skills_for_step(
         &self,
         registry: &Arc<skills::SkillRegistry>,
         step_description: &str,
     ) -> Vec<skills::RegisteredSkill> {
         let desc_lower = step_description.to_lowercase();
-        
+
         // Domain keyword → skill name/tag mappings
         let domain_keywords: &[(&[&str], &str)] = &[
-            (&["travel", "tour", "trip", "itinerary", "旅游", "旅行", "行程", "攻略", "景点", "酒店"], "travel_planner"),
-            (&["code", "program", "develop", "debug", "coding", "编程", "代码", "开发"], "python_developer"),
+            (
+                &[
+                    "travel",
+                    "tour",
+                    "trip",
+                    "itinerary",
+                    "旅游",
+                    "旅行",
+                    "行程",
+                    "攻略",
+                    "景点",
+                    "酒店",
+                ],
+                "travel_planner",
+            ),
+            (
+                &[
+                    "code", "program", "develop", "debug", "coding", "编程", "代码", "开发",
+                ],
+                "python_developer",
+            ),
             (&["code", "rust", "cargo", "编程", "代码"], "rust_developer"),
-            (&["contract", "solidity", "smart contract", "合约", "区块链"], "solidity_developer"),
+            (
+                &["contract", "solidity", "smart contract", "合约", "区块链"],
+                "solidity_developer",
+            ),
             (&["write", "email", "draft", "邮件", "写信"], "email_writer"),
-            (&["story", "novel", "fiction", "write", "故事", "小说"], "story_writer"),
+            (
+                &["story", "novel", "fiction", "write", "故事", "小说"],
+                "story_writer",
+            ),
             (&["game", "gaming", "游戏", "玩家"], "game_master"),
-            (&["data", "analyze", "analysis", "数据", "分析", "统计"], "data_analyst"),
-            (&["image", "photo", "picture", "图", "照片"], "image_analyst"),
-            (&["calendar", "schedule", "meeting", "日历", "会议", "安排"], "calendar_assistant"),
+            (
+                &["data", "analyze", "analysis", "数据", "分析", "统计"],
+                "data_analyst",
+            ),
+            (
+                &["image", "photo", "picture", "图", "照片"],
+                "image_analyst",
+            ),
+            (
+                &["calendar", "schedule", "meeting", "日历", "会议", "安排"],
+                "calendar_assistant",
+            ),
             (&["task", "todo", "plan", "任务", "待办"], "task_manager"),
-            (&["defi", "yield", "liquidity", "farm", "挖矿", "流动性"], "yield_farmer"),
+            (
+                &["defi", "yield", "liquidity", "farm", "挖矿", "流动性"],
+                "yield_farmer",
+            ),
             (&["nft", "mint", "token", "数字藏品"], "nft_minter"),
-            (&["health", "medical", "doctor", "健康", "医疗", "医生"], "health_advisor"),
-            (&["learn", "study", "tutor", "lesson", "学习", "课程", "辅导"], "tutor"),
-            (&["research", "paper", "survey", "研究", "论文", "调查"], "code_researcher"),
-            (&["dao", "governance", "proposal", "vote", "治理", "提案", "投票"], "governance_analyst"),
-            (&["finance", "portfolio", "invest", "理财", "投资", "组合"], "portfolio_manager"),
-            (&["social", "community", "content", "社媒", "社群", "内容"], "content_creator"),
-            (&["security", "audit", "vulnerability", "安全", "审计", "漏洞"], "auditor"),
+            (
+                &["health", "medical", "doctor", "健康", "医疗", "医生"],
+                "health_advisor",
+            ),
+            (
+                &["learn", "study", "tutor", "lesson", "学习", "课程", "辅导"],
+                "tutor",
+            ),
+            (
+                &["research", "paper", "survey", "研究", "论文", "调查"],
+                "code_researcher",
+            ),
+            (
+                &[
+                    "dao",
+                    "governance",
+                    "proposal",
+                    "vote",
+                    "治理",
+                    "提案",
+                    "投票",
+                ],
+                "governance_analyst",
+            ),
+            (
+                &["finance", "portfolio", "invest", "理财", "投资", "组合"],
+                "portfolio_manager",
+            ),
+            (
+                &["social", "community", "content", "社媒", "社群", "内容"],
+                "content_creator",
+            ),
+            (
+                &["security", "audit", "vulnerability", "安全", "审计", "漏洞"],
+                "auditor",
+            ),
         ];
-        
+
         let mut matched_skill_ids = std::collections::HashSet::new();
         let mut all_candidates = Vec::new();
-        
+
         // 1. Try domain keyword mapping against step description
         for (keywords, skill_id) in domain_keywords {
             if keywords.iter().any(|kw| desc_lower.contains(kw)) {
@@ -1581,7 +1915,7 @@ impl Agent {
                 }
             }
         }
-        
+
         // 🆕 FIX: 优先用原始用户目标匹配 skill（planning steps 常为英文 generic 描述，
         // 而 goal 包含中文领域关键词，匹配成功率更高）。不再要求 all_candidates 为空，
         // 而是总是把 goal 匹配的 skill 加入候选池。
@@ -1591,18 +1925,24 @@ impl Agent {
                 if keywords.iter().any(|kw| goal_lower.contains(kw)) {
                     if let Some(skill) = registry.get(skill_id).await {
                         if matched_skill_ids.insert(skill_id.to_string()) {
-                            info!("P2 PLANNING: skill '{}' matched via goal '{}' for step '{}'", 
-                                  skill_id, goal.chars().take(30).collect::<String>(), 
-                                  step_description.chars().take(40).collect::<String>());
+                            info!(
+                                "P2 PLANNING: skill '{}' matched via goal '{}' for step '{}'",
+                                skill_id,
+                                goal.chars().take(30).collect::<String>(),
+                                step_description.chars().take(40).collect::<String>()
+                            );
                             all_candidates.push(skill);
                         }
                     } else {
-                        warn!("P2 PLANNING: skill '{}' not found in registry (goal match)", skill_id);
+                        warn!(
+                            "P2 PLANNING: skill '{}' not found in registry (goal match)",
+                            skill_id
+                        );
                     }
                 }
             }
         }
-        
+
         // 2. Fallback to registry semantic search (name/description)
         let registry_candidates = registry.search(step_description).await;
         for skill in registry_candidates {
@@ -1610,7 +1950,7 @@ impl Agent {
                 all_candidates.push(skill);
             }
         }
-        
+
         // 3. Tag-based search with keywords extracted from description
         let extracted_keywords: Vec<&str> = desc_lower
             .split_whitespace()
@@ -1624,51 +1964,81 @@ impl Agent {
                 }
             }
         }
-        
+
         all_candidates
     }
 
     /// Execute action step
     ///
-    /// 🟢 P2 FIX: Before falling back to LLM, attempts to match and execute a registered skill.
-    /// This makes planning actually invoke tools instead of just chaining LLM calls.
+    /// 🟢 P2 FIX: Before falling back to LLM, attempts to match and execute a
+    /// registered skill. This makes planning actually invoke tools instead
+    /// of just chaining LLM calls.
     async fn execute_action_step(&self, step: &PlanStep) -> Result<ExecutionResult, AgentError> {
         let start_time = std::time::Instant::now();
 
         // 🟢 P2 FIX: Try skill registry first with semantic keyword matching
         if let Some(ref registry) = self.skill_registry {
             let enabled_count = registry.list_enabled().await.len();
-            info!("P2 PLANNING: skill registry has {} enabled skills for step '{}'", enabled_count, step.description.chars().take(40).collect::<String>());
-            let candidates = self.search_skills_for_step(registry, &step.description).await;
-            info!("P2 PLANNING: found {} candidates for step '{}'", candidates.len(), step.description.chars().take(40).collect::<String>());
+            info!(
+                "P2 PLANNING: skill registry has {} enabled skills for step '{}'",
+                enabled_count,
+                step.description.chars().take(40).collect::<String>()
+            );
+            let candidates = self
+                .search_skills_for_step(registry, &step.description)
+                .await;
+            info!(
+                "P2 PLANNING: found {} candidates for step '{}'",
+                candidates.len(),
+                step.description.chars().take(40).collect::<String>()
+            );
 
             if let Some(skill) = candidates.into_iter().find(|s| s.enabled) {
-                info!("P2 PLANNING: matched skill '{}' for step '{}', executing...", skill.skill.name, step.description.chars().take(40).collect::<String>());
-                match self.execute_registered_skill(&skill, &step.description, None).await {
-                    Ok(result) => {
+                info!(
+                    "P2 PLANNING: matched skill '{}' for step '{}', executing...",
+                    skill.skill.name,
+                    step.description.chars().take(40).collect::<String>()
+                );
+                match self
+                    .execute_registered_skill(&skill, &step.description, None)
+                    .await
+                {
+                    Ok((output, _execution_time_ms)) => {
                         let _ = registry.record_usage(&skill.skill.id).await;
                         return Ok(ExecutionResult {
-                            success: result.success,
-                            data: Some(serde_json::json!({ "output": result.output })),
-                            error: if result.success { None } else { Some(result.output.clone()) },
+                            success: true,
+                            data: Some(serde_json::json!({ "output": output })),
+                            error: None,
                             duration_ms: start_time.elapsed().as_millis() as u64,
                             attempts: 1,
                         });
                     }
                     Err(e) => {
-                        warn!("P2 PLANNING: skill execution failed for step '{}', falling back to LLM: {}", step.description.chars().take(40).collect::<String>(), e);
+                        warn!(
+                            "P2 PLANNING: skill execution failed for step '{}', falling back to \
+                             LLM: {}",
+                            step.description.chars().take(40).collect::<String>(),
+                            e
+                        );
                     }
                 }
             } else {
-                warn!("P2 PLANNING: no enabled skill matched for step '{}'", step.description.chars().take(40).collect::<String>());
+                warn!(
+                    "P2 PLANNING: no enabled skill matched for step '{}'",
+                    step.description.chars().take(40).collect::<String>()
+                );
             }
         } else {
-            warn!("P2 PLANNING: skill registry is None, cannot match skills for step '{}'", step.description.chars().take(40).collect::<String>());
+            warn!(
+                "P2 PLANNING: skill registry is None, cannot match skills for step '{}'",
+                step.description.chars().take(40).collect::<String>()
+            );
         }
 
         // Fallback: use LLM if available
         if let Some(llm) = &self.llm_interface {
-            // 🆕 FIX: Planning 步骤调用 LLM 时携带原始用户目标，避免 LLM "盲打" 导致输出质量差、耗时长。
+            // 🆕 FIX: Planning 步骤调用 LLM 时携带原始用户目标，避免 LLM "盲打"
+            // 导致输出质量差、耗时长。
             let mut messages: Vec<communication::Message> = Vec::new();
             if let Some(ref goal) = *self.current_plan_goal.read().await {
                 messages.push(communication::Message::new(
@@ -1702,7 +2072,9 @@ impl Agent {
         } else {
             Ok(ExecutionResult {
                 success: true,
-                data: Some(serde_json::json!({ "output": format!("Step executed successfully: {}", step.description) })),
+                data: Some(
+                    serde_json::json!({ "output": format!("Step executed successfully: {}", step.description) }),
+                ),
                 error: None,
                 duration_ms: start_time.elapsed().as_millis() as u64,
                 attempts: 1,
@@ -1723,29 +2095,40 @@ impl Agent {
     }
 
     /// Execute information gathering step
-    async fn execute_information_step(&self, step: &PlanStep) -> Result<ExecutionResult, AgentError> {
+    async fn execute_information_step(
+        &self,
+        step: &PlanStep,
+    ) -> Result<ExecutionResult, AgentError> {
         // Information steps gather data from various sources
         self.execute_action_step(step).await
     }
 
     /// Execute validation step
-    async fn execute_validation_step(&self, step: &PlanStep) -> Result<ExecutionResult, AgentError> {
+    async fn execute_validation_step(
+        &self,
+        step: &PlanStep,
+    ) -> Result<ExecutionResult, AgentError> {
         // Validation steps verify results
         self.execute_action_step(step).await
     }
 
     /// Check if should continue on step failure
     fn should_continue_on_failure(&self, plan: &Plan) -> bool {
-        plan.metadata.get("continue_on_failure")
+        plan.metadata
+            .get("continue_on_failure")
             .and_then(|v| v.as_bool())
             .unwrap_or(false)
     }
 
     /// Handle plan creation task
-    pub async fn handle_plan_creation_task(&self, task: &Task) -> Result<(String, Vec<Artifact>), AgentError> {
-        let planning_engine = self.planning_engine.as_ref().ok_or_else(|| {
-            AgentError::InvalidConfig("Planning engine not configured".into())
-        })?;
+    pub async fn handle_plan_creation_task(
+        &self,
+        task: &Task,
+    ) -> Result<(String, Vec<Artifact>), AgentError> {
+        let planning_engine = self
+            .planning_engine
+            .as_ref()
+            .ok_or_else(|| AgentError::InvalidConfig("Planning engine not configured".into()))?;
 
         let context = self.create_plan_context(task).await?;
         let strategy = self.select_plan_strategy(task);
@@ -1763,16 +2146,30 @@ impl Agent {
 
         let output = format!(
             "Created plan '{}' (ID: {}) with {} steps using {:?} strategy",
-            plan.name, plan.id, plan.steps.len(), strategy
+            plan.name,
+            plan.id,
+            plan.steps.len(),
+            strategy
         );
 
         Ok((output, vec![]))
     }
 
     /// Handle plan execution task
-    pub async fn handle_plan_execution_task(&self, task: &Task) -> Result<(String, Vec<Artifact>), AgentError> {
-        let plan_id_str = task.parameters.get("plan_id")
-            .or_else(|| if task.input.is_empty() { None } else { Some(&task.input) })
+    pub async fn handle_plan_execution_task(
+        &self,
+        task: &Task,
+    ) -> Result<(String, Vec<Artifact>), AgentError> {
+        let plan_id_str = task
+            .parameters
+            .get("plan_id")
+            .or_else(|| {
+                if task.input.is_empty() {
+                    None
+                } else {
+                    Some(&task.input)
+                }
+            })
             .ok_or_else(|| AgentError::InvalidConfig("Missing 'plan_id' parameter".into()))?;
 
         let plan_id = PlanId::from_string(plan_id_str);
@@ -1781,13 +2178,15 @@ impl Agent {
         let plan = {
             let active = self.active_plans.read().await;
             active.get(&plan_id).cloned()
-        }.ok_or_else(|| AgentError::NotFound(format!("Plan not found: {}", plan_id)))?;
+        }
+        .ok_or_else(|| AgentError::NotFound(format!("Plan not found: {}", plan_id)))?;
 
         // Execute plan
         let result = self.execute_plan_internal(&plan).await?;
 
         if result.success {
-            let output = result.data
+            let output = result
+                .data
                 .as_ref()
                 .and_then(|d| d.get("output"))
                 .and_then(|o| o.as_str())
@@ -1796,14 +2195,21 @@ impl Agent {
             Ok((output, vec![]))
         } else {
             Err(AgentError::Execution(
-                result.error.unwrap_or_else(|| "Plan execution failed".to_string())
+                result
+                    .error
+                    .unwrap_or_else(|| "Plan execution failed".to_string()),
             ))
         }
     }
 
     /// Handle plan adaptation task
-    pub async fn handle_plan_adaptation_task(&self, task: &Task) -> Result<(String, Vec<Artifact>), AgentError> {
-        let plan_id_str = task.parameters.get("plan_id")
+    pub async fn handle_plan_adaptation_task(
+        &self,
+        task: &Task,
+    ) -> Result<(String, Vec<Artifact>), AgentError> {
+        let plan_id_str = task
+            .parameters
+            .get("plan_id")
             .ok_or_else(|| AgentError::InvalidConfig("Missing 'plan_id' parameter".into()))?;
 
         let plan_id = PlanId::from_string(plan_id_str);
@@ -1812,7 +2218,8 @@ impl Agent {
         let plan = {
             let active = self.active_plans.read().await;
             active.get(&plan_id).cloned()
-        }.ok_or_else(|| AgentError::NotFound(format!("Plan not found: {}", plan_id)))?;
+        }
+        .ok_or_else(|| AgentError::NotFound(format!("Plan not found: {}", plan_id)))?;
 
         // Attempt replanning if replanner is available
         if let Some(replanner) = &self.replanner {
@@ -1863,23 +2270,29 @@ impl Agent {
     }
 
     /// Explicitly create a plan using planning engine
-    pub async fn create_plan(&self, goal: &str, strategy: PlanStrategy) -> Result<Plan, AgentError> {
-        let engine = self.planning_engine.as_ref().ok_or_else(|| {
-            AgentError::InvalidConfig("Planning engine not configured".into())
-        })?;
+    pub async fn create_plan(
+        &self,
+        goal: &str,
+        strategy: PlanStrategy,
+    ) -> Result<Plan, AgentError> {
+        let engine = self
+            .planning_engine
+            .as_ref()
+            .ok_or_else(|| AgentError::InvalidConfig("Planning engine not configured".into()))?;
 
         let context = PlanContext::new(&self.config.id);
-        
-        let plan = engine.create_plan(goal, &context, Some(strategy))
+
+        let plan = engine
+            .create_plan(goal, &context, Some(strategy))
             .await
             .map_err(|e| AgentError::Planning(format!("Failed to create plan: {}", e)))?;
-        
+
         // Store plan in active_plans
         {
             let mut active = self.active_plans.write().await;
             active.insert(plan.id.clone(), plan.clone());
         }
-        
+
         Ok(plan)
     }
 
@@ -1905,18 +2318,30 @@ impl Agent {
     // 🆕 DEVICE FIX: Device automation task handlers
 
     /// Handle device automation task
-    pub async fn handle_device_automation_task(&self, task: &Task) -> Result<(String, Vec<Artifact>), AgentError> {
+    pub async fn handle_device_automation_task(
+        &self,
+        task: &Task,
+    ) -> Result<(String, Vec<Artifact>), AgentError> {
         let device = self.device.as_ref().ok_or_else(|| {
             AgentError::InvalidConfig("No device configured for automation".into())
         })?;
 
-        let action = task.parameters.get("action")
-            .ok_or_else(|| AgentError::InvalidConfig("Missing 'action' parameter for device automation".into()))?;
+        let action = task.parameters.get("action").ok_or_else(|| {
+            AgentError::InvalidConfig("Missing 'action' parameter for device automation".into())
+        })?;
 
         let result = match action.as_str() {
             "tap" => {
-                let x = task.parameters.get("x").and_then(|s| s.parse().ok()).unwrap_or(0);
-                let y = task.parameters.get("y").and_then(|s| s.parse().ok()).unwrap_or(0);
+                let x = task
+                    .parameters
+                    .get("x")
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(0);
+                let y = task
+                    .parameters
+                    .get("y")
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(0);
                 match device {
                     Device::Node(d) => d.tap(x, y).await,
                     Device::Ios(d) => d.tap(x, y).await,
@@ -1925,17 +2350,40 @@ impl Agent {
                 format!("Tapped at ({}, {})", x, y)
             }
             "swipe" => {
-                let from_x = task.parameters.get("from_x").and_then(|s| s.parse().ok()).unwrap_or(0);
-                let from_y = task.parameters.get("from_y").and_then(|s| s.parse().ok()).unwrap_or(0);
-                let to_x = task.parameters.get("to_x").and_then(|s| s.parse().ok()).unwrap_or(0);
-                let to_y = task.parameters.get("to_y").and_then(|s| s.parse().ok()).unwrap_or(0);
-                let duration = task.parameters.get("duration").and_then(|s| s.parse().ok()).unwrap_or(500);
+                let from_x = task
+                    .parameters
+                    .get("from_x")
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(0);
+                let from_y = task
+                    .parameters
+                    .get("from_y")
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(0);
+                let to_x = task
+                    .parameters
+                    .get("to_x")
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(0);
+                let to_y = task
+                    .parameters
+                    .get("to_y")
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(0);
+                let duration = task
+                    .parameters
+                    .get("duration")
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(500);
                 match device {
                     Device::Node(d) => d.swipe(from_x, from_y, to_x, to_y, duration).await,
                     Device::Ios(d) => d.swipe(from_x, from_y, to_x, to_y, duration).await,
                     Device::Android(d) => d.swipe(from_x, from_y, to_x, to_y, duration).await,
                 }?;
-                format!("Swiped from ({}, {}) to ({}, {})", from_x, from_y, to_x, to_y)
+                format!(
+                    "Swiped from ({}, {}) to ({}, {})",
+                    from_x, from_y, to_x, to_y
+                )
             }
             "screenshot" => {
                 let screenshot = match device {
@@ -1946,7 +2394,11 @@ impl Agent {
                 format!("Screenshot captured: {} bytes", screenshot.len())
             }
             "press_button" => {
-                let button_str = task.parameters.get("button").unwrap_or(&"home".to_string()).clone();
+                let button_str = task
+                    .parameters
+                    .get("button")
+                    .unwrap_or(&"home".to_string())
+                    .clone();
                 let button = match button_str.as_str() {
                     "home" => crate::device::HardwareButton::Home,
                     "back" => crate::device::HardwareButton::Back,
@@ -1972,7 +2424,11 @@ impl Agent {
                 format!("Typed text: {}", text)
             }
             "find_element" => {
-                let locator_type = task.parameters.get("locator_type").unwrap_or(&"id".to_string()).clone();
+                let locator_type = task
+                    .parameters
+                    .get("locator_type")
+                    .unwrap_or(&"id".to_string())
+                    .clone();
                 let locator_value = &task.input;
                 let locator = crate::device::ElementLocator::new(
                     match locator_type.as_str() {
@@ -1982,7 +2438,7 @@ impl Agent {
                         "text" => crate::device::LocatorType::Text,
                         _ => crate::device::LocatorType::Id,
                     },
-                    locator_value
+                    locator_value,
                 );
                 let element = match device {
                     Device::Node(d) => d.find_element(&locator).await,
@@ -1992,7 +2448,11 @@ impl Agent {
                 format!("Found element: {:?}", element)
             }
             "tap_element" => {
-                let locator_type = task.parameters.get("locator_type").unwrap_or(&"id".to_string()).clone();
+                let locator_type = task
+                    .parameters
+                    .get("locator_type")
+                    .unwrap_or(&"id".to_string())
+                    .clone();
                 let locator_value = &task.input;
                 let locator = crate::device::ElementLocator::new(
                     match locator_type.as_str() {
@@ -2002,7 +2462,7 @@ impl Agent {
                         "text" => crate::device::LocatorType::Text,
                         _ => crate::device::LocatorType::Id,
                     },
-                    locator_value
+                    locator_value,
                 );
                 match device {
                     Device::Node(d) => d.tap_element(&locator).await,
@@ -2013,7 +2473,8 @@ impl Agent {
             }
             _ => {
                 return Err(AgentError::InvalidConfig(format!(
-                    "Unknown device action: {}", action
+                    "Unknown device action: {}",
+                    action
                 )));
             }
         };
@@ -2022,12 +2483,17 @@ impl Agent {
     }
 
     /// Handle app lifecycle task
-    pub async fn handle_app_lifecycle_task(&self, task: &Task) -> Result<(String, Vec<Artifact>), AgentError> {
+    pub async fn handle_app_lifecycle_task(
+        &self,
+        task: &Task,
+    ) -> Result<(String, Vec<Artifact>), AgentError> {
         let device = self.device.as_ref().ok_or_else(|| {
             AgentError::InvalidConfig("No device configured for app lifecycle".into())
         })?;
 
-        let operation = task.parameters.get("operation")
+        let operation = task
+            .parameters
+            .get("operation")
             .ok_or_else(|| AgentError::InvalidConfig("Missing 'operation' parameter".into()))?;
 
         let package = &task.input;
@@ -2084,7 +2550,8 @@ impl Agent {
             }
             _ => {
                 return Err(AgentError::InvalidConfig(format!(
-                    "Unknown app lifecycle operation: {}", operation
+                    "Unknown app lifecycle operation: {}",
+                    operation
                 )));
             }
         };
@@ -2109,7 +2576,7 @@ pub enum TaskComplexity {
 #[cfg(test)]
 mod planning_integration_tests {
     use super::*;
-    use crate::planning::{PlanningEngine, PlanExecutor};
+    use crate::planning::{PlanExecutor, PlanningEngine};
 
     /// Helper function to create a test agent without planning
     fn create_test_agent() -> Agent {
@@ -2136,7 +2603,7 @@ mod planning_integration_tests {
             input: "Hello".to_string(),
             parameters: HashMap::new(),
         };
-        
+
         assert_eq!(
             agent.analyze_task_complexity(&task).await,
             TaskComplexity::Simple
@@ -2152,7 +2619,7 @@ mod planning_integration_tests {
             input: "x".repeat(201), // > 200 chars
             parameters: HashMap::new(),
         };
-        
+
         assert_eq!(
             agent.analyze_task_complexity(&task).await,
             TaskComplexity::Complex
@@ -2164,14 +2631,14 @@ mod planning_integration_tests {
         let agent = create_test_agent();
         let mut params = HashMap::new();
         params.insert("multi_step".to_string(), "true".to_string());
-        
+
         let task = Task {
             id: "test-3".to_string(),
             task_type: TaskType::SkillExecution,
             input: "Short".to_string(),
             parameters: params,
         };
-        
+
         assert_eq!(
             agent.analyze_task_complexity(&task).await,
             TaskComplexity::Complex
@@ -2181,7 +2648,7 @@ mod planning_integration_tests {
     #[tokio::test]
     async fn test_analyze_task_complexity_planning_types() {
         let agent = create_test_agent();
-        
+
         // PlanCreation should always be Complex
         let plan_task = Task {
             id: "test-4".to_string(),
@@ -2189,12 +2656,12 @@ mod planning_integration_tests {
             input: "Short".to_string(),
             parameters: HashMap::new(),
         };
-        
+
         assert_eq!(
             agent.analyze_task_complexity(&plan_task).await,
             TaskComplexity::Complex
         );
-        
+
         // PlanExecution should always be Complex
         let exec_task = Task {
             id: "test-5".to_string(),
@@ -2202,12 +2669,12 @@ mod planning_integration_tests {
             input: "".to_string(),
             parameters: HashMap::new(),
         };
-        
+
         assert_eq!(
             agent.analyze_task_complexity(&exec_task).await,
             TaskComplexity::Complex
         );
-        
+
         // PlanAdaptation should always be Complex
         let adapt_task = Task {
             id: "test-6".to_string(),
@@ -2215,7 +2682,7 @@ mod planning_integration_tests {
             input: "Adapt".to_string(),
             parameters: HashMap::new(),
         };
-        
+
         assert_eq!(
             agent.analyze_task_complexity(&adapt_task).await,
             TaskComplexity::Complex
@@ -2235,7 +2702,7 @@ mod planning_integration_tests {
             input: "x".repeat(300), // Complex task
             parameters: HashMap::new(),
         };
-        
+
         // Should not use planning if not configured
         assert!(!agent.should_use_planning(&task).await);
     }
@@ -2249,7 +2716,7 @@ mod planning_integration_tests {
             input: "x".repeat(300), // Complex task
             parameters: HashMap::new(),
         };
-        
+
         // Should use planning for complex tasks
         assert!(agent.should_use_planning(&task).await);
     }
@@ -2259,14 +2726,14 @@ mod planning_integration_tests {
         let agent = create_test_agent_with_planning();
         let mut params = HashMap::new();
         params.insert("use_planning".to_string(), "true".to_string());
-        
+
         let task = Task {
             id: "test-9".to_string(),
             task_type: TaskType::LlmChat,
             input: "Short".to_string(), // Simple task
             parameters: params,
         };
-        
+
         // Should use planning if explicitly requested
         assert!(agent.should_use_planning(&task).await);
     }
@@ -2289,7 +2756,7 @@ mod planning_integration_tests {
         let agent = Agent::new(AgentConfig::default())
             .with_planning_engine(Arc::new(PlanningEngine::new()))
             .with_plan_executor(Arc::new(PlanExecutor::new()));
-        
+
         assert!(agent.is_planning_ready());
         assert!(agent.has_planning_engine());
         assert!(agent.has_plan_executor());
@@ -2302,12 +2769,12 @@ mod planning_integration_tests {
     #[tokio::test]
     async fn test_create_and_get_plan() {
         let agent = create_test_agent_with_planning();
-        
+
         let plan = agent
             .create_plan("Test goal", PlanStrategy::ReAct)
             .await
             .expect("Failed to create plan");
-        
+
         // Verify plan exists
         let retrieved = agent.get_active_plan(&plan.id).await;
         assert!(retrieved.is_some());
@@ -2317,15 +2784,21 @@ mod planning_integration_tests {
     #[tokio::test]
     async fn test_list_active_plans() {
         let agent = create_test_agent_with_planning();
-        
+
         // Initially empty
         let plans = agent.list_active_plans().await;
         assert!(plans.is_empty());
-        
+
         // Create some plans
-        let _plan1 = agent.create_plan("Goal 1", PlanStrategy::ReAct).await.unwrap();
-        let _plan2 = agent.create_plan("Goal 2", PlanStrategy::Hybrid).await.unwrap();
-        
+        let _plan1 = agent
+            .create_plan("Goal 1", PlanStrategy::ReAct)
+            .await
+            .unwrap();
+        let _plan2 = agent
+            .create_plan("Goal 2", PlanStrategy::Hybrid)
+            .await
+            .unwrap();
+
         let plans = agent.list_active_plans().await;
         assert_eq!(plans.len(), 2);
     }
@@ -2333,12 +2806,18 @@ mod planning_integration_tests {
     #[tokio::test]
     async fn test_cancel_plan() {
         let agent = create_test_agent_with_planning();
-        
-        let plan = agent.create_plan("Test goal", PlanStrategy::ReAct).await.unwrap();
-        
+
+        let plan = agent
+            .create_plan("Test goal", PlanStrategy::ReAct)
+            .await
+            .unwrap();
+
         // Cancel plan
-        agent.cancel_plan(&plan.id).await.expect("Failed to cancel plan");
-        
+        agent
+            .cancel_plan(&plan.id)
+            .await
+            .expect("Failed to cancel plan");
+
         // Verify removed
         assert!(agent.get_active_plan(&plan.id).await.is_none());
     }
@@ -2346,10 +2825,10 @@ mod planning_integration_tests {
     #[tokio::test]
     async fn test_cancel_nonexistent_plan() {
         let agent = create_test_agent_with_planning();
-        
+
         let fake_id = PlanId::new();
         let result = agent.cancel_plan(&fake_id).await;
-        
+
         assert!(result.is_err());
         match result.unwrap_err() {
             AgentError::NotFound(_) => (), // Expected
@@ -2364,9 +2843,9 @@ mod planning_integration_tests {
     #[tokio::test]
     async fn test_create_plan_without_engine() {
         let agent = create_test_agent(); // No planning engine
-        
+
         let result = agent.create_plan("Test goal", PlanStrategy::ReAct).await;
-        
+
         assert!(result.is_err());
         match result.unwrap_err() {
             AgentError::InvalidConfig(msg) => {
@@ -2379,10 +2858,10 @@ mod planning_integration_tests {
     #[tokio::test]
     async fn test_get_active_plan_nonexistent() {
         let agent = create_test_agent_with_planning();
-        
+
         let fake_id = PlanId::new();
         let plan = agent.get_active_plan(&fake_id).await;
-        
+
         assert!(plan.is_none());
     }
 
@@ -2395,14 +2874,14 @@ mod planning_integration_tests {
         let agent = create_test_agent();
         let mut params = HashMap::new();
         params.insert("strategy".to_string(), "react".to_string());
-        
+
         let task = Task {
             id: "test-strategy".to_string(),
             task_type: TaskType::LlmChat,
             input: "Test".to_string(),
             parameters: params,
         };
-        
+
         assert_eq!(agent.select_plan_strategy(&task), PlanStrategy::ReAct);
     }
 
@@ -2411,15 +2890,18 @@ mod planning_integration_tests {
         let agent = create_test_agent();
         let mut params = HashMap::new();
         params.insert("strategy".to_string(), "cot".to_string());
-        
+
         let task = Task {
             id: "test-strategy".to_string(),
             task_type: TaskType::LlmChat,
             input: "Test".to_string(),
             parameters: params,
         };
-        
-        assert_eq!(agent.select_plan_strategy(&task), PlanStrategy::ChainOfThought);
+
+        assert_eq!(
+            agent.select_plan_strategy(&task),
+            PlanStrategy::ChainOfThought
+        );
     }
 
     #[test]
@@ -2431,7 +2913,7 @@ mod planning_integration_tests {
             input: "Test".to_string(),
             parameters: HashMap::new(),
         };
-        
+
         assert_eq!(agent.select_plan_strategy(&task), PlanStrategy::Hybrid);
     }
 }

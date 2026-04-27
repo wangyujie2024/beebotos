@@ -6,25 +6,23 @@ pub mod config;
 pub mod logger;
 pub mod proxy;
 
-use axum::{
-    extract::{Request, State},
-    http::{header, HeaderValue, StatusCode},
-    response::IntoResponse,
-    routing::get,
-    Router,
-};
+use axum::extract::{Request, State};
+use axum::http::{header, HeaderValue, StatusCode};
+use axum::response::IntoResponse;
+use axum::routing::get;
+use axum::Router;
 use tower_http::services::ServeDir;
 use tower_http::set_header::SetResponseHeaderLayer;
 
 /// 创建应用路由
-pub fn create_app(
-    static_path: &str,
-    proxy_state: proxy::ProxyState,
-) -> Router {
+pub fn create_app(static_path: &str, proxy_state: proxy::ProxyState) -> Router {
     // 静态文件服务 - 使用 fallback 返回 index.html 支持 SPA 路由
     let serve_dir = ServeDir::new(static_path)
         .append_index_html_on_directories(true)
-        .fallback(tower_http::services::ServeFile::new(format!("{}/index.html", static_path)));
+        .fallback(tower_http::services::ServeFile::new(format!(
+            "{}/index.html",
+            static_path
+        )));
 
     // 创建 API 路由，使用嵌套路由匹配 /api/v1/... 等多级路径
     let api_routes = Router::new()
@@ -87,11 +85,7 @@ pub async fn run(config: &config::AppConfig) -> anyhow::Result<()> {
     let listener = tokio::net::TcpListener::bind(&addr).await?;
 
     // 记录启动信息
-    logger::log_startup(
-        &addr,
-        &config.static_file.path,
-        &config.proxy.gateway_url,
-    );
+    logger::log_startup(&addr, &config.static_file.path, &config.proxy.gateway_url);
 
     // 启动服务器
     axum::serve(listener, app).await?;
@@ -105,12 +99,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_create_app() {
-        let proxy_state = proxy::ProxyState::new(
-            "http://localhost:3000".to_string(),
-            30,
-            false,
-        )
-        .unwrap();
+        let proxy_state =
+            proxy::ProxyState::new("http://localhost:3000".to_string(), 30, false).unwrap();
 
         let _app = create_app("pkg", proxy_state);
     }

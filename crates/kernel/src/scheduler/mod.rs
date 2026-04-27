@@ -8,10 +8,11 @@
 //! - Task preemption
 //! - Resource accounting
 
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+
+use serde::{Deserialize, Serialize};
 use tokio::sync::{Mutex, RwLock};
 use tracing::{debug, info, trace};
 
@@ -23,11 +24,12 @@ pub mod resource;
 pub mod task;
 pub mod task_tracker;
 
-pub use task_tracker::{TaskStatus, TaskInfo as TrackedTaskInfo, TaskStatusEvent, TaskStatusTracker};
-
 pub use executor::{CancellationToken, ExecutableTask, TaskHandle, ThreadPoolExecutor};
 pub use queue::TaskQueue;
 pub use task::{CapabilityLevel, CapabilitySet, Priority, Task, TaskBuilder, TaskId, TaskState};
+pub use task_tracker::{
+    TaskInfo as TrackedTaskInfo, TaskStatus, TaskStatusEvent, TaskStatusTracker,
+};
 
 use crate::error::{KernelError, Result};
 use crate::resource::ResourceLimits;

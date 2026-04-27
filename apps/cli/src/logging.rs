@@ -5,14 +5,14 @@
 
 #![allow(dead_code)]
 
-use serde::Serialize;
 use std::io::Write;
 use std::sync::Mutex;
 use std::time::SystemTime;
 
+use serde::Serialize;
+
 /// Log level
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub enum LogLevel {
     Trace,
     Debug,
@@ -58,10 +58,8 @@ impl LogLevel {
     }
 }
 
-
 /// Log output format
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum LogFormat {
     /// Human-readable text format
     #[default]
@@ -69,7 +67,6 @@ pub enum LogFormat {
     /// JSON structured format
     Json,
 }
-
 
 /// Logger configuration
 #[derive(Debug, Clone)]

@@ -15,11 +15,13 @@ use tracing::{debug, info, warn};
 
 use crate::error::{GatewayError, Result};
 
-/// Channel-Agent binding record (LEGACY — deprecated, use `agent_channel_bindings` table instead)
+/// Channel-Agent binding record (LEGACY — deprecated, use
+/// `agent_channel_bindings` table instead)
 ///
-/// P2 OPTIMIZE: This struct and the `ChannelBindingStore` below are part of the legacy
-/// binding system. New code should use `AgentChannelService` + `AgentChannelBinding`
-/// from `beebotos_agents::services` and `beebotos_agents::communication::agent_channel`.
+/// P2 OPTIMIZE: This struct and the `ChannelBindingStore` below are part of the
+/// legacy binding system. New code should use `AgentChannelService` +
+/// `AgentChannelBinding` from `beebotos_agents::services` and
+/// `beebotos_agents::communication::agent_channel`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChannelBinding {
     pub platform: String,
@@ -68,15 +70,14 @@ impl ChannelBindingStore {
         let cache = Arc::new(DashMap::new());
 
         // Warm cache from DB
-        let rows: Vec<(String, String, String)> = sqlx::query_as(
-            "SELECT platform, channel_id, agent_id FROM channel_agent_bindings",
-        )
-        .fetch_all(&db)
-        .await
-        .map_err(|e| GatewayError::Internal {
-            correlation_id: uuid::Uuid::new_v4().to_string(),
-            message: format!("Failed to load channel bindings: {}", e),
-        })?;
+        let rows: Vec<(String, String, String)> =
+            sqlx::query_as("SELECT platform, channel_id, agent_id FROM channel_agent_bindings")
+                .fetch_all(&db)
+                .await
+                .map_err(|e| GatewayError::Internal {
+                    correlation_id: uuid::Uuid::new_v4().to_string(),
+                    message: format!("Failed to load channel bindings: {}", e),
+                })?;
 
         for (platform, channel_id, agent_id) in rows {
             let key = format!("{}:{}", platform, channel_id);
@@ -92,12 +93,7 @@ impl ChannelBindingStore {
     }
 
     /// Bind a channel to an agent
-    pub async fn bind(
-        &self,
-        platform: &str,
-        channel_id: &str,
-        agent_id: &str,
-    ) -> Result<()> {
+    pub async fn bind(&self, platform: &str, channel_id: &str, agent_id: &str) -> Result<()> {
         let created_at = Utc::now().to_rfc3339();
         let key = format!("{}:{}", platform, channel_id);
 
@@ -190,12 +186,10 @@ impl ChannelBindingStore {
     }
 
     /// List all bindings for a specific agent
-    pub async fn list_bindings_for_agent(
-        &self,
-        agent_id: &str,
-    ) -> Result<Vec<ChannelBinding>> {
+    pub async fn list_bindings_for_agent(&self, agent_id: &str) -> Result<Vec<ChannelBinding>> {
         let rows: Vec<(String, String, String, String)> = sqlx::query_as(
-            "SELECT platform, channel_id, agent_id, created_at FROM channel_agent_bindings WHERE agent_id = ?1",
+            "SELECT platform, channel_id, agent_id, created_at FROM channel_agent_bindings WHERE \
+             agent_id = ?1",
         )
         .bind(agent_id)
         .fetch_all(&self.db)
@@ -207,12 +201,14 @@ impl ChannelBindingStore {
 
         Ok(rows
             .into_iter()
-            .map(|(platform, channel_id, agent_id, created_at)| ChannelBinding {
-                platform,
-                channel_id,
-                agent_id,
-                created_at,
-            })
+            .map(
+                |(platform, channel_id, agent_id, created_at)| ChannelBinding {
+                    platform,
+                    channel_id,
+                    agent_id,
+                    created_at,
+                },
+            )
             .collect())
     }
 
@@ -230,12 +226,14 @@ impl ChannelBindingStore {
 
         Ok(rows
             .into_iter()
-            .map(|(platform, channel_id, agent_id, created_at)| ChannelBinding {
-                platform,
-                channel_id,
-                agent_id,
-                created_at,
-            })
+            .map(
+                |(platform, channel_id, agent_id, created_at)| ChannelBinding {
+                    platform,
+                    channel_id,
+                    agent_id,
+                    created_at,
+                },
+            )
             .collect())
     }
 }

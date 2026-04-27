@@ -15,7 +15,7 @@ pub use permission_system::{
     PermissionContext, PermissionResult,
 };
 pub use session_isolation::{
-    IsolatedSession, IsolationError, IsolationLevel, ResourceLimits, ResourceUsage, 
+    IsolatedSession, IsolationError, IsolationLevel, ResourceLimits, ResourceUsage,
     SessionIsolationManager, SessionSecurityConfig,
 };
 pub use webhook_security::{ReplayProtection, WebhookSignatureVerifier};

@@ -1,7 +1,7 @@
 //! Network Connection Pool Manager
 //!
-//! Provides connection pooling, management, and health monitoring for TCP/QUIC/WebSocket protocols.
-//! Implements:
+//! Provides connection pooling, management, and health monitoring for
+//! TCP/QUIC/WebSocket protocols. Implements:
 //! - Connection pooling with configurable limits
 //! - Connection multiplexing
 //! - Keepalive and health monitoring
@@ -1271,9 +1271,10 @@ pub async fn measure_latency(addr: SocketAddr, timeout: Duration) -> Result<u64>
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpListener;
+
+    use super::*;
 
     #[tokio::test]
     async fn test_connection_pool() {
@@ -1330,7 +1331,8 @@ mod tests {
             ..Default::default()
         };
 
-        // Create pool should work even without server (connections will fail but pool exists)
+        // Create pool should work even without server (connections will fail but pool
+        // exists)
         let pool = manager.create_pool(config).await;
         assert!(pool.is_ok());
 

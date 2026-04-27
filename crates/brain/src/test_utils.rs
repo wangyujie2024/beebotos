@@ -5,16 +5,15 @@
 
 #![cfg(test)]
 
-use crate::{
-    cognition::{Action, CognitiveState, Goal, MemoryItem, WorkingMemory},
-    emotion::state::EmotionState,
-    memory::{EpisodicMemory, MemoryQuery, SemanticMemory, ShortTermMemory, UnifiedMemory},
-    neat::{Genome, NeatConfig, NeuralNetwork},
-    pad::{EmotionalIntelligence, Pad},
-    personality::OceanProfile,
-    ApiConfig, SocialBrainApi,
-};
 use serde_json::json;
+
+use crate::cognition::{Action, CognitiveState, Goal, MemoryItem, WorkingMemory};
+use crate::emotion::state::EmotionState;
+use crate::memory::{EpisodicMemory, MemoryQuery, SemanticMemory, ShortTermMemory, UnifiedMemory};
+use crate::neat::{Genome, NeatConfig, NeuralNetwork};
+use crate::pad::{EmotionalIntelligence, Pad};
+use crate::personality::OceanProfile;
+use crate::{ApiConfig, SocialBrainApi};
 
 /// Create a test API instance with default configuration
 pub fn create_test_api() -> SocialBrainApi {

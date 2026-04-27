@@ -1,10 +1,8 @@
 //! Emotion System Benchmarks
 
-use beebotos_brain::{
-    emotion::state::EmotionState,
-    pad::{EmotionalEvent, EmotionalIntelligence, EmotionalTrait, Pad},
-    personality::OceanProfile,
-};
+use beebotos_brain::emotion::state::EmotionState;
+use beebotos_brain::pad::{EmotionalEvent, EmotionalIntelligence, EmotionalTrait, Pad};
+use beebotos_brain::personality::OceanProfile;
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 
 /// Benchmark PAD operations

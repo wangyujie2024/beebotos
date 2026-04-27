@@ -17,20 +17,44 @@ async fn test_instance_state_machine() {
     assert_eq!(inst.status, InstanceStatus::Pending);
 
     // Pending → Running ✅
-    manager.update_status(&id, InstanceStatus::Running).await.unwrap();
-    assert_eq!(manager.get(&id).await.unwrap().status, InstanceStatus::Running);
+    manager
+        .update_status(&id, InstanceStatus::Running)
+        .await
+        .unwrap();
+    assert_eq!(
+        manager.get(&id).await.unwrap().status,
+        InstanceStatus::Running
+    );
 
     // Running → Paused ✅
-    manager.update_status(&id, InstanceStatus::Paused).await.unwrap();
-    assert_eq!(manager.get(&id).await.unwrap().status, InstanceStatus::Paused);
+    manager
+        .update_status(&id, InstanceStatus::Paused)
+        .await
+        .unwrap();
+    assert_eq!(
+        manager.get(&id).await.unwrap().status,
+        InstanceStatus::Paused
+    );
 
     // Paused → Running ✅
-    manager.update_status(&id, InstanceStatus::Running).await.unwrap();
-    assert_eq!(manager.get(&id).await.unwrap().status, InstanceStatus::Running);
+    manager
+        .update_status(&id, InstanceStatus::Running)
+        .await
+        .unwrap();
+    assert_eq!(
+        manager.get(&id).await.unwrap().status,
+        InstanceStatus::Running
+    );
 
     // Running → Stopped ✅
-    manager.update_status(&id, InstanceStatus::Stopped).await.unwrap();
-    assert_eq!(manager.get(&id).await.unwrap().status, InstanceStatus::Stopped);
+    manager
+        .update_status(&id, InstanceStatus::Stopped)
+        .await
+        .unwrap();
+    assert_eq!(
+        manager.get(&id).await.unwrap().status,
+        InstanceStatus::Stopped
+    );
 
     // 清理
     manager.delete(&id).await.unwrap();
@@ -53,8 +77,14 @@ async fn test_invalid_state_transitions() {
     assert!(result.is_err());
 
     // 必须先 Running
-    manager.update_status(&id, InstanceStatus::Running).await.unwrap();
-    manager.update_status(&id, InstanceStatus::Stopped).await.unwrap();
+    manager
+        .update_status(&id, InstanceStatus::Running)
+        .await
+        .unwrap();
+    manager
+        .update_status(&id, InstanceStatus::Stopped)
+        .await
+        .unwrap();
 
     // Stopped → Running ❌（已终止）
     let result = manager.update_status(&id, InstanceStatus::Running).await;
@@ -65,13 +95,31 @@ async fn test_invalid_state_transitions() {
 async fn test_usage_stats_and_filtering() {
     let manager = InstanceManager::new();
 
-    let id1 = manager.create("skill-a", "agent-1", HashMap::new()).await.unwrap();
-    let id2 = manager.create("skill-b", "agent-1", HashMap::new()).await.unwrap();
-    let _id3 = manager.create("skill-a", "agent-2", HashMap::new()).await.unwrap();
+    let id1 = manager
+        .create("skill-a", "agent-1", HashMap::new())
+        .await
+        .unwrap();
+    let id2 = manager
+        .create("skill-b", "agent-1", HashMap::new())
+        .await
+        .unwrap();
+    let _id3 = manager
+        .create("skill-a", "agent-2", HashMap::new())
+        .await
+        .unwrap();
 
-    manager.update_status(&id1, InstanceStatus::Running).await.unwrap();
-    manager.update_status(&id2, InstanceStatus::Running).await.unwrap();
-    manager.update_status(&id2, InstanceStatus::Stopped).await.unwrap();
+    manager
+        .update_status(&id1, InstanceStatus::Running)
+        .await
+        .unwrap();
+    manager
+        .update_status(&id2, InstanceStatus::Running)
+        .await
+        .unwrap();
+    manager
+        .update_status(&id2, InstanceStatus::Stopped)
+        .await
+        .unwrap();
 
     // 记录执行统计
     manager.record_execution(&id1, true, 100.0).await.unwrap();

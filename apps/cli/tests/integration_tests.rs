@@ -1,7 +1,8 @@
 //! Integration tests for BeeBotOS CLI
 //!
-//! These tests verify the CLI behavior using the `assert_cmd` and `predicates` crates.
-//! They invoke the CLI as a subprocess and verify exit codes, stdout, and stderr.
+//! These tests verify the CLI behavior using the `assert_cmd` and `predicates`
+//! crates. They invoke the CLI as a subprocess and verify exit codes, stdout,
+//! and stderr.
 
 use assert_cmd::Command;
 use predicates::prelude::*;
@@ -68,7 +69,8 @@ mod agent_commands {
 
     #[test]
     fn test_agent_list_without_server() {
-        // This test verifies that the command fails gracefully when server is unavailable
+        // This test verifies that the command fails gracefully when server is
+        // unavailable
         let mut cmd = cli();
         cmd.args(["agent", "list"]);
         // Should fail because the mock server is not running
@@ -81,8 +83,9 @@ mod agent_commands {
 }
 
 mod config_commands {
-    use super::*;
     use tempfile::TempDir;
+
+    use super::*;
 
     #[test]
     fn test_config_show() {
@@ -294,10 +297,10 @@ mod client_tests {
         // Verify all main commands exist in help output
         let mut cmd = cli();
         cmd.arg("--help");
-        
+
         let output = cmd.output().unwrap();
         let stdout = String::from_utf8_lossy(&output.stdout);
-        
+
         // Check for main command categories
         assert!(stdout.contains("agent"), "Missing agent command");
         assert!(stdout.contains("brain"), "Missing brain command");
@@ -326,7 +329,7 @@ mod error_tests {
         let mut cmd = cli();
         cmd.env("BEEBOTOS_API_URL", "not-a-valid-url");
         cmd.args(["info"]);
-        
+
         // Should either fail gracefully or handle the error
         let output = cmd.output().unwrap();
         // Command may succeed or fail, but should not panic
@@ -339,15 +342,15 @@ mod error_tests {
         cmd.env_remove("BEEBOTOS_API_KEY");
         cmd.env("BEEBOTOS_API_URL", "http://localhost:9999");
         cmd.args(["agent", "list"]);
-        
+
         let output = cmd.output().unwrap();
         let stderr = String::from_utf8_lossy(&output.stderr);
-        
+
         // Should report missing API key
         assert!(
-            stderr.contains("API key") || 
-            stderr.contains("BEEBOTOS_API_KEY") ||
-            output.status.success() == false
+            stderr.contains("API key")
+                || stderr.contains("BEEBOTOS_API_KEY")
+                || output.status.success() == false
         );
     }
 }

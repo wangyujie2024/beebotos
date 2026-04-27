@@ -6,11 +6,13 @@
 //! - Usage tracking
 //! - Out-of-memory handling
 
-use crate::error::{KernelError, Result};
-use parking_lot::Mutex;
 use std::collections::BTreeMap;
 use std::sync::OnceLock;
+
+use parking_lot::Mutex;
 use tracing::{debug, error, trace, warn};
+
+use crate::error::{KernelError, Result};
 
 /// Heap block header
 #[derive(Debug, Clone, Copy)]
@@ -128,7 +130,8 @@ impl KernelHeap {
                     );
 
                     trace!(
-                        "Heap split: allocated {} bytes at 0x{:x}, new free block at 0x{:x} ({} bytes)",
+                        "Heap split: allocated {} bytes at 0x{:x}, new free block at 0x{:x} ({} \
+                         bytes)",
                         min_alloc_size,
                         addr,
                         new_block_addr,

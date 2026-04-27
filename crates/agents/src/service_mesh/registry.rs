@@ -518,7 +518,7 @@ mod tests {
     async fn test_service_expiry() {
         // Create entry with very short TTL (1 second)
         let entry = ServiceEntry::new("svc-1", "test-service", "1.0.0").with_ttl(1);
-        
+
         // Wait for entry to expire
         tokio::time::sleep(std::time::Duration::from_secs(2)).await;
 
@@ -530,7 +530,7 @@ mod tests {
         let mut entry = ServiceEntry::new("svc-1", "test-service", "1.0.0").with_ttl(3600);
 
         let old_heartbeat = entry.last_heartbeat_at;
-        
+
         // Small delay to ensure timestamp changes
         tokio::time::sleep(std::time::Duration::from_millis(10)).await;
         entry.heartbeat();

@@ -1,7 +1,8 @@
 //! 配置列表组件
 
-use crate::browser::{BrowserProfile, ConnectionStatus};
 use leptos::prelude::*;
+
+use crate::browser::{BrowserProfile, ConnectionStatus};
 
 /// 配置列表组件
 #[component]

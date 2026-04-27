@@ -68,11 +68,11 @@ pub trait Command: Send + Sync {
     }
 
     /// Execute the command
-    /// 
+    ///
     /// # Arguments
     /// * `args` - Command arguments (space-separated)
     /// * `ctx` - Command execution context
-    /// 
+    ///
     /// # Returns
     /// * Command response text
     async fn execute(&self, args: &[&str], ctx: &CommandContext) -> Result<String>;
@@ -136,22 +136,26 @@ impl CommandHandler {
     /// Initialize and register all built-in commands
     pub async fn initialize(&self) {
         self.register(Arc::new(HelpCommand)).await;
-        self.register(Arc::new(StatusCommand::new(self.runtime.clone()))).await;
+        self.register(Arc::new(StatusCommand::new(self.runtime.clone())))
+            .await;
         self.register(Arc::new(PingCommand)).await;
-        self.register(Arc::new(TasksCommand::new(self.runtime.clone()))).await;
-        
+        self.register(Arc::new(TasksCommand::new(self.runtime.clone())))
+            .await;
+
         // Create LinkHandler once and reuse for SummarizeCommand
-        let link_handler = self.llm.as_ref().and_then(|llm| {
-            match super::LinkHandler::new(llm.clone()) {
-                Ok(handler) => Some(Arc::new(handler)),
-                Err(e) => {
-                    tracing::warn!("Failed to create LinkHandler: {}", e);
-                    None
-                }
-            }
-        });
-        self.register(Arc::new(SummarizeCommand::new(link_handler))).await;
-        
+        let link_handler =
+            self.llm
+                .as_ref()
+                .and_then(|llm| match super::LinkHandler::new(llm.clone()) {
+                    Ok(handler) => Some(Arc::new(handler)),
+                    Err(e) => {
+                        tracing::warn!("Failed to create LinkHandler: {}", e);
+                        None
+                    }
+                });
+        self.register(Arc::new(SummarizeCommand::new(link_handler)))
+            .await;
+
         self.register(Arc::new(StartCommand)).await;
         info!("Command handler initialized with built-in commands");
     }
@@ -159,7 +163,7 @@ impl CommandHandler {
     /// Register a command
     pub async fn register(&self, command: Arc<dyn Command>) {
         let mut commands = self.commands.write().await;
-        
+
         // Register primary name
         let name = command.name().to_lowercase();
         debug!("Registering command: {}", name);
@@ -178,14 +182,14 @@ impl CommandHandler {
     }
 
     /// Parse and execute a command from text
-    /// 
+    ///
     /// # Arguments
     /// * `text` - Full command text (e.g., "/status --verbose")
     /// * `ctx` - Command context
     pub async fn execute(&self, text: &str, ctx: CommandContext) -> CommandResult {
         // Parse command and arguments
         let (cmd_name, args) = self.parse_command(text);
-        
+
         debug!("Executing command: {} with args: {:?}", cmd_name, args);
 
         // Find command
@@ -221,10 +225,10 @@ impl CommandHandler {
     fn parse_command(&self, text: &str) -> (String, Vec<String>) {
         // Remove leading slash if present
         let text = text.trim_start_matches('/');
-        
+
         // Split by whitespace
         let parts: Vec<&str> = text.split_whitespace().collect();
-        
+
         if parts.is_empty() {
             return (String::new(), vec![]);
         }
@@ -242,11 +246,11 @@ impl CommandHandler {
             .values()
             .map(|cmd| (cmd.name().to_string(), cmd.description().to_string()))
             .collect();
-        
+
         // Remove duplicates (from aliases)
         result.sort_by(|a, b| a.0.cmp(&b.0));
         result.dedup_by(|a, b| a.0 == b.0);
-        
+
         result
     }
 
@@ -295,12 +299,8 @@ impl Command for HelpCommand {
         if args.is_empty() {
             // List all commands
             Ok(format!(
-                "📚 可用命令:\n\
-                 /help - 显示此帮助\n\
-                 /status - 查看系统状态\n\
-                 /ping - 测试连接\n\
-                 /tasks - 查看任务列表\n\n\
-                 💡 使用 /help <命令> 查看详细信息"
+                "📚 可用命令:\n/help - 显示此帮助\n/status - 查看系统状态\n/ping - \
+                 测试连接\n/tasks - 查看任务列表\n\n💡 使用 /help <命令> 查看详细信息"
             ))
         } else {
             // Show specific command help
@@ -346,7 +346,10 @@ impl Command for StatusCommand {
 
         // System info
         response.push_str("✅ 系统运行正常\n");
-        response.push_str(&format!("🕐 当前时间: {}\n", chrono::Local::now().format("%Y-%m-%d %H:%M:%S")));
+        response.push_str(&format!(
+            "🕐 当前时间: {}\n",
+            chrono::Local::now().format("%Y-%m-%d %H:%M:%S")
+        ));
 
         // Runtime info if available
         if let Some(ref _runtime) = self.runtime {
@@ -458,12 +461,8 @@ impl Command for SummarizeCommand {
 
         if let Some(ref handler) = self.link_handler {
             match handler.process(url).await {
-                Ok(summary) => {
-                    Ok(super::format_summary_for_display(&summary))
-                }
-                Err(e) => {
-                    Ok(format!("❌ 总结失败: {}\n💡 请检查URL是否可访问", e))
-                }
+                Ok(summary) => Ok(super::format_summary_for_display(&summary)),
+                Err(e) => Ok(format!("❌ 总结失败: {}\n💡 请检查URL是否可访问", e)),
             }
         } else {
             Ok(format!("⏳ 正在总结: {}\n请稍候...", url))
@@ -486,13 +485,8 @@ impl Command for StartCommand {
 
     async fn execute(&self, _args: &[&str], ctx: &CommandContext) -> Result<String> {
         Ok(format!(
-            "👋 欢迎使用BeeBotOS!\n\n\
-             我是您的AI助手,可以帮您:\n\
-             • 💬 回答问题\n\
-             • 📝 总结文章链接\n\
-             • 🔄 执行各种任务\n\n\
-             使用 /help 查看可用命令\n\
-             您的ID: {}",
+            "👋 欢迎使用BeeBotOS!\n\n我是您的AI助手,可以帮您:\n• 💬 回答问题\n• 📝 \
+             总结文章链接\n• 🔄 执行各种任务\n\n使用 /help 查看可用命令\n您的ID: {}",
             ctx.sender_id
         ))
     }
@@ -533,7 +527,7 @@ mod tests {
     #[test]
     fn test_parse_command() {
         let handler = CommandHandler::new();
-        
+
         let (name, args) = handler.parse_command("/status --verbose");
         assert_eq!(name, "status");
         assert_eq!(args, vec!["--verbose"]);

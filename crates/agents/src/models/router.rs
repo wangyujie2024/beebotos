@@ -75,7 +75,8 @@ impl ModelRouter {
         });
 
         Ok(CompletionResponse {
-            text: response.choices
+            text: response
+                .choices
                 .into_iter()
                 .next()
                 .map(|c| c.message.text_content())
@@ -146,12 +147,12 @@ impl ModelRouter {
     fn calculate_cost(&self, provider: &str, usage: &Usage) -> f64 {
         // Simple cost calculation (would be more complex in production)
         let rate_per_1k_tokens = match provider {
-            "openai" => 0.03,     // $0.03 per 1K tokens for GPT-4
+            "openai" => 0.03,                // $0.03 per 1K tokens for GPT-4
             "anthropic" | "claude" => 0.008, // $0.008 per 1K tokens for Claude
-            "ollama" => 0.0,      // Local, no cost
-            "zhipu" => 0.0001,    // Very cheap
-            "kimi" => 0.003,      // Moonshot pricing
-            "deepseek" => 0.001,  // DeepSeek pricing
+            "ollama" => 0.0,                 // Local, no cost
+            "zhipu" => 0.0001,               // Very cheap
+            "kimi" => 0.003,                 // Moonshot pricing
+            "deepseek" => 0.001,             // DeepSeek pricing
             _ => 0.01,
         };
 
@@ -172,10 +173,10 @@ impl ModelRouter {
     }
 
     /// 🔧 P1 FIX: Complete with automatic fallback to backup providers
-    /// 
+    ///
     /// If the primary provider fails, automatically try fallback providers
     /// in order of priority until one succeeds.
-    /// 
+    ///
     /// # Arguments
     /// * `request` - The completion request
     /// * `fallback_chain` - Ordered list of fallback provider names
@@ -189,26 +190,17 @@ impl ModelRouter {
         for provider_name in &fallback_chain {
             match self.complete_with_provider(&request, provider_name).await {
                 Ok(response) => {
-                    tracing::info!(
-                        "Successfully completed with provider: {}",
-                        provider_name
-                    );
+                    tracing::info!("Successfully completed with provider: {}", provider_name);
                     return Ok(response);
                 }
                 Err(e) => {
-                    tracing::warn!(
-                        "Provider {} failed: {}, trying next...",
-                        provider_name,
-                        e
-                    );
+                    tracing::warn!("Provider {} failed: {}, trying next...", provider_name, e);
                     last_error = Some(e);
                 }
             }
         }
 
-        Err(last_error.unwrap_or_else(|| {
-            AgentError::Execution("All providers failed".to_string())
-        }))
+        Err(last_error.unwrap_or_else(|| AgentError::Execution("All providers failed".to_string())))
     }
 
     /// Complete with a specific provider
@@ -255,7 +247,7 @@ impl ModelRouter {
     }
 
     /// 🔧 P1 FIX: Smart provider selection based on capabilities and health
-    /// 
+    ///
     /// Automatically selects the best available provider based on:
     /// - Health status
     /// - Request requirements (streaming, function calling, etc.)
@@ -267,10 +259,10 @@ impl ModelRouter {
         require_vision: bool,
     ) -> Option<String> {
         let providers = self.providers.read().await;
-        
+
         for (name, provider) in providers.iter() {
             let caps = provider.capabilities();
-            
+
             // Check if provider meets requirements
             if require_streaming && !caps.streaming {
                 continue;
@@ -281,13 +273,13 @@ impl ModelRouter {
             if require_vision && !caps.vision {
                 continue;
             }
-            
+
             // Check health
             if provider.health_check().await.is_ok() {
                 return Some(name.clone());
             }
         }
-        
+
         None
     }
 }

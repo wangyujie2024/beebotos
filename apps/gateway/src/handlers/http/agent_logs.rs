@@ -2,14 +2,13 @@
 //!
 //! Provides query access to agent activity logs stored in SQLite.
 
+use std::sync::Arc;
+
 use axum::extract::{Path, Query, State};
 use axum::Json;
-use gateway::{
-    error::GatewayError,
-    middleware::{require_any_role, AuthUser},
-};
+use gateway::error::GatewayError;
+use gateway::middleware::{require_any_role, AuthUser};
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 
 use crate::AppState;
 
@@ -50,7 +49,7 @@ pub async fn get_agent_logs(
              FROM agent_logs
              WHERE agent_id = ?1 AND level = ?2
              ORDER BY timestamp DESC
-             LIMIT ?3"
+             LIMIT ?3",
         )
         .bind(&agent_id)
         .bind(level)
@@ -63,7 +62,7 @@ pub async fn get_agent_logs(
              FROM agent_logs
              WHERE agent_id = ?1
              ORDER BY timestamp DESC
-             LIMIT ?2"
+             LIMIT ?2",
         )
         .bind(&agent_id)
         .bind(limit)
@@ -72,14 +71,17 @@ pub async fn get_agent_logs(
     }
     .map_err(|e| GatewayError::internal(format!("Failed to query logs: {}", e)))?;
 
-    let logs = rows.into_iter().map(|r| LogEntry {
-        id: r.id,
-        agent_id: r.agent_id,
-        level: r.level,
-        message: r.message,
-        source: r.source,
-        timestamp: r.timestamp,
-    }).collect();
+    let logs = rows
+        .into_iter()
+        .map(|r| LogEntry {
+            id: r.id,
+            agent_id: r.agent_id,
+            level: r.level,
+            message: r.message,
+            source: r.source,
+            timestamp: r.timestamp,
+        })
+        .collect();
 
     Ok(Json(logs))
 }

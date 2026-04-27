@@ -6,12 +6,14 @@
 //! - Common response builders
 //! - Utility functions
 
+use std::collections::HashMap;
+
+use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
+
 use crate::communication::channel::ChannelEvent;
 use crate::communication::{PlatformMessage, PlatformType};
 use crate::error::{AgentError, Result};
-use async_trait::async_trait;
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 // =============================================================================
 // Signature Verification
@@ -342,7 +344,7 @@ pub fn get_json_value<'a>(
 }
 
 /// Convert HTTP header value to string
-/// 
+///
 /// Takes a string representation of a header value
 pub fn header_to_string(value: Option<&str>) -> Option<String> {
     value.map(|s| s.to_string())
@@ -381,7 +383,8 @@ pub mod encryption {
     /// - Content bytes
     /// - App ID at the end
     pub fn aes_cbc_decrypt(encrypted_data: &[u8], key: &[u8], iv: &[u8]) -> Result<Vec<u8>> {
-        use aes::cipher::{block_padding::NoPadding, BlockDecryptMut, KeyIvInit};
+        use aes::cipher::block_padding::NoPadding;
+        use aes::cipher::{BlockDecryptMut, KeyIvInit};
 
         type Aes256CbcDec = cbc::Decryptor<aes::Aes256>;
 
@@ -395,7 +398,12 @@ pub mod encryption {
             key[..16].as_ref()
         };
 
-        tracing::info!("AES decrypt: key_len={}, iv_len={}, data_len={}", key.len(), iv.len(), encrypted_data.len());
+        tracing::info!(
+            "AES decrypt: key_len={}, iv_len={}, data_len={}",
+            key.len(),
+            iv.len(),
+            encrypted_data.len()
+        );
         tracing::info!("First 4 bytes of key: {:?}", &key[..4.min(key.len())]);
         tracing::info!("First 4 bytes of IV: {:?}", &iv[..4.min(iv.len())]);
 
@@ -423,7 +431,8 @@ pub mod encryption {
 
     /// Encrypt message with AES-CBC
     pub fn aes_cbc_encrypt(data: &[u8], key: &[u8], iv: &[u8]) -> Result<Vec<u8>> {
-        use aes::cipher::{block_padding::Pkcs7, BlockEncryptMut, KeyIvInit};
+        use aes::cipher::block_padding::Pkcs7;
+        use aes::cipher::{BlockEncryptMut, KeyIvInit};
 
         type Aes256CbcEnc = cbc::Encryptor<aes::Aes256>;
 
@@ -440,7 +449,7 @@ pub mod encryption {
         // Allocate buffer with space for padding
         let mut buffer = vec![0u8; data.len() + 16];
         buffer[..data.len()].copy_from_slice(data);
-        
+
         let encrypted = Aes256CbcEnc::new(key.into(), iv.into())
             .encrypt_padded_mut::<Pkcs7>(&mut buffer, data.len())
             .map_err(|e| AgentError::platform(format!("AES encryption failed: {:?}", e)))?;

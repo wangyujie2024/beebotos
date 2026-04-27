@@ -1,7 +1,8 @@
 //! BeeBotOS Contract Bindings
 //!
 //! Complete smart contract bindings for the BeeBotOS platform.
-//! These can be deployed on any EVM-compatible chain (Ethereum, BSC, Beechain, Monad, etc.)
+//! These can be deployed on any EVM-compatible chain (Ethereum, BSC, Beechain,
+//! Monad, etc.)
 //!
 //! ## Contract Categories
 //!

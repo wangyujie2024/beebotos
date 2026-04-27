@@ -1,8 +1,9 @@
 //! Distributed tracing
 
+use std::collections::HashMap;
+
 use rand::Rng;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 /// Trace ID
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]

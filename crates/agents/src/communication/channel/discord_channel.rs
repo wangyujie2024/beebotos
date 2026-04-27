@@ -743,7 +743,10 @@ impl ChannelFactory for DiscordChannelFactory {
         super::PlatformType::Discord
     }
 
-    async fn create(&self, config: &Value) -> crate::error::Result<Arc<RwLock<dyn super::Channel>>> {
+    async fn create(
+        &self,
+        config: &Value,
+    ) -> crate::error::Result<Arc<RwLock<dyn super::Channel>>> {
         use crate::error::AgentError;
 
         let bot_token = config
@@ -754,8 +757,14 @@ impl ChannelFactory for DiscordChannelFactory {
 
         let channel = DiscordChannel::new(DiscordChannelConfig {
             bot_token,
-            application_id: config.get("application_id").and_then(|v| v.as_str()).map(|s| s.to_string()),
-            intents: config.get("intents").and_then(|v| v.as_u64()).unwrap_or(1 << 0 | 1 << 9 | 1 << 12 | 1 << 15),
+            application_id: config
+                .get("application_id")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string()),
+            intents: config
+                .get("intents")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(1 << 0 | 1 << 9 | 1 << 12 | 1 << 15),
             base: BaseChannelConfig::default(),
         });
 

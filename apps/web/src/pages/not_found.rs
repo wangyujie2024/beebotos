@@ -1,8 +1,9 @@
-use crate::i18n::I18nContext;
 use leptos::prelude::*;
 use leptos::view;
 use leptos_meta::*;
 use leptos_router::components::A;
+
+use crate::i18n::I18nContext;
 
 #[component]
 pub fn NotFound() -> impl IntoView {

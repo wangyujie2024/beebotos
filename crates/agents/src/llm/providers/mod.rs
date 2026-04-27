@@ -1,73 +1,28 @@
 //! LLM Providers
 //!
-//! Implementations of the LLMProvider trait for various LLM services.
+//! Protocol-based provider implementations.
 
 pub mod anthropic;
-pub mod claude;
-pub mod deepseek;
-pub mod doubao;
-pub mod gemini;
-pub mod kimi;
 pub mod ollama;
 pub mod openai;
-pub mod qwen;
-pub mod zhipu;
 
 // Re-export providers
-pub use anthropic::{AnthropicConfig, AnthropicProvider, anthropic_models};
-pub use claude::{ClaudeConfig, ClaudeProvider, claude_models};
+pub use anthropic::{anthropic_models, AnthropicConfig, AnthropicProvider};
+pub use ollama::{ollama_models, OllamaConfig, OllamaProvider};
+pub use openai::{openai_models, OpenAIConfig, OpenAIProvider};
 
-// ChatGLM is now an alias for Zhipu (same provider)
-pub use zhipu::{ZhipuConfig as ChatGLMConfig, ZhipuProvider as ChatGLMProvider, zhipu_models as chatglm_models};
-pub use deepseek::{DeepSeekConfig, DeepSeekProvider, deepseek_models};
-pub use doubao::{DoubaoConfig, DoubaoProvider, doubao_models};
-pub use gemini::{GeminiConfig, GeminiProvider, gemini_models};
-pub use kimi::{KimiConfig, KimiProvider, ProviderMode, kimi_models};
-pub use ollama::{OllamaConfig, OllamaProvider, ollama_models};
-pub use openai::{OpenAIConfig, OpenAIProvider, openai_models};
-pub use qwen::{QwenConfig, QwenProvider, qwen_models};
-pub use zhipu::{ZhipuConfig, ZhipuProvider, zhipu_models};
-
-/// Provider factory - creates providers by name
+/// Provider factory - creates providers by name from environment
+///
+/// NOTE: Gateway app no longer uses this. Kept for other modules.
 pub struct ProviderFactory;
 
 impl ProviderFactory {
-    /// Create a provider by name from environment
     pub fn from_env(name: &str) -> Result<Box<dyn super::traits::LLMProvider>, String> {
         match name.to_lowercase().as_str() {
-            "kimi" | "moonshot" => {
-                let provider = KimiProvider::from_env()
-                    .map_err(|e| format!("Failed to create Kimi provider: {}", e))?;
-                Ok(Box::new(provider))
-            }
-            "openai" | "chatgpt" => {
+            "openai" | "chatgpt" | "kimi" | "moonshot" | "deepseek" | "zhipu" | "doubao"
+            | "qwen" | "gemini" => {
                 let provider = OpenAIProvider::from_env()
-                    .map_err(|e| format!("Failed to create OpenAI provider: {}", e))?;
-                Ok(Box::new(provider))
-            }
-            "deepseek" => {
-                let provider = DeepSeekProvider::from_env()
-                    .map_err(|e| format!("Failed to create DeepSeek provider: {}", e))?;
-                Ok(Box::new(provider))
-            }
-            "chatglm" | "zhipu" | "glm" => {
-                let provider = ZhipuProvider::from_env()
-                    .map_err(|e| format!("Failed to create Zhipu provider: {}", e))?;
-                Ok(Box::new(provider))
-            }
-            "doubao" | "bytedance" | "ark" => {
-                let provider = DoubaoProvider::from_env()
-                    .map_err(|e| format!("Failed to create Doubao provider: {}", e))?;
-                Ok(Box::new(provider))
-            }
-            "qwen" | "alibaba" | "dashscope" => {
-                let provider = QwenProvider::from_env()
-                    .map_err(|e| format!("Failed to create Qwen provider: {}", e))?;
-                Ok(Box::new(provider))
-            }
-            "gemini" | "google" => {
-                let provider = GeminiProvider::from_env()
-                    .map_err(|e| format!("Failed to create Gemini provider: {}", e))?;
+                    .map_err(|e| format!("Failed to create OpenAI-compatible provider: {}", e))?;
                 Ok(Box::new(provider))
             }
             "claude" | "anthropic" => {
@@ -84,18 +39,7 @@ impl ProviderFactory {
         }
     }
 
-    /// List all available provider names
     pub fn available_providers() -> Vec<&'static str> {
-        vec![
-            "kimi",
-            "openai",
-            "deepseek",
-            "zhipu",
-            "doubao",
-            "qwen",
-            "gemini",
-            "claude",
-            "ollama",
-        ]
+        vec!["openai", "anthropic", "ollama"]
     }
 }

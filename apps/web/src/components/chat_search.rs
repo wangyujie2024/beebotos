@@ -2,6 +2,7 @@
 //!
 //! Provides message search functionality for chat interfaces
 
+use crate::i18n::I18nContext;
 use leptos::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -27,6 +28,8 @@ pub fn ChatSearch(
     let search_query = RwSignal::new(String::new());
     let is_expanded = RwSignal::new(false);
     let selected_index = RwSignal::new(0);
+    let i18n = use_context::<I18nContext>().expect("i18n context not found");
+    let i18n_stored = StoredValue::new(i18n);
 
     // Debounced search
     let debounced_search = move || {
@@ -42,7 +45,7 @@ pub fn ChatSearch(
                 <input
                     type="text"
                     class="chat-search-input"
-                    placeholder="Search messages..."
+                    placeholder=move || i18n_stored.get_value().t("search-messages-placeholder")
                     prop:value=search_query
                     on:focus=move |_| is_expanded.set(true)
                     on:input=move |e| {
@@ -88,12 +91,12 @@ pub fn ChatSearch(
             <Show when=move || is_expanded.get() && !results.get().is_empty()>
                 <div class="chat-search-results">
                     <div class="search-results-header">
-                        <span>{move || format!("{} results", results.get().len())}</span>
+                        <span>{move || format!("{} {}", results.get().len(), i18n_stored.get_value().t("search-results"))}</span>
                         <button
                             class="btn btn-sm btn-ghost"
                             on:click=move |_| is_expanded.set(false)
                         >
-                            "Close"
+                            {move || i18n_stored.get_value().t("action-close")}
                         </button>
                     </div>
                     <div class="search-results-list">
@@ -123,7 +126,7 @@ pub fn ChatSearch(
                                                 {result.highlighted_text}
                                             </div>
                                             <div class="search-result-channel">
-                                                "in " {result.channel}
+                                                {move || format!("{} {}", i18n_stored.get_value().t("search-in"), result.channel)}
                                             </div>
                                         </div>
                                     }
@@ -155,6 +158,8 @@ pub fn AdvancedChatSearch(
     let search_query = RwSignal::new(String::new());
     let show_filters = RwSignal::new(false);
     let filters = RwSignal::new(SearchFilters::default());
+    let i18n = use_context::<I18nContext>().expect("i18n context not found");
+    let i18n_stored = StoredValue::new(i18n);
 
     view! {
         <div class="advanced-chat-search">
@@ -162,7 +167,7 @@ pub fn AdvancedChatSearch(
                 <input
                     type="text"
                     class="search-input"
-                    placeholder="Search messages..."
+                    placeholder=move || i18n_stored.get_value().t("search-messages-placeholder")
                     prop:value=search_query
                     on:input=move |e| search_query.set(event_target_value(&e))
                 />
@@ -170,7 +175,7 @@ pub fn AdvancedChatSearch(
                     class="btn btn-secondary"
                     on:click=move |_| show_filters.update(|v| *v = !*v)
                 >
-                    "Filters"
+                    {move || i18n_stored.get_value().t("action-filter")}
                 </button>
                 <button
                     class="btn btn-primary"
@@ -178,7 +183,7 @@ pub fn AdvancedChatSearch(
                         on_search.run((search_query.get(), filters.get()));
                     }
                 >
-                    "Search"
+                    {move || i18n_stored.get_value().t("action-search")}
                 </button>
             </div>
 
@@ -186,7 +191,7 @@ pub fn AdvancedChatSearch(
                 <div class="search-filters">
                     <div class="filter-row">
                         <div class="filter-group">
-                            <label>"From Date"</label>
+                            <label>{move || i18n_stored.get_value().t("filter-from-date")}</label>
                             <input
                                 type="date"
                                 on:input=move |e| {
@@ -195,7 +200,7 @@ pub fn AdvancedChatSearch(
                             />
                         </div>
                         <div class="filter-group">
-                            <label>"To Date"</label>
+                            <label>{move || i18n_stored.get_value().t("filter-to-date")}</label>
                             <input
                                 type="date"
                                 on:input=move |e| {
@@ -206,20 +211,20 @@ pub fn AdvancedChatSearch(
                     </div>
                     <div class="filter-row">
                         <div class="filter-group">
-                            <label>"Sender"</label>
+                            <label>{move || i18n_stored.get_value().t("filter-sender")}</label>
                             <input
                                 type="text"
-                                placeholder="Username"
+                                placeholder=move || i18n_stored.get_value().t("filter-sender-placeholder")
                                 on:input=move |e| {
                                     filters.update(|f| f.sender = Some(event_target_value(&e)));
                                 }
                             />
                         </div>
                         <div class="filter-group">
-                            <label>"Channel"</label>
+                            <label>{move || i18n_stored.get_value().t("filter-channel")}</label>
                             <input
                                 type="text"
-                                placeholder="Channel name"
+                                placeholder=move || i18n_stored.get_value().t("filter-channel-placeholder")
                                 on:input=move |e| {
                                     filters.update(|f| f.channel = Some(event_target_value(&e)));
                                 }
@@ -235,7 +240,7 @@ pub fn AdvancedChatSearch(
                                     filters.update(|f| f.has_attachments = checked);
                                 }
                             />
-                            "Has attachments only"
+                            {move || i18n_stored.get_value().t("filter-has-attachments")}
                         </label>
                     </div>
                 </div>
@@ -253,12 +258,14 @@ pub fn MessageExportDialog(
     let export_format = RwSignal::new("json".to_string());
     let include_attachments = RwSignal::new(true);
     let date_range = RwSignal::new("all".to_string());
+    let i18n = use_context::<I18nContext>().expect("i18n context not found");
+    let i18n_stored = StoredValue::new(i18n);
 
     view! {
         <div class="modal-overlay" on:click=move |_| on_close.run(())>
             <div class="modal" on:click=|ev| ev.stop_propagation()>
                 <div class="modal-header">
-                    <h2>"Export Messages"</h2>
+                    <h2>{move || i18n_stored.get_value().t("export-messages-title")}</h2>
                     <button class="btn btn-icon" on:click=move |_| on_close.run(())>
                         "✕"
                     </button>
@@ -266,29 +273,29 @@ pub fn MessageExportDialog(
 
                 <div class="modal-body">
                     <div class="form-group">
-                        <label>"Export Format"</label>
+                        <label>{move || i18n_stored.get_value().t("export-format")}</label>
                         <select
                             prop:value=export_format
                             on:change=move |e| export_format.set(event_target_value(&e))
                         >
                             <option value="json">"JSON"</option>
                             <option value="csv">"CSV"</option>
-                            <option value="txt">"Plain Text"</option>
+                            <option value="txt">{move || i18n_stored.get_value().t("format-plain-text")}</option>
                             <option value="pdf">"PDF"</option>
                         </select>
                     </div>
 
                     <div class="form-group">
-                        <label>"Date Range"</label>
+                        <label>{move || i18n_stored.get_value().t("date-range")}</label>
                         <select
                             prop:value=date_range
                             on:change=move |e| date_range.set(event_target_value(&e))
                         >
-                            <option value="all">"All messages"</option>
-                            <option value="today">"Today"</option>
-                            <option value="week">"Last 7 days"</option>
-                            <option value="month">"Last 30 days"</option>
-                            <option value="custom">"Custom range"</option>
+                            <option value="all">{move || i18n_stored.get_value().t("range-all-messages")}</option>
+                            <option value="today">{move || i18n_stored.get_value().t("range-today")}</option>
+                            <option value="week">{move || i18n_stored.get_value().t("range-last-7-days")}</option>
+                            <option value="month">{move || i18n_stored.get_value().t("range-last-30-days")}</option>
+                            <option value="custom">{move || i18n_stored.get_value().t("range-custom")}</option>
                         </select>
                     </div>
 
@@ -301,14 +308,14 @@ pub fn MessageExportDialog(
                                     include_attachments.set(event_target_checked(&e));
                                 }
                             />
-                            "Include attachments"
+                            {move || i18n_stored.get_value().t("include-attachments")}
                         </label>
                     </div>
                 </div>
 
                 <div class="modal-actions">
                     <button class="btn btn-secondary" on:click=move |_| on_close.run(())>
-                        "Cancel"
+                        {move || i18n_stored.get_value().t("action-cancel")}
                     </button>
                     <button
                         class="btn btn-primary"
@@ -320,7 +327,7 @@ pub fn MessageExportDialog(
                             });
                         }
                     >
-                        "Export"
+                        {move || i18n_stored.get_value().t("action-export")}
                     </button>
                 </div>
             </div>
@@ -343,10 +350,13 @@ pub fn PinnedMessagesPanel(
     #[prop(into)] on_unpin: Callback<String>,
     #[prop(into)] on_jump: Callback<String>,
 ) -> impl IntoView {
+    let i18n = use_context::<I18nContext>().expect("i18n context not found");
+    let i18n_stored = StoredValue::new(i18n);
+
     view! {
         <div class="pinned-messages-panel">
             <div class="pinned-header">
-                <h3>"📌 Pinned Messages"</h3>
+                <h3>{move || format!("📌 {}", i18n_stored.get_value().t("pinned-messages"))}</h3>
             </div>
             <div class="pinned-list">
                 {move || {
@@ -365,14 +375,14 @@ pub fn PinnedMessagesPanel(
                                         <button
                                             class="btn btn-sm btn-ghost"
                                             on:click=move |_| on_jump.run(msg_id.clone())
-                                            title="Jump to message"
+                                            title=move || i18n_stored.get_value().t("jump-to-message")
                                         >
                                             "➡️"
                                         </button>
                                         <button
                                             class="btn btn-sm btn-ghost"
                                             on:click=move |_| on_unpin.run(msg_id_unpin.clone())
-                                            title="Unpin"
+                                            title=move || i18n_stored.get_value().t("unpin-message")
                                         >
                                             "📌"
                                         </button>
@@ -413,6 +423,8 @@ pub fn SlashCommandInput(
     let input_value = RwSignal::new(String::new());
     let show_suggestions = RwSignal::new(false);
     let selected_suggestion = RwSignal::new(0);
+    let i18n = use_context::<I18nContext>().expect("i18n context not found");
+    let i18n_stored = StoredValue::new(i18n);
 
     // Filter commands based on input
     let commands = StoredValue::new(commands);
@@ -436,7 +448,7 @@ pub fn SlashCommandInput(
             <input
                 type="text"
                 class="chat-input"
-                placeholder="Type / for commands..."
+                placeholder=move || i18n_stored.get_value().t("slash-command-placeholder")
                 prop:value=input_value
                 on:input=move |e| {
                     let value = event_target_value(&e);

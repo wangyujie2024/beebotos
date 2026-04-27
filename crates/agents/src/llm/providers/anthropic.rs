@@ -1,7 +1,7 @@
 //! Anthropic (Claude) LLM Provider
 //!
-//! Implementation for Anthropic's Claude API (Claude 3 Opus, Claude 3.5 Sonnet, Claude 3 Haiku, etc.)
-//! Claude is known for its strong reasoning capabilities.
+//! Implementation for Anthropic's Claude API (Claude 3 Opus, Claude 3.5 Sonnet,
+//! Claude 3 Haiku, etc.) Claude is known for its strong reasoning capabilities.
 
 use async_trait::async_trait;
 use reqwest::header::{self, HeaderMap, HeaderValue};
@@ -39,7 +39,7 @@ impl Default for AnthropicConfig {
 impl AnthropicConfig {
     pub fn from_env() -> Result<Self, String> {
         use std::env;
-        
+
         let api_key = env::var("ANTHROPIC_API_KEY")
             .or_else(|_| env::var("CLAUDE_API_KEY"))
             .map_err(|_| "ANTHROPIC_API_KEY not set".to_string())?;
@@ -88,7 +88,10 @@ impl AnthropicProvider {
             max_output_tokens: 8_192,
         };
 
-        info!("Anthropic provider initialized with model: {}", config.default_model);
+        info!(
+            "Anthropic provider initialized with model: {}",
+            config.default_model
+        );
 
         Ok(Self {
             config,
@@ -98,8 +101,7 @@ impl AnthropicProvider {
     }
 
     pub fn from_env() -> Result<Self, LLMError> {
-        let config = AnthropicConfig::from_env()
-            .map_err(|e| LLMError::InvalidRequest(e))?;
+        let config = AnthropicConfig::from_env().map_err(|e| LLMError::InvalidRequest(e))?;
         Self::new(config)
     }
 
@@ -115,7 +117,10 @@ impl AnthropicProvider {
             HeaderValue::from_str(&self.config.version)
                 .map_err(|e| LLMError::InvalidRequest(e.to_string()))?,
         );
-        headers.insert(header::CONTENT_TYPE, HeaderValue::from_static("application/json"));
+        headers.insert(
+            header::CONTENT_TYPE,
+            HeaderValue::from_static("application/json"),
+        );
         Ok(headers)
     }
 
@@ -148,13 +153,16 @@ impl AnthropicProvider {
 
     fn convert_tools(&self, tools: Option<Vec<Tool>>) -> Option<Vec<serde_json::Value>> {
         tools.map(|tools| {
-            tools.into_iter().map(|tool| {
-                json!({
-                    "name": tool.function.name,
-                    "description": tool.function.description,
-                    "input_schema": tool.function.parameters
+            tools
+                .into_iter()
+                .map(|tool| {
+                    json!({
+                        "name": tool.function.name,
+                        "description": tool.function.description,
+                        "input_schema": tool.function.parameters
+                    })
                 })
-            }).collect()
+                .collect()
         })
     }
 
@@ -206,16 +214,31 @@ impl AnthropicProvider {
         loop {
             trace!("Sending request to Anthropic API (attempt {})", attempt + 1);
 
-            let response = self.http_client.post(&url).headers(headers.clone()).json(&body).send().await
-                .map_err(|e| if e.is_timeout() { LLMError::Timeout } else { LLMError::Network(e.to_string()) })?;
+            let response = self
+                .http_client
+                .post(&url)
+                .headers(headers.clone())
+                .json(&body)
+                .send()
+                .await
+                .map_err(|e| {
+                    if e.is_timeout() {
+                        LLMError::Timeout
+                    } else {
+                        LLMError::Network(e.to_string())
+                    }
+                })?;
 
-            if response.status().is_success() { 
-                return Ok(response); 
+            if response.status().is_success() {
+                return Ok(response);
             }
 
             let status = response.status();
-            let error_body = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-            
+            let error_body = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
+
             let error = match status {
                 reqwest::StatusCode::UNAUTHORIZED => LLMError::Auth("Invalid API key".to_string()),
                 reqwest::StatusCode::TOO_MANY_REQUESTS => LLMError::RateLimit { retry_after: None },
@@ -226,16 +249,22 @@ impl AnthropicProvider {
                         LLMError::InvalidRequest(error_body)
                     }
                 }
-                _ => LLMError::Api { code: status.as_u16(), message: error_body },
+                _ => LLMError::Api {
+                    code: status.as_u16(),
+                    message: error_body,
+                },
             };
 
-            if !self.config.retry_policy.should_retry(&error, attempt) { 
-                return Err(error); 
+            if !self.config.retry_policy.should_retry(&error, attempt) {
+                return Err(error);
             }
 
             attempt += 1;
             let delay = self.config.retry_policy.delay_for_attempt(attempt);
-            warn!("Request failed, retrying in {:?} (attempt {}/{})", delay, attempt, self.config.retry_policy.max_retries);
+            warn!(
+                "Request failed, retrying in {:?} (attempt {}/{})",
+                delay, attempt, self.config.retry_policy.max_retries
+            );
             tokio::time::sleep(delay).await;
         }
     }
@@ -243,45 +272,52 @@ impl AnthropicProvider {
 
 #[async_trait]
 impl LLMProvider for AnthropicProvider {
-    fn name(&self) -> &str { 
-        "anthropic" 
+    fn name(&self) -> &str {
+        "anthropic"
     }
 
-    fn capabilities(&self) -> ProviderCapabilities { 
-        self.capabilities.clone() 
+    fn capabilities(&self) -> ProviderCapabilities {
+        self.capabilities.clone()
     }
 
     async fn complete(&self, request: LLMRequest) -> LLMResult<LLMResponse> {
         debug!("Sending completion request to Anthropic");
 
         let response = self.execute_with_retry(request).await?;
-        
-        let anthropic_resp: AnthropicResponse = response.json().await
+
+        let anthropic_resp: AnthropicResponse = response
+            .json()
+            .await
             .map_err(|e| LLMError::Serialization(e.to_string()))?;
 
-        let content = anthropic_resp.content
+        let content = anthropic_resp
+            .content
             .first()
             .map(|c| c.text.clone())
             .unwrap_or_default();
 
-        let tool_calls = anthropic_resp.content.iter().filter_map(|c| {
-            if let Some(name) = &c.name {
-                Some(ToolCall {
-                    id: format!("call_{}", uuid::Uuid::new_v4()),
-                    r#type: "function".to_string(),
-                    function: FunctionCall {
-                        name: name.clone(),
-                        arguments: c.input.as_ref()?.to_string(),
-                    },
-                })
-            } else {
-                None
-            }
-        }).collect::<Vec<_>>();
+        let tool_calls = anthropic_resp
+            .content
+            .iter()
+            .filter_map(|c| {
+                if let Some(name) = &c.name {
+                    Some(ToolCall {
+                        id: format!("call_{}", uuid::Uuid::new_v4()),
+                        r#type: "function".to_string(),
+                        function: FunctionCall {
+                            name: name.clone(),
+                            arguments: c.input.as_ref()?.to_string(),
+                        },
+                    })
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
 
-        debug!("Received response from Anthropic: {} input_tokens, {} output_tokens", 
-            anthropic_resp.usage.input_tokens,
-            anthropic_resp.usage.output_tokens
+        debug!(
+            "Received response from Anthropic: {} input_tokens, {} output_tokens",
+            anthropic_resp.usage.input_tokens, anthropic_resp.usage.output_tokens
         );
 
         Ok(LLMResponse {
@@ -296,45 +332,50 @@ impl LLMProvider for AnthropicProvider {
                 } else {
                     Message::assistant(content).with_tool_calls(tool_calls)
                 },
-                finish_reason: Some(anthropic_resp.stop_reason.unwrap_or_else(|| "stop".to_string())),
+                finish_reason: Some(
+                    anthropic_resp
+                        .stop_reason
+                        .unwrap_or_else(|| "stop".to_string()),
+                ),
                 logprobs: None,
             }],
             usage: Some(Usage {
                 prompt_tokens: anthropic_resp.usage.input_tokens,
                 completion_tokens: anthropic_resp.usage.output_tokens,
-                total_tokens: anthropic_resp.usage.input_tokens + anthropic_resp.usage.output_tokens,
+                total_tokens: anthropic_resp.usage.input_tokens
+                    + anthropic_resp.usage.output_tokens,
             }),
         })
     }
 
     async fn complete_stream(&self, request: LLMRequest) -> LLMResult<mpsc::Receiver<StreamChunk>> {
         let (tx, rx) = mpsc::channel(100);
-        
+
         let mut request = request;
         request.config.stream = Some(true);
-        
+
         let response = self.execute_with_retry(request).await?;
-        
+
         let mut stream = response.bytes_stream();
-        
+
         tokio::spawn(async move {
             let mut event_id = String::new();
             let mut buffer = String::new();
-            
+
             while let Some(chunk_result) = stream.next().await {
                 match chunk_result {
                     Ok(bytes) => {
                         let text = String::from_utf8_lossy(&bytes);
                         buffer.push_str(&text);
-                        
+
                         // Process SSE events
                         while let Some(pos) = buffer.find("\n\n") {
                             let chunk = buffer.split_off(pos + 2);
                             let event = std::mem::replace(&mut buffer, chunk);
-                            
+
                             let mut event_type = String::new();
                             let mut data = String::new();
-                            
+
                             for line in event.lines() {
                                 if let Some(t) = line.strip_prefix("event: ") {
                                     event_type = t.to_string();
@@ -342,31 +383,41 @@ impl LLMProvider for AnthropicProvider {
                                     data = d.to_string();
                                 }
                             }
-                            
+
                             match event_type.as_str() {
                                 "message_start" => {
-                                    if let Ok(start) = serde_json::from_str::<AnthropicStreamStart>(&data) {
+                                    if let Ok(start) =
+                                        serde_json::from_str::<AnthropicStreamStart>(&data)
+                                    {
                                         event_id = start.message.id.clone();
                                     }
                                 }
                                 "content_block_delta" => {
-                                    if let Ok(delta) = serde_json::from_str::<AnthropicStreamDelta>(&data) {
+                                    if let Ok(delta) =
+                                        serde_json::from_str::<AnthropicStreamDelta>(&data)
+                                    {
                                         if let Some(text) = delta.delta.text {
-                                            let _ = tx.send(StreamChunk::new(
-                                                event_id.clone(),
-                                                text,
-                                                None,
-                                            )).await;
+                                            let _ = tx
+                                                .send(StreamChunk::new(
+                                                    event_id.clone(),
+                                                    text,
+                                                    None,
+                                                ))
+                                                .await;
                                         }
                                     }
                                 }
                                 "message_delta" => {
-                                    if let Ok(delta) = serde_json::from_str::<AnthropicMessageDelta>(&data) {
-                                        let _ = tx.send(StreamChunk::new(
-                                            event_id.clone(),
-                                            String::new(),
-                                            delta.delta.stop_reason.clone(),
-                                        )).await;
+                                    if let Ok(delta) =
+                                        serde_json::from_str::<AnthropicMessageDelta>(&data)
+                                    {
+                                        let _ = tx
+                                            .send(StreamChunk::new(
+                                                event_id.clone(),
+                                                String::new(),
+                                                delta.delta.stop_reason.clone(),
+                                            ))
+                                            .await;
                                     }
                                 }
                                 "message_stop" => break,
@@ -388,55 +439,77 @@ impl LLMProvider for AnthropicProvider {
     async fn health_check(&self) -> LLMResult<()> {
         let test = LLMRequest {
             messages: vec![Message::user("Hi")],
-            config: RequestConfig { max_tokens: Some(1), ..Default::default() },
+            config: RequestConfig {
+                max_tokens: Some(1),
+                ..Default::default()
+            },
         };
-        self.complete(test).await.map(|_| ()).map_err(|e| LLMError::Provider(format!("Health check: {}", e)))
+        self.complete(test)
+            .await
+            .map(|_| ())
+            .map_err(|e| LLMError::Provider(format!("Health check: {}", e)))
     }
 
     async fn list_models(&self) -> LLMResult<Vec<ModelInfo>> {
         Ok(vec![
             ModelInfo {
-                id: anthropic_models::CLAUDE_3_5_SONNET.to_string(), 
+                id: anthropic_models::CLAUDE_3_5_SONNET.to_string(),
                 name: "Claude 3.5 Sonnet".to_string(),
                 description: Some("Best balance of intelligence and speed".to_string()),
-                context_window: 200_000, 
+                context_window: 200_000,
                 max_tokens: 8_192,
-                capabilities: ModelCapabilities { vision: true, function_calling: true, json_mode: true },
+                capabilities: ModelCapabilities {
+                    vision: true,
+                    function_calling: true,
+                    json_mode: true,
+                },
                 pricing: Some((0.003, 0.015)),
             },
             ModelInfo {
-                id: anthropic_models::CLAUDE_3_OPUS.to_string(), 
+                id: anthropic_models::CLAUDE_3_OPUS.to_string(),
                 name: "Claude 3 Opus".to_string(),
                 description: Some("Most powerful model for complex tasks".to_string()),
-                context_window: 200_000, 
+                context_window: 200_000,
                 max_tokens: 4_096,
-                capabilities: ModelCapabilities { vision: true, function_calling: true, json_mode: true },
+                capabilities: ModelCapabilities {
+                    vision: true,
+                    function_calling: true,
+                    json_mode: true,
+                },
                 pricing: Some((0.015, 0.075)),
             },
             ModelInfo {
-                id: anthropic_models::CLAUDE_3_HAIKU.to_string(), 
+                id: anthropic_models::CLAUDE_3_HAIKU.to_string(),
                 name: "Claude 3 Haiku".to_string(),
                 description: Some("Fastest model for lightweight actions".to_string()),
-                context_window: 200_000, 
+                context_window: 200_000,
                 max_tokens: 4_096,
-                capabilities: ModelCapabilities { vision: true, function_calling: true, json_mode: true },
+                capabilities: ModelCapabilities {
+                    vision: true,
+                    function_calling: true,
+                    json_mode: true,
+                },
                 pricing: Some((0.00025, 0.00125)),
             },
             ModelInfo {
-                id: anthropic_models::CLAUDE_3_5_HAIKU.to_string(), 
+                id: anthropic_models::CLAUDE_3_5_HAIKU.to_string(),
                 name: "Claude 3.5 Haiku".to_string(),
                 description: Some("Updated fast model".to_string()),
-                context_window: 200_000, 
+                context_window: 200_000,
                 max_tokens: 8_192,
-                capabilities: ModelCapabilities { vision: false, function_calling: true, json_mode: true },
+                capabilities: ModelCapabilities {
+                    vision: false,
+                    function_calling: true,
+                    json_mode: true,
+                },
                 pricing: Some((0.0008, 0.004)),
             },
         ])
     }
 }
 
-use serde::Deserialize;
 use futures::StreamExt;
+use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
 struct AnthropicResponse {

@@ -3,16 +3,18 @@
 //! Provides intelligent gas estimation with EIP-1559 support,
 //! historical data analysis, and priority-based pricing.
 
+use std::collections::VecDeque;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+
+use alloy_rpc_types::{FeeHistory, TransactionRequest};
+use parking_lot::RwLock;
+use tracing::{debug, info, instrument, warn};
+
 use crate::chains::common::token::TransactionPriority;
 use crate::chains::common::{EvmError, EvmProvider};
 use crate::compat::U256;
 use crate::constants::{DEFAULT_GAS_LIMIT, MIN_GAS_LIMIT, NATIVE_TRANSFER_GAS};
-use alloy_rpc_types::{FeeHistory, TransactionRequest};
-use parking_lot::RwLock;
-use std::collections::VecDeque;
-use std::sync::Arc;
-use std::time::{Duration, Instant};
-use tracing::{debug, info, instrument, warn};
 
 /// Gas estimator with caching and historical analysis
 #[derive(Clone)]

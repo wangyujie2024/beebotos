@@ -28,26 +28,25 @@ pub mod executor;
 pub mod lifecycle;
 pub mod react_framework;
 pub mod scheduler;
+pub mod session_pool;
 pub mod signals;
 pub mod state_machine;
-pub mod session_pool;
 
 // 🟢 P1 FIX: Re-export new types for object pool and batch processing
 use std::sync::Arc;
 
 pub use agent::{AgentRuntime, AgentRuntimeBuilder};
 pub use executor::{BatchExecutor, BatchResult, TaskExecutor};
+pub use react_framework::tools::{CalculatorTool, SearchTool};
 pub use react_framework::{
-    ReActAgent, ReActConfig, ReActResult, ReActStep, Action, Tool, ToolResult,
-    LLMInterface, tools::{CalculatorTool, SearchTool},
-};
-pub use session_pool::{
-    SessionPool, SessionPoolConfig, PooledSession, PooledSessionState,
-    SessionCapabilities, SessionRequirements, SessionMetrics,
-    SessionPoolStats, TaskAssignment,
-    DEFAULT_MIN_POOL_SIZE, DEFAULT_MAX_POOL_SIZE, DEFAULT_IDLE_TIMEOUT_SECS,
+    Action, LLMInterface, ReActAgent, ReActConfig, ReActResult, ReActStep, Tool, ToolResult,
 };
 use serde::{Deserialize, Serialize};
+pub use session_pool::{
+    PooledSession, PooledSessionState, SessionCapabilities, SessionMetrics, SessionPool,
+    SessionPoolConfig, SessionPoolStats, SessionRequirements, TaskAssignment,
+    DEFAULT_IDLE_TIMEOUT_SECS, DEFAULT_MAX_POOL_SIZE, DEFAULT_MIN_POOL_SIZE,
+};
 use tokio::sync::Semaphore;
 
 /// Runtime configuration for performance tuning

@@ -10,11 +10,12 @@
 //! - Digital Touch
 //! - Threaded replies
 
+use std::collections::HashMap;
+use std::path::PathBuf;
+
 use crate::communication::channel::content::{
     ContentType as UnifiedContentType, MediaContent, PlatformContent,
 };
-use std::collections::HashMap;
-use std::path::PathBuf;
 
 /// iMessage attachment
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -685,7 +686,9 @@ impl AttachmentInfo {
     /// Convert to unified MediaContent
     pub fn to_media_content(&self) -> MediaContent {
         MediaContent {
-            url: self.local_path.as_ref()
+            url: self
+                .local_path
+                .as_ref()
                 .map(|p| p.to_string_lossy().to_string())
                 .unwrap_or_default(),
             mime_type: Some(self.mime_type.clone()),

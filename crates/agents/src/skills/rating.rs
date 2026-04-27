@@ -67,12 +67,11 @@ impl SkillRatingStore {
 
     /// Get rating summary for a skill
     pub async fn get_summary(&self, skill_id: &str) -> Result<RatingSummary, sqlx::Error> {
-        let row: (Option<f64>, i64) = sqlx::query_as(
-            "SELECT AVG(rating), COUNT(*) FROM skill_ratings WHERE skill_id = ?1",
-        )
-        .bind(skill_id)
-        .fetch_one(&self.db)
-        .await?;
+        let row: (Option<f64>, i64) =
+            sqlx::query_as("SELECT AVG(rating), COUNT(*) FROM skill_ratings WHERE skill_id = ?1")
+                .bind(skill_id)
+                .fetch_one(&self.db)
+                .await?;
 
         Ok(RatingSummary {
             average_rating: row.0.unwrap_or(0.0),
@@ -134,7 +133,10 @@ mod tests {
         let db = create_test_db().await;
         let store = SkillRatingStore::new(db);
 
-        store.rate("skill-1", "user-a", 5, Some("Great!")).await.unwrap();
+        store
+            .rate("skill-1", "user-a", 5, Some("Great!"))
+            .await
+            .unwrap();
         store.rate("skill-1", "user-b", 3, None).await.unwrap();
         store.rate("skill-1", "user-c", 4, None).await.unwrap();
 

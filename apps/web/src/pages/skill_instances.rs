@@ -2,11 +2,12 @@
 //!
 //! Create, manage, and execute skill instances bound to agents.
 
-use crate::api::{CreateInstanceRequest, InstanceInfo};
-use crate::state::use_app_state;
 use leptos::prelude::*;
 use leptos::view;
 use leptos_meta::*;
+
+use crate::api::{CreateInstanceRequest, InstanceInfo};
+use crate::state::use_app_state;
 
 #[component]
 pub fn SkillInstancesPage() -> impl IntoView {

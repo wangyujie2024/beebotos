@@ -61,7 +61,7 @@ use crate::task::TaskType;
 use crate::{Agent, AgentConfig, Task, TaskResult};
 
 /// 🟢 P1 FIX: Capability requirements for different task types
-/// 
+///
 /// Maps each task type to the minimum capability level required
 pub struct TaskCapabilityRequirements;
 
@@ -85,7 +85,7 @@ impl TaskCapabilityRequirements {
             TaskType::Custom(_) => CapabilityLevel::L3NetworkOut,
         }
     }
-    
+
     /// Get required permissions for a task type
     pub fn required_permissions(task_type: &TaskType) -> Vec<&'static str> {
         match task_type {
@@ -105,11 +105,11 @@ impl TaskCapabilityRequirements {
             TaskType::Custom(_) => vec!["custom:execute"],
         }
     }
-    
+
     /// Check if a capability set can execute a task
     pub fn can_execute(caps: &CapabilitySet, task_type: &TaskType) -> Result<()> {
         let required_level = Self::required_level(task_type);
-        
+
         // Check capability level
         if caps.max_level < required_level {
             return Err(AgentError::CapabilityDenied(format!(
@@ -117,7 +117,7 @@ impl TaskCapabilityRequirements {
                 required_level, caps.max_level
             )));
         }
-        
+
         // Check permissions
         let required_perms = Self::required_permissions(task_type);
         for perm in required_perms {
@@ -128,12 +128,12 @@ impl TaskCapabilityRequirements {
                 )));
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// Validate capability set comprehensively
-    /// 
+    ///
     /// Performs full validation including:
     /// - Capability level sufficiency
     /// - Required permissions presence
@@ -141,39 +141,44 @@ impl TaskCapabilityRequirements {
     /// - Security policy compliance
     pub fn validate_capabilities(caps: &CapabilitySet) -> Result<Vec<String>> {
         let mut warnings = Vec::new();
-        
+
         // Check if capability set is empty
         if caps.permissions.is_empty() {
             warnings.push("Capability set has no permissions".to_string());
         }
-        
+
         // Validate permission format
         for perm in &caps.permissions {
             if !perm.contains(':') {
                 warnings.push(format!(
-                    "Permission '{}' should use 'namespace:action' format", 
+                    "Permission '{}' should use 'namespace:action' format",
                     perm
                 ));
             }
         }
-        
+
         // Security recommendations
         if caps.max_level >= CapabilityLevel::L8ChainWriteLow {
-            warnings.push("High-level chain write capabilities detected - ensure proper audit logging".to_string());
+            warnings.push(
+                "High-level chain write capabilities detected - ensure proper audit logging"
+                    .to_string(),
+            );
         }
-        
+
         if caps.has_permission("wasm:execute") && caps.has_permission("file:write") {
-            warnings.push("Combination of WASM execution and file write may pose security risks".to_string());
+            warnings.push(
+                "Combination of WASM execution and file write may pose security risks".to_string(),
+            );
         }
-        
+
         Ok(warnings)
     }
-    
+
     /// Get human-readable description of why a capability check failed
     pub fn explain_requirements(task_type: &TaskType) -> String {
         let level = Self::required_level(task_type);
         let perms = Self::required_permissions(task_type);
-        
+
         format!(
             "Task '{:?}' requires:\n- Capability level: {:?}\n- Permissions: {:?}",
             task_type, level, perms
@@ -206,8 +211,8 @@ impl KernelAgentConfig {
             agent_config: AgentConfig::default(),
             capabilities,
             initial_state: AgentState::Registered,
-            task_receive_timeout_secs: 1,      // Default: 1 second
-            task_execution_timeout_secs: 300,  // Default: 5 minutes
+            task_receive_timeout_secs: 1,     // Default: 1 second
+            task_execution_timeout_secs: 300, // Default: 5 minutes
         }
     }
 
@@ -318,8 +323,9 @@ impl AgentKernelTask {
                 let mut rx = self.task_rx.write().await;
                 tokio::time::timeout(
                     tokio::time::Duration::from_secs(self.config.task_receive_timeout_secs),
-                    rx.recv()
-                ).await
+                    rx.recv(),
+                )
+                .await
             };
 
             match request {
@@ -359,7 +365,7 @@ impl AgentKernelTask {
     }
 
     /// Handle a task execution request
-    /// 
+    ///
     /// 🟢 P1 FIX: Capability verification before task execution
     async fn handle_task_request(&self, request: KernelTaskRequest) {
         let KernelTaskRequest { task, result_tx } = request;
@@ -370,10 +376,9 @@ impl AgentKernelTask {
         );
 
         // 🟢 P1 FIX: Verify capabilities before executing task
-        if let Err(e) = TaskCapabilityRequirements::can_execute(
-            &self.config.capabilities,
-            &task.task_type
-        ) {
+        if let Err(e) =
+            TaskCapabilityRequirements::can_execute(&self.config.capabilities, &task.task_type)
+        {
             warn!(
                 "Agent {} capability check failed for task {}: {}",
                 self.config.agent_id, task.id, e
@@ -460,6 +465,8 @@ pub struct KernelAgentBuilder {
     with_planning_engine: Option<Arc<crate::planning::PlanningEngine>>,
     with_plan_executor: Option<Arc<crate::planning::PlanExecutor>>,
     with_replanner: Option<Arc<dyn crate::planning::RePlanner>>,
+    /// 🆕 TOOL-CALLING FIX: LLM provider for building LLMClient with tool support
+    with_llm_provider: Option<Arc<dyn crate::llm::LLMProvider>>,
 }
 
 impl KernelAgentBuilder {
@@ -478,6 +485,8 @@ impl KernelAgentBuilder {
             with_planning_engine: None,
             with_plan_executor: None,
             with_replanner: None,
+            // 🆕 TOOL-CALLING FIX: Initialize LLM provider as None
+            with_llm_provider: None,
         }
     }
 
@@ -527,38 +536,32 @@ impl KernelAgentBuilder {
     }
 
     /// 🟢 P1 FIX: Set memory system for long-term memory retrieval
-    pub fn with_memory_system(
-        mut self,
-        memory: Arc<dyn crate::memory::MemorySearch>,
-    ) -> Self {
+    pub fn with_memory_system(mut self, memory: Arc<dyn crate::memory::MemorySearch>) -> Self {
         self.with_memory_system = Some(memory);
         self
     }
 
     /// 🆕 PLANNING FIX: Set planning engine for autonomous planning
-    pub fn with_planning_engine(
-        mut self,
-        engine: Arc<crate::planning::PlanningEngine>,
-    ) -> Self {
+    pub fn with_planning_engine(mut self, engine: Arc<crate::planning::PlanningEngine>) -> Self {
         self.with_planning_engine = Some(engine);
         self
     }
 
     /// 🆕 PLANNING FIX: Set plan executor
-    pub fn with_plan_executor(
-        mut self,
-        executor: Arc<crate::planning::PlanExecutor>,
-    ) -> Self {
+    pub fn with_plan_executor(mut self, executor: Arc<crate::planning::PlanExecutor>) -> Self {
         self.with_plan_executor = Some(executor);
         self
     }
 
     /// 🆕 PLANNING FIX: Set replanner for dynamic replanning
-    pub fn with_replanner(
-        mut self,
-        replanner: Arc<dyn crate::planning::RePlanner>,
-    ) -> Self {
+    pub fn with_replanner(mut self, replanner: Arc<dyn crate::planning::RePlanner>) -> Self {
         self.with_replanner = Some(replanner);
+        self
+    }
+
+    /// 🆕 TOOL-CALLING FIX: Set LLM provider for building LLMClient with tool support
+    pub fn with_llm_provider(mut self, provider: Arc<dyn crate::llm::LLMProvider>) -> Self {
+        self.with_llm_provider = Some(provider);
         self
     }
 
@@ -581,12 +584,24 @@ impl KernelAgentBuilder {
             agent = agent.with_wallet(wallet);
         }
 
+        // Clone skill registry before moving for tool registration
+        let skill_registry_for_tools = self.with_skill_registry.clone();
+
         if let Some(registry) = self.with_skill_registry {
             agent = agent.with_skill_registry(registry);
         }
 
         if let Some(interface) = self.with_llm_interface {
             agent = agent.with_llm_interface(interface);
+        }
+
+        // 🆕 TOOL-CALLING FIX: Build LLMClient and register tools
+        if let Some(provider) = self.with_llm_provider {
+            let llm_client = Arc::new(crate::llm::LLMClient::new(provider));
+            agent = agent.with_llm_client(llm_client.clone());
+            if let Err(e) = agent.register_tools(skill_registry_for_tools).await {
+                warn!("Failed to register tools for agent {}: {}", agent_config.id, e);
+            }
         }
 
         // 🟢 P1 FIX: Attach memory system for long-term memory retrieval
@@ -615,8 +630,8 @@ impl KernelAgentBuilder {
             agent_config: agent_config.clone(),
             capabilities: capabilities.clone(),
             initial_state: AgentState::Registered,
-            task_receive_timeout_secs: 1,      // Default: 1 second
-            task_execution_timeout_secs: 300,  // Default: 5 minutes
+            task_receive_timeout_secs: 1,     // Default: 1 second
+            task_execution_timeout_secs: 300, // Default: 5 minutes
         };
 
         // Clone state_manager for the kernel task
@@ -636,7 +651,10 @@ impl KernelAgentBuilder {
             )
             .await
             .map_err(|e| {
-                error!("❌ kernel.spawn_task failed for agent {}: {:?}", agent_config.id, e);
+                error!(
+                    "❌ kernel.spawn_task failed for agent {}: {:?}",
+                    agent_config.id, e
+                );
                 AgentError::Execution(format!("Failed to spawn kernel task: {}", e))
             })?;
 
@@ -681,8 +699,8 @@ impl KernelIntegrable for Agent {
             agent_config: config.clone(),
             capabilities: capabilities.clone(),
             initial_state: AgentState::Registered,
-            task_receive_timeout_secs: 1,      // Default: 1 second
-            task_execution_timeout_secs: 300,  // Default: 5 minutes
+            task_receive_timeout_secs: 1,     // Default: 1 second
+            task_execution_timeout_secs: 300, // Default: 5 minutes
         };
 
         let agent_id = kernel_config.agent_id.clone();
@@ -704,7 +722,7 @@ impl KernelIntegrable for Agent {
 }
 
 /// 🟢 P1 FIX: Capability Validator for runtime permission checking
-/// 
+///
 /// Provides fine-grained capability validation for agent operations
 pub struct CapabilityValidator {
     caps: CapabilitySet,
@@ -715,7 +733,7 @@ impl CapabilityValidator {
     pub fn new(caps: CapabilitySet) -> Self {
         Self { caps }
     }
-    
+
     /// Validate capability for a specific operation
     pub fn validate(&self, required: CapabilityLevel) -> Result<()> {
         if self.caps.has(required) {
@@ -727,7 +745,7 @@ impl CapabilityValidator {
             )))
         }
     }
-    
+
     /// Validate permission for a specific operation
     pub fn validate_permission(&self, permission: &str) -> Result<()> {
         if self.caps.has_permission(permission) {
@@ -739,26 +757,24 @@ impl CapabilityValidator {
             )))
         }
     }
-    
+
     /// Check if can execute WASM
     pub fn can_execute_wasm(&self) -> bool {
-        self.caps.has(CapabilityLevel::L2FileWrite) 
-            && self.caps.has_permission("wasm:execute")
+        self.caps.has(CapabilityLevel::L2FileWrite) && self.caps.has_permission("wasm:execute")
     }
-    
+
     /// Check if can access network
     pub fn can_access_network(&self) -> bool {
-        self.caps.has(CapabilityLevel::L3NetworkOut)
-            && self.caps.has_permission("network:outbound")
+        self.caps.has(CapabilityLevel::L3NetworkOut) && self.caps.has_permission("network:outbound")
     }
-    
+
     /// Check if can perform chain transactions
     pub fn can_send_transactions(&self) -> bool {
         self.caps.has(CapabilityLevel::L8ChainWriteLow)
             && self.caps.has_permission("wallet:sign")
             && self.caps.has_permission("chain:send")
     }
-    
+
     /// Get the underlying capability set
     pub fn capabilities(&self) -> &CapabilitySet {
         &self.caps
@@ -774,34 +790,35 @@ mod tests {
         // This test requires a kernel instance, so it's more of an integration
         // test In practice, you would mock the kernel for unit tests
     }
-    
+
     #[test]
     fn test_task_capability_requirements() {
         use beebotos_kernel::capabilities::CapabilityLevel;
-        
+
         // Test LLM chat requires L3
         let caps = CapabilitySet::empty()
             .with_level(CapabilityLevel::L3NetworkOut)
             .with_permission("llm:chat")
             .with_permission("network:outbound");
-        
+
         assert!(TaskCapabilityRequirements::can_execute(&caps, &TaskType::LlmChat).is_ok());
-        
+
         // Test chain transaction requires L6
-        let caps = CapabilitySet::empty()
-            .with_level(CapabilityLevel::L5SpawnLimited); // Not enough
-        
-        assert!(TaskCapabilityRequirements::can_execute(&caps, &TaskType::ChainTransaction).is_err());
+        let caps = CapabilitySet::empty().with_level(CapabilityLevel::L5SpawnLimited); // Not enough
+
+        assert!(
+            TaskCapabilityRequirements::can_execute(&caps, &TaskType::ChainTransaction).is_err()
+        );
     }
-    
+
     #[test]
     fn test_capability_validator() {
         let caps = CapabilitySet::standard();
         let validator = CapabilityValidator::new(caps);
-        
+
         // Standard caps should have network access
         assert!(validator.can_access_network());
-        
+
         // Standard caps should not have financial access
         assert!(!validator.can_send_transactions());
     }

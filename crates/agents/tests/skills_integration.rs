@@ -8,7 +8,8 @@ fn minimal_wasm_header() -> Vec<u8> {
     vec![0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00]
 }
 
-/// Small WASM module with a function `handle(i32, i32) -> i32` that returns the first argument
+/// Small WASM module with a function `handle(i32, i32) -> i32` that returns the
+/// first argument
 fn echo_wasm_skill() -> Vec<u8> {
     // WASM module:
     // - header
@@ -18,12 +19,9 @@ fn echo_wasm_skill() -> Vec<u8> {
     // - code section: func body: local.get 0, end
     vec![
         // header
-        0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
-        // type section
-        0x01, 0x07, 0x01, 0x60, 0x02, 0x7f, 0x7f, 0x01, 0x7f,
-        // function section
-        0x03, 0x02, 0x01, 0x00,
-        // export section: "handle"
+        0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, // type section
+        0x01, 0x07, 0x01, 0x60, 0x02, 0x7f, 0x7f, 0x01, 0x7f, // function section
+        0x03, 0x02, 0x01, 0x00, // export section: "handle"
         0x07, 0x0a, 0x01, 0x06, 0x68, 0x61, 0x6e, 0x64, 0x6c, 0x65, 0x00, 0x00,
         // code section
         0x0a, 0x06, 0x01, 0x04, 0x00, 0x20, 0x00, 0x0b,
@@ -80,7 +78,9 @@ async fn test_skill_registry_registration() {
     let skill = loader.load_skill("test_registry_skill").await.unwrap();
 
     let registry = beebotos_agents::skills::SkillRegistry::new();
-    registry.register(skill, "test", vec!["tag1".to_string()]).await;
+    registry
+        .register(skill, "test", vec!["tag1".to_string()])
+        .await;
 
     let found = registry.get("test_registry_skill").await.unwrap();
     assert_eq!(found.skill.id, "test_registry_skill");
@@ -169,8 +169,7 @@ async fn test_skill_executor_creation() {
 
 #[tokio::test]
 async fn test_instance_manager_lifecycle() {
-    use beebotos_agents::skills::InstanceManager;
-    use beebotos_agents::skills::InstanceStatus;
+    use beebotos_agents::skills::{InstanceManager, InstanceStatus};
 
     let manager = InstanceManager::new();
     let mut config = HashMap::new();
@@ -186,13 +185,22 @@ async fn test_instance_manager_lifecycle() {
     assert_eq!(instance.config.get("model"), Some(&"gpt-4".to_string()));
 
     // Transition to Running
-    manager.update_status(&id, InstanceStatus::Running).await.unwrap();
+    manager
+        .update_status(&id, InstanceStatus::Running)
+        .await
+        .unwrap();
     let instance = manager.get(&id).await.unwrap();
     assert_eq!(instance.status, InstanceStatus::Running);
 
     // Pause and resume
-    manager.update_status(&id, InstanceStatus::Paused).await.unwrap();
-    manager.update_status(&id, InstanceStatus::Running).await.unwrap();
+    manager
+        .update_status(&id, InstanceStatus::Paused)
+        .await
+        .unwrap();
+    manager
+        .update_status(&id, InstanceStatus::Running)
+        .await
+        .unwrap();
 
     // Update config
     let mut updates = HashMap::new();
@@ -203,7 +211,10 @@ async fn test_instance_manager_lifecycle() {
     assert_eq!(instance.config.get("model"), Some(&"gpt-4".to_string()));
 
     // Stop and delete
-    manager.update_status(&id, InstanceStatus::Stopped).await.unwrap();
+    manager
+        .update_status(&id, InstanceStatus::Stopped)
+        .await
+        .unwrap();
     manager.delete(&id).await.unwrap();
     assert_eq!(manager.count().await, 0);
 }
@@ -213,14 +224,20 @@ async fn test_instance_manager_invalid_transition() {
     use beebotos_agents::skills::{InstanceManager, InstanceStatus};
 
     let manager = InstanceManager::new();
-    let id = manager.create("skill-1", "agent-1", HashMap::new()).await.unwrap();
+    let id = manager
+        .create("skill-1", "agent-1", HashMap::new())
+        .await
+        .unwrap();
 
     // Pending -> Paused is invalid
     let result = manager.update_status(&id, InstanceStatus::Paused).await;
     assert!(result.is_err());
 
     // Running -> Pending is invalid
-    manager.update_status(&id, InstanceStatus::Running).await.unwrap();
+    manager
+        .update_status(&id, InstanceStatus::Running)
+        .await
+        .unwrap();
     let result = manager.update_status(&id, InstanceStatus::Pending).await;
     assert!(result.is_err());
 }
@@ -230,7 +247,10 @@ async fn test_instance_manager_usage_stats() {
     use beebotos_agents::skills::InstanceManager;
 
     let manager = InstanceManager::new();
-    let id = manager.create("skill-1", "agent-1", HashMap::new()).await.unwrap();
+    let id = manager
+        .create("skill-1", "agent-1", HashMap::new())
+        .await
+        .unwrap();
 
     manager.record_execution(&id, true, 100.0).await.unwrap();
     manager.record_execution(&id, false, 200.0).await.unwrap();
@@ -248,13 +268,31 @@ async fn test_instance_manager_list_filtering() {
     use beebotos_agents::skills::{InstanceFilter, InstanceManager, InstanceStatus};
 
     let manager = InstanceManager::new();
-    let id1 = manager.create("skill-a", "agent-1", HashMap::new()).await.unwrap();
-    let id2 = manager.create("skill-b", "agent-1", HashMap::new()).await.unwrap();
-    let _id3 = manager.create("skill-a", "agent-2", HashMap::new()).await.unwrap();
+    let id1 = manager
+        .create("skill-a", "agent-1", HashMap::new())
+        .await
+        .unwrap();
+    let id2 = manager
+        .create("skill-b", "agent-1", HashMap::new())
+        .await
+        .unwrap();
+    let _id3 = manager
+        .create("skill-a", "agent-2", HashMap::new())
+        .await
+        .unwrap();
 
-    manager.update_status(&id1, InstanceStatus::Running).await.unwrap();
-    manager.update_status(&id2, InstanceStatus::Running).await.unwrap();
-    manager.update_status(&id2, InstanceStatus::Stopped).await.unwrap();
+    manager
+        .update_status(&id1, InstanceStatus::Running)
+        .await
+        .unwrap();
+    manager
+        .update_status(&id2, InstanceStatus::Running)
+        .await
+        .unwrap();
+    manager
+        .update_status(&id2, InstanceStatus::Stopped)
+        .await
+        .unwrap();
 
     let filter = InstanceFilter {
         agent_id: Some("agent-1".to_string()),
@@ -301,10 +339,15 @@ async fn test_executor_stream_chunks() {
     let executor = SkillExecutor::new().unwrap();
 
     let mut rx = executor
-        .execute_stream(&skill, None, HashMap::new(), SkillContext {
-            input: "hello world".to_string(),
-            parameters: HashMap::new(),
-        })
+        .execute_stream(
+            &skill,
+            None,
+            HashMap::new(),
+            SkillContext {
+                input: "hello world".to_string(),
+                parameters: HashMap::new(),
+            },
+        )
         .await
         .unwrap();
 
@@ -320,5 +363,8 @@ async fn test_executor_stream_chunks() {
     // Should receive at least one chunk (either Data, Error, or Complete)
     // Note: echo_wasm_skill does not conform to the [len: i32][data...] output
     // convention, so execution may fail and produce an Error chunk.
-    assert!(!chunks.is_empty(), "Stream should produce at least one chunk");
+    assert!(
+        !chunks.is_empty(),
+        "Stream should produce at least one chunk"
+    );
 }

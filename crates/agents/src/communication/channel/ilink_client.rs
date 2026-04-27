@@ -1,7 +1,7 @@
 //! iLink Protocol Client for WeChat Personal Account
 //!
-//! Direct implementation of Tencent's iLink Bot API for WeChat personal accounts.
-//! Based on the official OpenClaw/iLink protocol.
+//! Direct implementation of Tencent's iLink Bot API for WeChat personal
+//! accounts. Based on the official OpenClaw/iLink protocol.
 //!
 //! API Base: https://ilinkai.weixin.qq.com
 
@@ -382,14 +382,8 @@ impl ILinkClient {
             reqwest::header::CONTENT_TYPE,
             "application/json".parse().unwrap(),
         );
-        headers.insert(
-            "AuthorizationType",
-            "ilink_bot_token".parse().unwrap(),
-        );
-        headers.insert(
-            "X-WECHAT-UIN",
-            self.generate_uin_header().parse().unwrap(),
-        );
+        headers.insert("AuthorizationType", "ilink_bot_token".parse().unwrap());
+        headers.insert("X-WECHAT-UIN", self.generate_uin_header().parse().unwrap());
 
         if let Some(t) = token {
             headers.insert(
@@ -403,7 +397,10 @@ impl ILinkClient {
 
     /// Get bot QR code for login
     pub async fn get_bot_qrcode(&self) -> Result<QrCodeResponse> {
-        let url = format!("{}/ilink/bot/get_bot_qrcode?bot_type=3", self.config.base_url);
+        let url = format!(
+            "{}/ilink/bot/get_bot_qrcode?bot_type=3",
+            self.config.base_url
+        );
 
         println!("[ILINK] Requesting QR code from: {}", url);
         info!("🌐 正在请求 iLink QR 码: {}", url);
@@ -442,14 +439,13 @@ impl ILinkClient {
 
         info!("✅ QR 码响应成功，正在解析...");
 
-        let qr_resp: QrCodeResponse = match response
-            .json()
-            .await
-        {
+        let qr_resp: QrCodeResponse = match response.json().await {
             Ok(resp) => resp,
             Err(e) => {
                 error!("❌ 解析 QR 码响应失败: {}", e);
-                return Err(AgentError::platform(format!("Failed to parse QR response: {}", e)).into());
+                return Err(
+                    AgentError::platform(format!("Failed to parse QR response: {}", e)).into(),
+                );
             }
         };
 
@@ -641,17 +637,14 @@ impl ILinkClient {
         );
 
         // Generate random client_id
-        let client_id = format!(
-            "openclaw-weixin-{:08x}",
-            rand::random::<u32>()
-        );
+        let client_id = format!("openclaw-weixin-{:08x}", rand::random::<u32>());
 
         let body = SendMessageRequest {
             msg: OutboundMessage {
                 from_user_id: "".to_string(),
                 to_user_id: to_user_id.to_string(),
                 client_id,
-                message_type: 2, // BOT message
+                message_type: 2,  // BOT message
                 message_state: 2, // FINISH
                 context_token: context_token.to_string(),
                 item_list: vec![OutboundMessageItem {

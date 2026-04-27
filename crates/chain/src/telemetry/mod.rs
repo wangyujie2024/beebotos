@@ -2,11 +2,12 @@
 //!
 //! Provides distributed tracing and metrics export via OpenTelemetry.
 
+use std::time::Duration;
+
 use opentelemetry::trace::TracerProvider;
 use opentelemetry_otlp::WithExportConfig;
 use opentelemetry_sdk::trace::{Config, Sampler, Tracer};
 use opentelemetry_sdk::Resource;
-use std::time::Duration;
 use tracing::info;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::Registry;

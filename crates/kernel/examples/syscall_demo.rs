@@ -8,15 +8,11 @@
 //! - UpdateCapability: Capability elevation
 //! - EnterSandbox/ExitSandbox: Sandbox isolation
 
-use beebotos_kernel::{
-    capabilities::CapabilitySet,
-    syscalls::{
-        blockchain::{self, MockBlockchainClient},
-        sandbox::{self, SandboxRegistry},
-        SyscallArgs, SyscallContext, SyscallDispatcher,
-    },
-    KernelBuilder, KernelConfig,
-};
+use beebotos_kernel::capabilities::CapabilitySet;
+use beebotos_kernel::syscalls::blockchain::{self, MockBlockchainClient};
+use beebotos_kernel::syscalls::sandbox::{self, SandboxRegistry};
+use beebotos_kernel::syscalls::{SyscallArgs, SyscallContext, SyscallDispatcher};
+use beebotos_kernel::{KernelBuilder, KernelConfig};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

@@ -1,4 +1,5 @@
-use axum::{extract::Path, Json};
+use axum::extract::Path;
+use axum::Json;
 
 use crate::models::{PublishRequest, PublishResponse, Skill};
 

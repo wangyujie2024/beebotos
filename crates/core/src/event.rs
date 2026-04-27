@@ -1,10 +1,12 @@
 //! Event system for BeeBotOS
 
-use crate::types::{AgentId, AgentStatus, Timestamp};
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
+
+use serde::{Deserialize, Serialize};
 use tokio::sync::{mpsc, RwLock};
+
+use crate::types::{AgentId, AgentStatus, Timestamp};
 
 /// Event types
 #[derive(Debug, Clone, Serialize, Deserialize)]

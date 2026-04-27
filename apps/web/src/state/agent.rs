@@ -2,8 +2,9 @@
 //!
 //! Separated to avoid re-renders when other domains change
 
-use crate::api::{AgentInfo, AgentStatus};
 use leptos::prelude::*;
+
+use crate::api::{AgentInfo, AgentStatus};
 
 /// Agent domain state
 #[derive(Clone, Debug)]

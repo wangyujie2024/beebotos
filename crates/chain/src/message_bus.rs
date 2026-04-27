@@ -3,6 +3,7 @@
 //! Provides integration between Chain module and the unified Message Bus.
 
 use std::sync::Arc;
+
 use beebotos_message_bus::{Message, MessageBus, Result as BusResult};
 
 /// Blockchain transaction events
@@ -51,10 +52,7 @@ pub enum DaoEvent {
         timestamp: u64,
     },
     /// Proposal executed
-    ProposalExecuted {
-        proposal_id: u64,
-        timestamp: u64,
-    },
+    ProposalExecuted { proposal_id: u64, timestamp: u64 },
 }
 
 /// Chain Message Bus adapter
@@ -70,11 +68,14 @@ impl<B: MessageBus> ChainMessageBus<B> {
 
     /// Publish transaction event
     pub async fn publish_transaction(&self, event: ChainTransactionEvent) -> BusResult<()> {
-        let topic = format!("chain/tx/{}", match &event {
-            ChainTransactionEvent::Submitted { tx_hash, .. } => tx_hash.clone(),
-            ChainTransactionEvent::Confirmed { tx_hash, .. } => tx_hash.clone(),
-            ChainTransactionEvent::Failed { tx_hash, .. } => tx_hash.clone(),
-        });
+        let topic = format!(
+            "chain/tx/{}",
+            match &event {
+                ChainTransactionEvent::Submitted { tx_hash, .. } => tx_hash.clone(),
+                ChainTransactionEvent::Confirmed { tx_hash, .. } => tx_hash.clone(),
+                ChainTransactionEvent::Failed { tx_hash, .. } => tx_hash.clone(),
+            }
+        );
 
         let payload = serde_json::to_vec(&event).unwrap_or_default();
         let message = Message::new(&topic, payload);
@@ -90,56 +91,93 @@ impl<B: MessageBus> ChainMessageBus<B> {
     }
 
     /// Subscribe to transaction events
-    pub async fn subscribe_transactions(&self) -> BusResult<(beebotos_message_bus::SubscriptionId, beebotos_message_bus::MessageStream)> {
+    pub async fn subscribe_transactions(
+        &self,
+    ) -> BusResult<(
+        beebotos_message_bus::SubscriptionId,
+        beebotos_message_bus::MessageStream,
+    )> {
         self.bus.subscribe("chain/tx/+").await
     }
 
     /// Subscribe to DAO events
-    pub async fn subscribe_dao_events(&self) -> BusResult<(beebotos_message_bus::SubscriptionId, beebotos_message_bus::MessageStream)> {
+    pub async fn subscribe_dao_events(
+        &self,
+    ) -> BusResult<(
+        beebotos_message_bus::SubscriptionId,
+        beebotos_message_bus::MessageStream,
+    )> {
         self.bus.subscribe("chain/dao/+").await
     }
 
     /// Publish transaction submitted
-    pub async fn transaction_submitted(&self, tx_hash: String, from: String, to: String, value: String) -> BusResult<()> {
+    pub async fn transaction_submitted(
+        &self,
+        tx_hash: String,
+        from: String,
+        to: String,
+        value: String,
+    ) -> BusResult<()> {
         self.publish_transaction(ChainTransactionEvent::Submitted {
             tx_hash,
             from,
             to,
             value,
             timestamp: chrono::Utc::now().timestamp() as u64,
-        }).await
+        })
+        .await
     }
 
     /// Publish transaction confirmed
-    pub async fn transaction_confirmed(&self, tx_hash: String, block_number: u64, gas_used: u64, status: bool) -> BusResult<()> {
+    pub async fn transaction_confirmed(
+        &self,
+        tx_hash: String,
+        block_number: u64,
+        gas_used: u64,
+        status: bool,
+    ) -> BusResult<()> {
         self.publish_transaction(ChainTransactionEvent::Confirmed {
             tx_hash,
             block_number,
             gas_used,
             status,
             timestamp: chrono::Utc::now().timestamp() as u64,
-        }).await
+        })
+        .await
     }
 
     /// Publish proposal created
-    pub async fn proposal_created(&self, proposal_id: u64, proposer: String, description: String) -> BusResult<()> {
+    pub async fn proposal_created(
+        &self,
+        proposal_id: u64,
+        proposer: String,
+        description: String,
+    ) -> BusResult<()> {
         self.publish_dao_event(DaoEvent::ProposalCreated {
             proposal_id,
             proposer,
             description,
             timestamp: chrono::Utc::now().timestamp() as u64,
-        }).await
+        })
+        .await
     }
 
     /// Publish vote cast
-    pub async fn vote_cast(&self, proposal_id: u64, voter: String, support: bool, voting_power: u64) -> BusResult<()> {
+    pub async fn vote_cast(
+        &self,
+        proposal_id: u64,
+        voter: String,
+        support: bool,
+        voting_power: u64,
+    ) -> BusResult<()> {
         self.publish_dao_event(DaoEvent::VoteCast {
             proposal_id,
             voter,
             support,
             voting_power,
             timestamp: chrono::Utc::now().timestamp() as u64,
-        }).await
+        })
+        .await
     }
 }
 
@@ -154,15 +192,17 @@ impl<B: MessageBus> Clone for ChainMessageBus<B> {
 use std::sync::OnceLock;
 
 /// Global Message Bus handle
-/// 
-/// SECURITY FIX: Replaced `static mut` with `OnceLock` for thread-safe initialization
+///
+/// SECURITY FIX: Replaced `static mut` with `OnceLock` for thread-safe
+/// initialization
 static CHAIN_MESSAGE_BUS: OnceLock<Arc<dyn MessageBus>> = OnceLock::new();
 
 /// Initialize Chain Message Bus
-/// 
+///
 /// This function is thread-safe and can only be called once.
 pub fn init_message_bus<B: MessageBus + 'static>(bus: Arc<B>) -> Result<(), &'static str> {
-    CHAIN_MESSAGE_BUS.set(bus)
+    CHAIN_MESSAGE_BUS
+        .set(bus)
         .map_err(|_| "Chain message bus already initialized")
 }
 
@@ -173,8 +213,9 @@ pub fn message_bus() -> Option<Arc<dyn MessageBus>> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use beebotos_message_bus::{DefaultMessageBus, JsonCodec, MemoryTransport};
+
+    use super::*;
 
     #[tokio::test]
     async fn test_chain_message_bus() {
@@ -185,11 +226,14 @@ mod tests {
         ));
         let chain_bus = ChainMessageBus::new(bus);
 
-        assert!(chain_bus.transaction_submitted(
-            "0x123".to_string(),
-            "0xabc".to_string(),
-            "0xdef".to_string(),
-            "1000".to_string()
-        ).await.is_ok());
+        assert!(chain_bus
+            .transaction_submitted(
+                "0x123".to_string(),
+                "0xabc".to_string(),
+                "0xdef".to_string(),
+                "1000".to_string()
+            )
+            .await
+            .is_ok());
     }
 }

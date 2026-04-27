@@ -2,8 +2,10 @@
 //!
 //! 支持多种日志格式: compact, pretty, json
 
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
+
 use crate::server::config::LogConfig;
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 /// 初始化日志系统
 pub fn init_logger(config: &LogConfig) -> anyhow::Result<()> {

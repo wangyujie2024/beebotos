@@ -60,10 +60,10 @@ impl Default for ScalingConfig {
             enabled: true,
             min_workers: 2,
             max_workers: 20,
-            scale_up_threshold: 10,   // Scale up when 10+ tasks queued
-            scale_down_threshold: 2,  // Scale down when < 2 tasks queued
-            check_interval_secs: 30,  // Check every 30 seconds
-            cooldown_secs: 60,        // Wait 60s between scaling actions
+            scale_up_threshold: 10,  // Scale up when 10+ tasks queued
+            scale_down_threshold: 2, // Scale down when < 2 tasks queued
+            check_interval_secs: 30, // Check every 30 seconds
+            cooldown_secs: 60,       // Wait 60s between scaling actions
         }
     }
 }
@@ -272,7 +272,7 @@ impl QueueManager {
     ///
     /// RELIABILITY FIX: Now starts supervisor task for automatic worker restart
     /// on panic
-    /// 
+    ///
     /// CODE QUALITY FIX: Added dynamic scaling for subagent workers
     pub async fn spawn_workers(&self, processor: Arc<dyn TaskProcessor>) {
         info!("Starting queue workers...");
@@ -289,7 +289,7 @@ impl QueueManager {
         } else {
             5 // Default for backward compatibility
         };
-        
+
         // Spawn subagent queue workers (parallel - dynamic count)
         for i in 0..initial_workers {
             self.spawn_subagent_worker(processor.clone(), i).await;
@@ -301,7 +301,7 @@ impl QueueManager {
 
         // RELIABILITY FIX: Start supervisor task for automatic restart
         self.start_supervisor(processor.clone()).await;
-        
+
         // CODE QUALITY FIX: Start dynamic scaling task if enabled
         if self.config.scaling.enabled {
             self.start_auto_scaling(processor.clone()).await;
@@ -309,14 +309,14 @@ impl QueueManager {
 
         info!("All queue workers started with supervision");
     }
-    
+
     /// CODE QUALITY FIX: Start auto-scaling task for subagent workers
     async fn start_auto_scaling(&self, processor: Arc<dyn TaskProcessor>) {
         let workers = self.workers.clone();
         let worker_infos = self.worker_infos.clone();
         let shutdown = self.shutdown.clone();
         let config = self.config.clone();
-        
+
         let semaphore = self.subagent_queue.semaphore.clone();
         let stats = self.stats.clone();
         let event_bus = self.event_bus.clone();
@@ -327,7 +327,8 @@ impl QueueManager {
 
         tokio::spawn(async move {
             info!("Auto-scaling started for subagent workers");
-            let mut interval = tokio::time::interval(Duration::from_secs(config.scaling.check_interval_secs));
+            let mut interval =
+                tokio::time::interval(Duration::from_secs(config.scaling.check_interval_secs));
             let mut last_scale_action = std::time::Instant::now();
             let mut _current_workers = config.scaling.min_workers;
 
@@ -338,23 +339,23 @@ impl QueueManager {
                         if last_scale_action.elapsed().as_secs() < config.scaling.cooldown_secs {
                             continue;
                         }
-                        
+
                         // CODE QUALITY FIX: Get actual queue depth from counter
                         let queue_depth = queue_depth_counter.load(Ordering::SeqCst);
-                        
+
                         // Get current worker count (subagent workers only)
                         let worker_count = {
                             let infos_guard = worker_infos.lock().await;
                             infos_guard.iter().filter(|w| w.worker_type == WorkerType::Subagent).count()
                         };
-                        
+
                         // Scale up logic
-                        if queue_depth >= config.scaling.scale_up_threshold 
+                        if queue_depth >= config.scaling.scale_up_threshold
                             && worker_count < config.scaling.max_workers {
                             let new_worker_id = worker_count;
-                            info!("Scaling up: adding worker {} (queue depth: {})", 
+                            info!("Scaling up: adding worker {} (queue depth: {})",
                                 new_worker_id, queue_depth);
-                            
+
                             // Spawn new worker with queue depth counter
                             let handle = crate::queue::worker_tasks::spawn_subagent_worker_task(
                                 rx.clone(),
@@ -367,7 +368,7 @@ impl QueueManager {
                                 0,
                                 Some(queue_depth_counter.clone()),
                             );
-                            
+
                             {
                                 let mut workers_guard = workers.lock().await;
                                 workers_guard.push(handle);
@@ -380,14 +381,14 @@ impl QueueManager {
                                     restart_count: 0,
                                 });
                             }
-                            
+
                             _current_workers += 1;
                             last_scale_action = std::time::Instant::now();
                         }
-                        
+
                         // Scale down logic (simplified - just log for now)
                         // In production, you'd want to gracefully terminate idle workers
-                        if queue_depth <= config.scaling.scale_down_threshold 
+                        if queue_depth <= config.scaling.scale_down_threshold
                             && worker_count > config.scaling.min_workers {
                             info!("Scale down condition met (queue depth: {}), but keeping {} workers for stability",
                                 queue_depth, config.scaling.min_workers);
@@ -817,7 +818,7 @@ mod tests {
         });
 
         manager.spawn_workers(processor.clone()).await;
-        
+
         // Give workers time to start listening for shutdown
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 

@@ -1,12 +1,13 @@
 //! Blockchain Syscall Tests
 
-use beebotos_kernel::syscalls::{
-    blockchain::{init_blockchain_client, BlockchainClient, MockBlockchainClient, SwapResult},
-    handlers::get_handler,
-    sandbox::{init_sandbox_registry, SandboxRegistry},
-};
-use parking_lot::RwLock;
 use std::sync::Arc;
+
+use beebotos_kernel::syscalls::blockchain::{
+    init_blockchain_client, BlockchainClient, MockBlockchainClient, SwapResult,
+};
+use beebotos_kernel::syscalls::handlers::get_handler;
+use beebotos_kernel::syscalls::sandbox::{init_sandbox_registry, SandboxRegistry};
+use parking_lot::RwLock;
 
 #[test]
 fn test_syscall_registration() {

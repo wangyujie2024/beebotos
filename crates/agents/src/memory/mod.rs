@@ -1,7 +1,7 @@
 //! Memory Module
 //!
 //! Agent memory management.
-//! 
+//!
 //! 🟠 HIGH FIX: Memory entry size limits to prevent memory exhaustion.
 //!
 //! ## High Priority Features (OpenClaw Compatible)
@@ -9,70 +9,64 @@
 //! - **Memory Flush**: Automatic memory persistence on context window limits
 //! - **Markdown Storage**: File-based memory storage (File is Truth)
 
+pub mod backup;
+pub mod embedding;
+pub mod hybrid_search;
+pub mod hybrid_search_sqlite;
 pub mod local;
+pub mod markdown_search;
+pub mod markdown_storage;
+pub mod memory_flush;
+pub mod memory_flush_llm;
 pub mod qmd;
 pub mod sync;
-pub mod backup;
-pub mod hybrid_search;
-pub mod memory_flush;
-pub mod markdown_storage;
-pub mod hybrid_search_sqlite;
-pub mod embedding;
-pub mod markdown_search;
-pub mod memory_flush_llm;
 
 // 🟢 P1 FIX: Unified search interface
 pub mod search;
 
-pub use local::LocalMemory;
-pub use hybrid_search::{
-    HybridSearchEngine, HybridSearchConfig,
-    DEFAULT_VECTOR_WEIGHT as HYBRID_DEFAULT_VECTOR_WEIGHT, 
-    DEFAULT_BM25_WEIGHT as HYBRID_DEFAULT_BM25_WEIGHT, 
-    DEFAULT_MAX_RESULTS as HYBRID_DEFAULT_MAX_RESULTS,
-};
-pub use memory_flush::{
-    MemoryFlushManager, MemoryFlushConfig, FlushEvent, FlushTrigger,
-    FlushStatistics, ImportanceAnalysis, MemoryCategory, FlushedMemoryEntry,
-    ContextWindowState, DEFAULT_TOKEN_THRESHOLD, DEFAULT_FLUSH_INTERVAL_SECS,
-};
-pub use markdown_storage::{
-    MarkdownStorage, MarkdownStorageConfig, MarkdownMemoryEntry,
-    MemoryFileType, SearchMatch,
-    CORE_MEMORY_FILE, USER_PROFILE_FILE, SOUL_FILE, 
-    AGENTS_MANUAL_FILE, HEARTBEAT_FILE, MEMORY_SUBDIR,
-};
-pub use hybrid_search_sqlite::{
-    HybridSearchSqlite, SqliteMemoryEntry, SqliteSearchResult,
-    SearchDatabaseStats, DEFAULT_SEARCH_DB,
-};
 pub use embedding::{
-    EmbeddingProvider, EmbeddingConfig, EmbeddingProviderFactory,
-    ProviderType, CachedEmbeddingProvider,
-    DEFAULT_EMBEDDING_DIMENSION, DEFAULT_EMBEDDING_TIMEOUT_SECS,
+    CachedEmbeddingProvider, EmbeddingConfig, EmbeddingProvider, EmbeddingProviderFactory,
+    ProviderType, DEFAULT_EMBEDDING_DIMENSION, DEFAULT_EMBEDDING_TIMEOUT_SECS,
     MAX_EMBEDDING_TEXT_LENGTH,
 };
+pub use hybrid_search::{
+    HybridSearchConfig, HybridSearchEngine, DEFAULT_BM25_WEIGHT as HYBRID_DEFAULT_BM25_WEIGHT,
+    DEFAULT_MAX_RESULTS as HYBRID_DEFAULT_MAX_RESULTS,
+    DEFAULT_VECTOR_WEIGHT as HYBRID_DEFAULT_VECTOR_WEIGHT,
+};
+pub use hybrid_search_sqlite::{
+    HybridSearchSqlite, SearchDatabaseStats, SqliteMemoryEntry, SqliteSearchResult,
+    DEFAULT_SEARCH_DB,
+};
+pub use local::LocalMemory;
 pub use markdown_search::{
-    UnifiedMemorySystem, UnifiedMemoryConfig, MemorySearchResult,
-    MemoryFileWatcher, IndexingStats, IndexingProgressCallback,
+    IndexingProgressCallback, IndexingStats, MemoryFileWatcher, MemorySearchResult,
+    UnifiedMemoryConfig, UnifiedMemorySystem,
+};
+pub use markdown_storage::{
+    MarkdownMemoryEntry, MarkdownStorage, MarkdownStorageConfig, MemoryFileType, SearchMatch,
+    AGENTS_MANUAL_FILE, CORE_MEMORY_FILE, HEARTBEAT_FILE, MEMORY_SUBDIR, SOUL_FILE,
+    USER_PROFILE_FILE,
+};
+pub use memory_flush::{
+    ContextWindowState, FlushEvent, FlushStatistics, FlushTrigger, FlushedMemoryEntry,
+    ImportanceAnalysis, MemoryCategory, MemoryFlushConfig, MemoryFlushManager,
+    DEFAULT_FLUSH_INTERVAL_SECS, DEFAULT_TOKEN_THRESHOLD,
 };
 pub use memory_flush_llm::{
-    LLMMemoryFlushOrchestrator, LLMMemoryFlushConfig, LLMImportanceAnalysis,
-    LLMProvider, OpenAILLMProvider, MockLLMProvider,
-    CompressionResult, ConversationMessage,
+    CompressionResult, ConversationMessage, LLMImportanceAnalysis, LLMMemoryFlushConfig,
+    LLMMemoryFlushOrchestrator, LLMProvider, MockLLMProvider, OpenAILLMProvider,
 };
-
 // 🟢 P1 FIX: Unified search exports - these are the canonical types
 pub use search::{
-    MemorySearch, SearchConfig, SearchResult, SearchStats,
-    VectorEmbedding, BM25IndexEntry,
-    DEFAULT_VECTOR_WEIGHT, DEFAULT_BM25_WEIGHT, DEFAULT_MAX_RESULTS,
+    BM25IndexEntry, MemorySearch, SearchConfig, SearchResult, SearchStats, VectorEmbedding,
+    DEFAULT_BM25_WEIGHT, DEFAULT_MAX_RESULTS, DEFAULT_VECTOR_WEIGHT,
 };
-
-#[allow(unused_imports)]
-use crate::error::{Result, AgentError};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+
+#[allow(unused_imports)]
+use crate::error::{AgentError, Result};
 
 /// CODE QUALITY FIX: Memory limits are now configurable via MemoryConfig
 /// Default maximum content size: 1MB
@@ -110,14 +104,17 @@ impl Default for MemoryLimitsConfig {
 
 impl MemoryLimitsConfig {
     /// Create configuration from environment variables
-    /// 
+    ///
     /// Environment variables:
-    /// - `AGENT_MEMORY_MAX_CONTENT_SIZE`: Max content size in bytes (default: 1MB)
-    /// - `AGENT_MEMORY_MAX_METADATA_ENTRIES`: Max metadata entries (default: 100)
-    /// - `AGENT_MEMORY_MAX_METADATA_VALUE_SIZE`: Max metadata value size in bytes (default: 4KB)
+    /// - `AGENT_MEMORY_MAX_CONTENT_SIZE`: Max content size in bytes (default:
+    ///   1MB)
+    /// - `AGENT_MEMORY_MAX_METADATA_ENTRIES`: Max metadata entries (default:
+    ///   100)
+    /// - `AGENT_MEMORY_MAX_METADATA_VALUE_SIZE`: Max metadata value size in
+    ///   bytes (default: 4KB)
     pub fn from_env() -> Self {
         use std::env;
-        
+
         Self {
             max_content_size: env::var("AGENT_MEMORY_MAX_CONTENT_SIZE")
                 .ok()
@@ -152,7 +149,11 @@ pub enum MemoryError {
     #[error("Too many metadata entries: {count} (max: {max})")]
     TooManyMetadataEntries { count: usize, max: usize },
     #[error("Metadata value too large for key '{key}': {size} bytes (max: {max})")]
-    MetadataValueTooLarge { key: String, size: usize, max: usize },
+    MetadataValueTooLarge {
+        key: String,
+        size: usize,
+        max: usize,
+    },
 }
 
 impl MemoryEntry {
@@ -166,7 +167,7 @@ impl MemoryEntry {
                 max: DEFAULT_MAX_CONTENT_SIZE,
             });
         }
-        
+
         // Check metadata entry count
         if self.metadata.len() > DEFAULT_MAX_METADATA_ENTRIES {
             return Err(MemoryError::TooManyMetadataEntries {
@@ -174,7 +175,7 @@ impl MemoryEntry {
                 max: DEFAULT_MAX_METADATA_ENTRIES,
             });
         }
-        
+
         // Check metadata value sizes
         for (key, value) in &self.metadata {
             if value.len() > DEFAULT_MAX_METADATA_VALUE_SIZE {
@@ -185,16 +186,14 @@ impl MemoryEntry {
                 });
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// Calculate total size of this entry
     pub fn total_size(&self) -> usize {
         let content_size = self.content.len();
-        let metadata_size: usize = self.metadata.iter()
-            .map(|(k, v)| k.len() + v.len())
-            .sum();
+        let metadata_size: usize = self.metadata.iter().map(|(k, v)| k.len() + v.len()).sum();
         content_size + metadata_size
     }
 }

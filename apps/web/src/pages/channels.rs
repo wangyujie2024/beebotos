@@ -2,13 +2,16 @@
 //!
 //! Reference: /data/copaw-style-web channel management design
 
-use crate::api::{ChannelService, ChannelInfo, ChannelStatus, WeChatQrResponse, QrStatusResponse, ChannelConfig};
-use wasm_bindgen::JsCast;
-use crate::components::InlineLoading;
-use crate::i18n::I18nContext;
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 use leptos::view;
+use wasm_bindgen::JsCast;
+
+use crate::api::{
+    ChannelConfig, ChannelInfo, ChannelService, ChannelStatus, QrStatusResponse, WeChatQrResponse,
+};
+use crate::components::InlineLoading;
+use crate::i18n::I18nContext;
 
 #[component]
 pub fn ChannelsPage() -> impl IntoView {
@@ -23,9 +26,7 @@ pub fn ChannelsPage() -> impl IntoView {
     // Channels resource
     let channels = LocalResource::new(move || {
         let service = service_stored.get_value();
-        async move {
-            service.list().await.unwrap_or_default()
-        }
+        async move { service.list().await.unwrap_or_default() }
     });
 
     // Selected channel for configuration
@@ -196,7 +197,7 @@ pub fn ChannelsPage() -> impl IntoView {
                                                                 match service.set_enabled(&id, enabled).await {
                                                                     Ok(_) => {
                                                                         set_action_message.set(Some(
-                                                                            if enabled { "Channel enabled".to_string() } else { "Channel disabled".to_string() }
+                                                                            if enabled { i18n_stored.get_value().t("channel-enabled-msg") } else { i18n_stored.get_value().t("channel-disabled-msg") }
                                                                         ));
                                                                         refresh();
                                                                     }
@@ -235,24 +236,25 @@ pub fn ChannelsPage() -> impl IntoView {
                                                                 {qr.qrcode_img_content.map(|url| view! {
                                                                     <div class="qr-link-box">
                                                                         <a href={url.clone()} target="_blank" rel="noopener" class="qr-link">
-                                                                            <span class="qr-link-icon">[扫码]</span>
-                                                                            <span>"点击打开微信扫码页面"</span>
+                                                                            <span class="qr-link-icon">{format!("[{}]", i18n_stored.get_value().t("scan-qr"))}</span>
+                                                                            <span>{move || i18n_stored.get_value().t("click-open-wechat-scan")}</span>
                                                                         </a>
-                                                                        <p class="qr-hint">"请使用微信扫描页面中的二维码"</p>
+                                                                        <p class="qr-hint">{move || i18n_stored.get_value().t("wechat-scan-hint")}</p>
                                                                     </div>
                                                                 })}
-                                                                <p class="qr-text">{format!("二维码: {}", qr.qrcode.clone())}</p>
+                                                                <p class="qr-text">{format!("{}: {}", i18n_stored.get_value().t("qr-code-label"), qr.qrcode.clone())}</p>
                                                                 <p class="qr-expiry">
                                                                     {i18n_stored.get_value().t("qr-expires-in")}
                                                                     {format!(" {}s", qr.expires_in)}
                                                                 </p>
                                                                 {move || qr_status.get().map(|status| {
-                                                                    let (icon, text, class) = match status.status.as_str() {
-                                                                        "confirmed" => ("✅", "扫码成功，登录完成", "status-success"),
-                                                                        "scanned" => ("📱", "已扫码，等待确认", "status-pending"),
-                                                                        "expired" => ("❌", "二维码已过期，请重新获取", "status-error"),
-                                                                        _ => ("⏳", "等待扫码...", "status-pending"),
+                                                                    let (icon, text_key, class) = match status.status.as_str() {
+                                                                        "confirmed" => ("✅", "qr-status-confirmed", "status-success"),
+                                                                        "scanned" => ("📱", "qr-status-scanned", "status-pending"),
+                                                                        "expired" => ("❌", "qr-status-expired", "status-error"),
+                                                                        _ => ("⏳", "qr-status-waiting", "status-pending"),
                                                                     };
+                                                                    let text = i18n_stored.get_value().t(text_key);
                                                                     view! {
                                                                         <p class={format!("qr-status {}", class)}>
                                                                             {icon} " " {text}
@@ -294,7 +296,7 @@ pub fn ChannelsPage() -> impl IntoView {
                                                                                         }
                                                                                     }
                                                                                     Err(e) => {
-                                                                                        set_qr_error.set(Some(format!("轮询二维码状态失败: {:?}", e)));
+                                                                                        set_qr_error.set(Some(format!("{}: {:?}", i18n_stored.get_value().t("poll-qr-failed"), e)));
                                                                                         set_qr_polling.set(false);
                                                                                         break;
                                                                                     }
@@ -303,7 +305,7 @@ pub fn ChannelsPage() -> impl IntoView {
                                                                         });
                                                                     }
                                                                     Err(e) => {
-                                                                        set_qr_error.set(Some(format!("获取二维码失败: {:?}", e)));
+                                                                        set_qr_error.set(Some(format!("{}: {:?}", i18n_stored.get_value().t("get-qr-failed"), e)));
                                                                     }
                                                                 }
                                                                 set_qr_loading.set(false);
@@ -366,13 +368,13 @@ pub fn ChannelsPage() -> impl IntoView {
                                                         match service.test_connection(&id).await {
                                                             Ok(resp) => {
                                                                 if resp.success {
-                                                                    set_action_message.set(Some("Connection test passed".to_string()));
+                                                                    set_action_message.set(Some(i18n_stored.get_value().t("connection-test-passed")));
                                                                 } else {
-                                                                    set_action_error.set(Some("Connection test failed".to_string()));
+                                                                    set_action_error.set(Some(i18n_stored.get_value().t("connection-test-failed")));
                                                                 }
                                                             }
                                                             Err(e) => {
-                                                                set_action_error.set(Some(format!("Test failed: {}", e)));
+                                                                set_action_error.set(Some(format!("{}: {}", i18n_stored.get_value().t("test-failed"), e)));
                                                             }
                                                         }
                                                     });
@@ -400,12 +402,12 @@ pub fn ChannelsPage() -> impl IntoView {
                                                     spawn_local(async move {
                                                         match service.update(&id, cfg).await {
                                                             Ok(_) => {
-                                                                set_action_message.set(Some("Configuration saved".to_string()));
+                                                                set_action_message.set(Some(i18n_stored.get_value().t("config-saved")));
                                                                 set_config_panel_open.set(false);
                                                                 refresh();
                                                             }
                                                             Err(e) => {
-                                                                set_action_error.set(Some(format!("Save failed: {}", e)));
+                                                                set_action_error.set(Some(format!("{}: {}", i18n_stored.get_value().t("save-failed"), e)));
                                                             }
                                                         }
                                                     });

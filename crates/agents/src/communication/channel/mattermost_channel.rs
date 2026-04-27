@@ -29,9 +29,13 @@ use tracing::{error, info, warn};
 /// WebSocket stream type alias
 type WsStream = WebSocketStream<MaybeTlsStream<TcpStream>>;
 
-use super::channel_extensions::{EditableChannel, MessageEditHistory, PinnableChannel, PinnedMessage};
+use super::channel_extensions::{
+    EditableChannel, MessageEditHistory, PinnableChannel, PinnedMessage,
+};
 use super::r#trait::{BaseChannelConfig, ConnectionMode, ContentType};
-use super::{Channel, ChannelConfig, ChannelEvent, ChannelInfo, ChannelType, MemberInfo, MemberRole};
+use super::{
+    Channel, ChannelConfig, ChannelEvent, ChannelInfo, ChannelType, MemberInfo, MemberRole,
+};
 use crate::communication::{Message, MessageType, PlatformType};
 use crate::error::{AgentError, Result};
 
@@ -262,7 +266,9 @@ impl MattermostChannelClient {
         let http_client = reqwest::Client::builder()
             .timeout(Duration::from_secs(30))
             .build()
-            .map_err(|e| AgentError::configuration(format!("Failed to create HTTP client: {}", e)))?;
+            .map_err(|e| {
+                AgentError::configuration(format!("Failed to create HTTP client: {}", e))
+            })?;
 
         Ok(Self {
             name: "mattermost".to_string(),
@@ -277,7 +283,10 @@ impl MattermostChannelClient {
 
     /// Get API base URL
     fn api_url(&self, path: &str) -> String {
-        format!("{}{}{}", self.config.server_url, MATTERMOST_API_VERSION, path)
+        format!(
+            "{}{}{}",
+            self.config.server_url, MATTERMOST_API_VERSION, path
+        )
     }
 
     /// Get WebSocket URL
@@ -296,7 +305,8 @@ impl MattermostChannelClient {
     /// Make an authenticated API request
     async fn api_get(&self, path: &str) -> Result<reqwest::Response> {
         let url = self.api_url(path);
-        let response = self.http_client
+        let response = self
+            .http_client
             .get(&url)
             .header("Authorization", format!("Bearer {}", self.config.token))
             .send()
@@ -318,7 +328,8 @@ impl MattermostChannelClient {
     /// Make an authenticated API POST request
     async fn api_post(&self, path: &str, body: serde_json::Value) -> Result<reqwest::Response> {
         let url = self.api_url(path);
-        let response = self.http_client
+        let response = self
+            .http_client
             .post(&url)
             .header("Authorization", format!("Bearer {}", self.config.token))
             .json(&body)
@@ -341,7 +352,8 @@ impl MattermostChannelClient {
     /// Make an authenticated API DELETE request
     async fn api_delete(&self, path: &str) -> Result<reqwest::Response> {
         let url = self.api_url(path);
-        let response = self.http_client
+        let response = self
+            .http_client
             .delete(&url)
             .header("Authorization", format!("Bearer {}", self.config.token))
             .send()
@@ -363,7 +375,9 @@ impl MattermostChannelClient {
     /// Get current user information
     async fn get_me(&self) -> Result<MattermostUser> {
         let response = self.api_get("/users/me").await?;
-        let user: MattermostUser = response.json().await
+        let user: MattermostUser = response
+            .json()
+            .await
             .map_err(|e| AgentError::platform(format!("Failed to parse user info: {}", e)))?;
         Ok(user)
     }
@@ -375,11 +389,13 @@ impl MattermostChannelClient {
         if let Some(since_time) = since {
             path.push_str(&format!("?since={}", since_time));
         }
-        
+
         let response = self.api_get(&path).await?;
-        let posts_data: serde_json::Value = response.json().await
+        let posts_data: serde_json::Value = response
+            .json()
+            .await
             .map_err(|e| AgentError::platform(format!("Failed to parse posts: {}", e)))?;
-        
+
         // Parse posts from the response
         let posts: Vec<MattermostPost> = posts_data["posts"]
             .as_object()
@@ -389,23 +405,30 @@ impl MattermostChannelClient {
                     .collect()
             })
             .unwrap_or_default();
-        
+
         Ok(posts)
     }
 
     /// Create a post
-    async fn create_post(&self, channel_id: &str, message: &str, root_id: Option<&str>) -> Result<MattermostPost> {
+    async fn create_post(
+        &self,
+        channel_id: &str,
+        message: &str,
+        root_id: Option<&str>,
+    ) -> Result<MattermostPost> {
         let mut body = json!({
             "channel_id": channel_id,
             "message": message,
         });
-        
+
         if let Some(root) = root_id {
             body["root_id"] = json!(root);
         }
-        
+
         let response = self.api_post("/posts", body).await?;
-        let post: MattermostPost = response.json().await
+        let post: MattermostPost = response
+            .json()
+            .await
             .map_err(|e| AgentError::platform(format!("Failed to parse post: {}", e)))?;
         Ok(post)
     }
@@ -416,9 +439,11 @@ impl MattermostChannelClient {
             "id": post_id,
             "message": message,
         });
-        
+
         let response = self.api_post(&format!("/posts/{}", post_id), body).await?;
-        let post: MattermostPost = response.json().await
+        let post: MattermostPost = response
+            .json()
+            .await
             .map_err(|e| AgentError::platform(format!("Failed to parse updated post: {}", e)))?;
         Ok(post)
     }
@@ -432,23 +457,29 @@ impl MattermostChannelClient {
     /// Pin a post to the channel
     async fn pin_post(&self, post_id: &str) -> Result<()> {
         let body = json!(post_id);
-        self.api_post(&format!("/posts/{}/pin", post_id), body).await?;
+        self.api_post(&format!("/posts/{}/pin", post_id), body)
+            .await?;
         Ok(())
     }
 
     /// Unpin a post from the channel
     async fn unpin_post(&self, post_id: &str) -> Result<()> {
         let body = json!(post_id);
-        self.api_post(&format!("/posts/{}/unpin", post_id), body).await?;
+        self.api_post(&format!("/posts/{}/unpin", post_id), body)
+            .await?;
         Ok(())
     }
 
     /// Get pinned posts for a channel
     async fn get_pinned_posts(&self, channel_id: &str) -> Result<Vec<MattermostPost>> {
-        let response = self.api_get(&format!("/channels/{}/pinned", channel_id)).await?;
-        let data: serde_json::Value = response.json().await
+        let response = self
+            .api_get(&format!("/channels/{}/pinned", channel_id))
+            .await?;
+        let data: serde_json::Value = response
+            .json()
+            .await
             .map_err(|e| AgentError::platform(format!("Failed to parse pinned posts: {}", e)))?;
-        
+
         let posts: Vec<MattermostPost> = data["posts"]
             .as_object()
             .map(|m| {
@@ -457,20 +488,27 @@ impl MattermostChannelClient {
                     .collect()
             })
             .unwrap_or_default();
-        
+
         Ok(posts)
     }
 
     /// Get edit history for a post
     async fn get_post_edit_history(&self, post_id: &str) -> Result<Vec<PostEdit>> {
-        let response = self.api_get(&format!("/posts/{}/edit_history", post_id)).await?;
-        let edits: Vec<PostEdit> = response.json().await
+        let response = self
+            .api_get(&format!("/posts/{}/edit_history", post_id))
+            .await?;
+        let edits: Vec<PostEdit> = response
+            .json()
+            .await
             .map_err(|e| AgentError::platform(format!("Failed to parse edit history: {}", e)))?;
         Ok(edits)
     }
 
     /// Send authentication challenge via WebSocket
-    async fn ws_authenticate(&self, ws_stream: &mut WebSocketStream<MaybeTlsStream<TcpStream>>) -> Result<()> {
+    async fn ws_authenticate(
+        &self,
+        ws_stream: &mut WebSocketStream<MaybeTlsStream<TcpStream>>,
+    ) -> Result<()> {
         let auth_msg = json!({
             "seq": *self.seq.read().await,
             "action": "authentication_challenge",
@@ -479,7 +517,9 @@ impl MattermostChannelClient {
             },
         });
 
-        ws_stream.send(WsMessage::Text(auth_msg.to_string())).await
+        ws_stream
+            .send(WsMessage::Text(auth_msg.to_string()))
+            .await
             .map_err(|e| AgentError::platform(format!("WebSocket auth failed: {}", e)))?;
 
         *self.seq.write().await += 1;
@@ -503,7 +543,8 @@ impl Channel for MattermostChannelClient {
     }
 
     fn platform(&self) -> PlatformType {
-        PlatformType::Custom // Using Custom for now, or add Mattermost to PlatformType
+        PlatformType::Custom // Using Custom for now, or add Mattermost to
+                             // PlatformType
     }
 
     fn is_connected(&self) -> bool {
@@ -516,7 +557,7 @@ impl Channel for MattermostChannelClient {
         // Get user information
         let user = self.get_me().await?;
         info!("Authenticated as {} ({})", user.username, user.id);
-        
+
         *self.user_info.write().await = Some(user.clone());
         self.config.user_id = Some(user.id);
 
@@ -525,11 +566,12 @@ impl Channel for MattermostChannelClient {
             let ws_url = self.ws_url();
             info!("Connecting WebSocket to {}...", ws_url);
 
-            let (ws_stream, _) = connect_async(&ws_url).await
+            let (ws_stream, _) = connect_async(&ws_url)
+                .await
                 .map_err(|e| AgentError::platform(format!("WebSocket connection failed: {}", e)))?;
 
             *self.ws_stream.write().await = Some(ws_stream);
-            
+
             // Authenticate WebSocket
             if let Some(ref mut ws) = *self.ws_stream.write().await {
                 self.ws_authenticate(ws).await?;
@@ -564,7 +606,7 @@ impl Channel for MattermostChannelClient {
     async fn start_listener(&self, event_bus: mpsc::Sender<ChannelEvent>) -> Result<()> {
         if !self.config.connection_mode().is_websocket() {
             return Err(AgentError::configuration(
-                "WebSocket mode required for listener".to_string()
+                "WebSocket mode required for listener".to_string(),
             ));
         }
 
@@ -583,7 +625,7 @@ impl Channel for MattermostChannelClient {
                             "seq": *seq.read().await,
                             "action": "ping",
                         });
-                        
+
                         if let Some(ref mut ws) = *ws_stream.write().await {
                             if let Err(e) = ws.send(WsMessage::Text(heartbeat_msg.to_string())).await {
                                 warn!("Failed to send heartbeat: {}", e);
@@ -617,7 +659,7 @@ impl Channel for MattermostChannelClient {
                                                             timestamp: DateTime::from_timestamp(post.create_at / 1000, 0)
                                                                 .unwrap_or_else(Utc::now),
                                                         };
-                                                        
+
                                                         let _ = event_bus.send(ChannelEvent::MessageReceived {
                                                             platform: PlatformType::Custom,
                                                             channel_id: post.channel_id,
@@ -668,10 +710,13 @@ impl Channel for MattermostChannelClient {
 
     async fn list_channels(&self) -> Result<Vec<ChannelInfo>> {
         let response = self.api_get("/users/me/channels").await?;
-        let channels: Vec<MattermostChannelInfo> = response.json().await
+        let channels: Vec<MattermostChannelInfo> = response
+            .json()
+            .await
             .map_err(|e| AgentError::platform(format!("Failed to parse channels: {}", e)))?;
 
-        let channel_infos: Vec<ChannelInfo> = channels.into_iter()
+        let channel_infos: Vec<ChannelInfo> = channels
+            .into_iter()
             .map(|c| ChannelInfo {
                 id: c.id,
                 name: c.display_name,
@@ -696,11 +741,16 @@ impl Channel for MattermostChannelClient {
     }
 
     async fn list_members(&self, channel_id: &str) -> Result<Vec<MemberInfo>> {
-        let response = self.api_get(&format!("/channels/{}/members", channel_id)).await?;
-        let members: Vec<serde_json::Value> = response.json().await
+        let response = self
+            .api_get(&format!("/channels/{}/members", channel_id))
+            .await?;
+        let members: Vec<serde_json::Value> = response
+            .json()
+            .await
             .map_err(|e| AgentError::platform(format!("Failed to parse members: {}", e)))?;
 
-        let member_infos: Vec<MemberInfo> = members.into_iter()
+        let member_infos: Vec<MemberInfo> = members
+            .into_iter()
             .filter_map(|m| {
                 Some(MemberInfo {
                     id: m["user_id"].as_str()?.to_string(),
@@ -741,7 +791,7 @@ impl super::r#trait::ChannelFactory for MattermostChannelFactory {
     async fn create(&self, config: &serde_json::Value) -> Result<Arc<RwLock<dyn Channel>>> {
         let config: MattermostChannelConfig = serde_json::from_value(config.clone())
             .map_err(|e| AgentError::configuration(format!("Invalid config: {}", e)))?;
-        
+
         let channel = MattermostChannelClient::new(config)?;
         Ok(Arc::new(RwLock::new(channel)))
     }
@@ -771,14 +821,15 @@ impl PinnableChannel for MattermostChannelClient {
 
     async fn get_pinned_messages(&self, channel_id: &str) -> Result<Vec<PinnedMessage>> {
         let posts = self.get_pinned_posts(channel_id).await?;
-        
-        let messages: Vec<PinnedMessage> = posts.into_iter()
+
+        let messages: Vec<PinnedMessage> = posts
+            .into_iter()
             .map(|p| PinnedMessage {
                 message_id: p.id,
                 channel_id: channel_id.to_string(),
                 content: p.message,
                 author_id: p.user_id,
-                pinned_at: Utc::now(), // Mattermost doesn't provide pin time
+                pinned_at: Utc::now(),    // Mattermost doesn't provide pin time
                 pinned_by: String::new(), // Mattermost doesn't provide pin user
             })
             .collect();
@@ -789,7 +840,12 @@ impl PinnableChannel for MattermostChannelClient {
 
 #[async_trait]
 impl EditableChannel for MattermostChannelClient {
-    async fn edit_message(&self, channel_id: &str, message_id: &str, new_content: &str) -> Result<()> {
+    async fn edit_message(
+        &self,
+        channel_id: &str,
+        message_id: &str,
+        new_content: &str,
+    ) -> Result<()> {
         let _ = channel_id; // Mattermost API doesn't require channel_id for edit
         self.update_post(message_id, new_content).await?;
         Ok(())
@@ -800,11 +856,16 @@ impl EditableChannel for MattermostChannelClient {
         self.delete_post(message_id).await
     }
 
-    async fn get_message_edit_history(&self, channel_id: &str, message_id: &str) -> Result<Vec<MessageEditHistory>> {
+    async fn get_message_edit_history(
+        &self,
+        channel_id: &str,
+        message_id: &str,
+    ) -> Result<Vec<MessageEditHistory>> {
         let _ = channel_id; // Mattermost API doesn't require channel_id for history
         let edits = self.get_post_edit_history(message_id).await?;
-        
-        let history: Vec<MessageEditHistory> = edits.into_iter()
+
+        let history: Vec<MessageEditHistory> = edits
+            .into_iter()
             .enumerate()
             .map(|(idx, e)| MessageEditHistory {
                 edit_id: format!("edit-{}", idx),
@@ -813,8 +874,7 @@ impl EditableChannel for MattermostChannelClient {
                 previous_content: e.message.clone(),
                 new_content: e.message,
                 edited_by: e.user_id,
-                edited_at: DateTime::from_timestamp(e.edit_at / 1000, 0)
-                    .unwrap_or_else(Utc::now),
+                edited_at: DateTime::from_timestamp(e.edit_at / 1000, 0).unwrap_or_else(Utc::now),
                 edit_reason: None,
                 version: idx as u32 + 1,
             })
@@ -853,7 +913,7 @@ mod tests {
             token: "test".to_string(),
             ..Default::default()
         };
-        
+
         let channel = MattermostChannelClient::new(config).unwrap();
         assert_eq!(
             channel.api_url("/users/me"),
@@ -868,7 +928,7 @@ mod tests {
             token: "test".to_string(),
             ..Default::default()
         };
-        
+
         let channel = MattermostChannelClient::new(config).unwrap();
         assert_eq!(
             channel.ws_url(),

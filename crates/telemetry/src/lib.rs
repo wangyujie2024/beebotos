@@ -6,10 +6,11 @@ pub mod logging;
 pub mod metrics;
 pub mod tracing;
 
-use async_trait::async_trait;
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::SystemTime;
+
+use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
 
 /// Telemetry configuration
 #[derive(Debug, Clone, Deserialize)]

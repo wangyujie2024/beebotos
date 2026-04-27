@@ -1,6 +1,11 @@
 //! Retry Logic for Blockchain Operations
 //!
-//! Provides configurable retry mechanisms with exponential backoff for RPC calls.
+//! Provides configurable retry mechanisms with exponential backoff for RPC
+//! calls.
+
+use std::time::Duration;
+
+use backoff::ExponentialBackoff;
 
 use crate::constants::{
     AGGRESSIVE_MAX_RETRIES, CIRCUIT_BREAKER_FAILURE_THRESHOLD, CIRCUIT_BREAKER_SUCCESS_THRESHOLD,
@@ -8,8 +13,6 @@ use crate::constants::{
     DEFAULT_RETRY_INITIAL_MS, DEFAULT_RETRY_MAX_INTERVAL_SECS,
 };
 use crate::ChainError;
-use backoff::ExponentialBackoff;
-use std::time::Duration;
 
 /// Retry configuration
 #[derive(Debug, Clone)]

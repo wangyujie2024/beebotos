@@ -2,9 +2,10 @@
 //!
 //! Inter-process message queue implementation.
 
+use std::collections::VecDeque;
+
 use crate::error::Result;
 use crate::task::TaskId;
-use std::collections::VecDeque;
 
 /// Inter-process message
 #[derive(Debug)]

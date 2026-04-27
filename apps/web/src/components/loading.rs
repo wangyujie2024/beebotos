@@ -1,13 +1,17 @@
+use crate::i18n::I18nContext;
 use leptos::prelude::*;
 use leptos::view;
 
 /// Full page loading spinner
 #[component]
 pub fn PageLoading() -> impl IntoView {
+    let i18n = use_context::<I18nContext>().expect("i18n context not found");
+    let i18n_stored = StoredValue::new(i18n);
+
     view! {
         <div class="page-loading">
             <div class="spinner-large"></div>
-            <p>"Loading..."</p>
+            <p>{move || i18n_stored.get_value().t("loading-page")}</p>
         </div>
     }
 }
@@ -118,10 +122,13 @@ pub fn ProgressiveLoading(
 /// Inline loading spinner
 #[component]
 pub fn InlineLoading(#[prop(optional)] text: Option<String>) -> impl IntoView {
+    let i18n = use_context::<I18nContext>().expect("i18n context not found");
+    let i18n_stored = StoredValue::new(i18n);
+
     view! {
         <span class="inline-loading">
             <span class="spinner-small"></span>
-            {text.map(|t| view! { <span>{t}</span> })}
+            {text.map(|t| view! { <span>{t}</span> }.into_any()).unwrap_or_else(|| view! { <span>{move || i18n_stored.get_value().t("loading-inline")}</span> }.into_any())}
         </span>
     }
 }

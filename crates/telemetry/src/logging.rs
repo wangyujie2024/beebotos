@@ -1,13 +1,14 @@
 //! Logging configuration
 
-use crate::TelemetryConfig;
 use std::io;
-use tracing_subscriber::{
-    fmt::{self, format::FmtSpan},
-    layer::SubscriberExt,
-    util::SubscriberInitExt,
-    EnvFilter, Layer,
-};
+
+use tracing_subscriber::fmt::format::FmtSpan;
+use tracing_subscriber::fmt::{self};
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::{EnvFilter, Layer};
+
+use crate::TelemetryConfig;
 
 /// Initialize logging
 pub fn init_logging(config: &TelemetryConfig) -> anyhow::Result<()> {

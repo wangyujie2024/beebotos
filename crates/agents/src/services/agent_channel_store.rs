@@ -12,16 +12,18 @@ pub trait AgentChannelBindingStore: Send + Sync {
 
     async fn list_by_agent(&self, agent_id: &str) -> Result<Vec<AgentChannelBinding>>;
 
-    async fn list_by_user_channel(&self, user_channel_id: &str) -> Result<Vec<AgentChannelBinding>>;
+    async fn list_by_user_channel(&self, user_channel_id: &str)
+        -> Result<Vec<AgentChannelBinding>>;
 
     async fn set_default(&self, user_channel_id: &str, agent_id: &str) -> Result<()>;
 
-    /// Find the default agent bound to a user channel identified by platform + platform_channel_id.
-    /// Returns the agent_id of the default binding, if any.
+    /// Find the default agent bound to a user channel identified by platform +
+    /// platform_channel_id. Returns the agent_id of the default binding, if
+    /// any.
     ///
-    /// P2 OPTIMIZE: Renamed from `find_default_agent_by_platform_user` to clarify that
-    /// the lookup key is the platform-level channel identifier (e.g. chat_id, room_id),
-    /// not the individual sender/user ID.
+    /// P2 OPTIMIZE: Renamed from `find_default_agent_by_platform_user` to
+    /// clarify that the lookup key is the platform-level channel identifier
+    /// (e.g. chat_id, room_id), not the individual sender/user ID.
     async fn find_default_agent_by_platform_channel(
         &self,
         platform: PlatformType,

@@ -4,8 +4,9 @@
 
 #![allow(dead_code)]
 
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 /// Concept in ontology

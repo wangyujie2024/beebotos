@@ -4,8 +4,9 @@
 
 #![allow(dead_code)]
 
-use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use std::time::Duration;
+
+use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 
 /// Create a spinner for indeterminate progress
 pub fn create_spinner(message: &str) -> ProgressBar {

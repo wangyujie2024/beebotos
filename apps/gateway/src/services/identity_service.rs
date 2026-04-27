@@ -5,9 +5,7 @@
 
 use std::sync::Arc;
 
-use beebotos_chain::{
-    compat::{Address, ChainClientTrait, TxHash, U256, AgentIdentityInfo},
-};
+use beebotos_chain::compat::{Address, AgentIdentityInfo, ChainClientTrait, TxHash, U256};
 use tracing::{debug, info, instrument};
 
 /// Agent metadata for identity
@@ -17,11 +15,10 @@ pub struct AgentMetadata {
     pub description: String,
 }
 
+use super::identity_cache::{CacheStats, IdentityCache, IdentityCacheConfig};
+use super::wallet_service::WalletService;
 use crate::config::BlockchainConfig;
 use crate::error::AppError;
-
-use super::wallet_service::WalletService;
-use super::identity_cache::{IdentityCache, IdentityCacheConfig, CacheStats};
 
 /// Identity service configuration
 #[derive(Debug, Clone)]
@@ -40,7 +37,8 @@ impl From<&BlockchainConfig> for IdentityServiceConfig {
             addr.as_ref().and_then(|a| {
                 let a = a.trim();
                 if a.len() >= 42 && a.starts_with("0x") {
-                    hex::decode(&a[2..]).ok()
+                    hex::decode(&a[2..])
+                        .ok()
                         .filter(|b| b.len() == 20)
                         .map(|b| Address::from_slice(&b))
                 } else {
@@ -131,14 +129,20 @@ impl IdentityService {
         &self,
         request: RegisterIdentityRequest,
     ) -> Result<TxHash, AppError> {
-        let _client = self.client.as_ref()
+        let _client = self
+            .client
+            .as_ref()
             .ok_or_else(|| AppError::Configuration("Chain client not initialized".into()))?;
-        
-        let identity_contract = self.config.identity_contract.as_ref()
-            .ok_or_else(|| AppError::Configuration("Identity contract not configured".into()))?;
+
+        let identity_contract =
+            self.config.identity_contract.as_ref().ok_or_else(|| {
+                AppError::Configuration("Identity contract not configured".into())
+            })?;
 
         if !self.wallet_service.has_wallet() {
-            return Err(AppError::Configuration("Wallet not initialized for signing".into()));
+            return Err(AppError::Configuration(
+                "Wallet not initialized for signing".into(),
+            ));
         }
 
         info!(
@@ -151,12 +155,9 @@ impl IdentityService {
         let tx_data = build_register_identity_call(&request);
 
         // Send transaction
-        let tx_hash = self.wallet_service
-            .send_contract_transaction(
-                identity_contract.clone(),
-                tx_data,
-                U256::from(0),
-            )
+        let tx_hash = self
+            .wallet_service
+            .send_contract_transaction(identity_contract.clone(), tx_data, U256::from(0))
             .await?;
 
         // Clear cache for this agent
@@ -182,11 +183,15 @@ impl IdentityService {
             return Ok(cached);
         }
 
-        let _client = self.client.as_ref()
+        let _client = self
+            .client
+            .as_ref()
             .ok_or_else(|| AppError::Configuration("Chain client not initialized".into()))?;
-        
-        let _identity_contract = self.config.identity_contract.as_ref()
-            .ok_or_else(|| AppError::Configuration("Identity contract not configured".into()))?;
+
+        let _identity_contract =
+            self.config.identity_contract.as_ref().ok_or_else(|| {
+                AppError::Configuration("Identity contract not configured".into())
+            })?;
 
         // TODO: Implement actual chain query
         // For now, return not found
@@ -209,11 +214,15 @@ impl IdentityService {
         &self,
         request: UpdateIdentityRequest,
     ) -> Result<TxHash, AppError> {
-        let identity_contract = self.config.identity_contract.as_ref()
-            .ok_or_else(|| AppError::Configuration("Identity contract not configured".into()))?;
+        let identity_contract =
+            self.config.identity_contract.as_ref().ok_or_else(|| {
+                AppError::Configuration("Identity contract not configured".into())
+            })?;
 
         if !self.wallet_service.has_wallet() {
-            return Err(AppError::Configuration("Wallet not initialized for signing".into()));
+            return Err(AppError::Configuration(
+                "Wallet not initialized for signing".into(),
+            ));
         }
 
         info!(agent_id = %request.agent_id, "Updating agent metadata");
@@ -222,12 +231,9 @@ impl IdentityService {
         let tx_data = build_update_metadata_call(&request);
 
         // Send transaction
-        let tx_hash = self.wallet_service
-            .send_contract_transaction(
-                identity_contract.clone(),
-                tx_data,
-                U256::from(0),
-            )
+        let tx_hash = self
+            .wallet_service
+            .send_contract_transaction(identity_contract.clone(), tx_data, U256::from(0))
             .await?;
 
         // Clear cache
@@ -244,11 +250,15 @@ impl IdentityService {
 
     /// Deactivate an agent's on-chain identity
     pub async fn deactivate_identity(&self, agent_id: &str) -> Result<TxHash, AppError> {
-        let identity_contract = self.config.identity_contract.as_ref()
-            .ok_or_else(|| AppError::Configuration("Identity contract not configured".into()))?;
+        let identity_contract =
+            self.config.identity_contract.as_ref().ok_or_else(|| {
+                AppError::Configuration("Identity contract not configured".into())
+            })?;
 
         if !self.wallet_service.has_wallet() {
-            return Err(AppError::Configuration("Wallet not initialized for signing".into()));
+            return Err(AppError::Configuration(
+                "Wallet not initialized for signing".into(),
+            ));
         }
 
         info!(agent_id = %agent_id, "Deactivating agent identity");
@@ -258,12 +268,9 @@ impl IdentityService {
         let tx_data = build_deactivate_identity_call(agent_id_bytes);
 
         // Send transaction
-        let tx_hash = self.wallet_service
-            .send_contract_transaction(
-                identity_contract.clone(),
-                tx_data,
-                U256::from(0),
-            )
+        let tx_hash = self
+            .wallet_service
+            .send_contract_transaction(identity_contract.clone(), tx_data, U256::from(0))
             .await?;
 
         // Clear cache
@@ -297,7 +304,7 @@ impl IdentityService {
 /// Keccak256 hash - using sha3 since tiny_keccak is not available
 fn keccak256_hash(input: &str) -> [u8; 32] {
     use sha3::{Digest, Keccak256};
-    
+
     let mut hasher = Keccak256::new();
     hasher.update(input.as_bytes());
     let result = hasher.finalize();
@@ -318,17 +325,14 @@ fn build_register_identity_call(
     beebotos_chain::compat::Bytes::from(data)
 }
 
-fn build_update_metadata_call(
-    _request: &UpdateIdentityRequest,
-) -> beebotos_chain::compat::Bytes {
+fn build_update_metadata_call(_request: &UpdateIdentityRequest) -> beebotos_chain::compat::Bytes {
     // In real implementation, this would ABI encode the function call
-    // Metadata serialization removed since AgentMetadata doesn't implement Serialize
+    // Metadata serialization removed since AgentMetadata doesn't implement
+    // Serialize
     beebotos_chain::compat::Bytes::from(vec![0u8; 32])
 }
 
-fn build_deactivate_identity_call(
-    agent_id_bytes: [u8; 32],
-) -> beebotos_chain::compat::Bytes {
+fn build_deactivate_identity_call(agent_id_bytes: [u8; 32]) -> beebotos_chain::compat::Bytes {
     beebotos_chain::compat::Bytes::from(agent_id_bytes.to_vec())
 }
 
@@ -352,13 +356,17 @@ mod tests {
         let blockchain_config = BlockchainConfig {
             enabled: true,
             chain_id: 1,
-            identity_contract_address: Some("0x1234567890123456789012345678901234567890".to_string()),
-            registry_contract_address: Some("0x0987654321098765432109876543210987654321".to_string()),
+            identity_contract_address: Some(
+                "0x1234567890123456789012345678901234567890".to_string(),
+            ),
+            registry_contract_address: Some(
+                "0x0987654321098765432109876543210987654321".to_string(),
+            ),
             ..Default::default()
         };
 
         let identity_config = IdentityServiceConfig::from(&blockchain_config);
-        
+
         assert_eq!(identity_config.chain_id, 1);
         assert!(identity_config.identity_contract.is_some());
         assert!(identity_config.registry_contract.is_some());

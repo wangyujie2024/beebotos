@@ -2,8 +2,9 @@
 //!
 //! Conceptual knowledge and facts network.
 
-use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
+
+use serde::{Deserialize, Serialize};
 
 /// Semantic memory (concept network)
 #[derive(Debug, Clone, Serialize, Deserialize)]

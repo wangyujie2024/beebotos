@@ -4,17 +4,18 @@
 //! all components run in the same application. It provides the lowest
 //! latency and highest throughput.
 
-use super::{Transport, TransportConfig, TransportStats};
-use crate::error::{MessageBusError, Result};
-
-use crate::{Message, MessageStream, SubscriptionId};
-use async_trait::async_trait;
-use dashmap::DashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
+
+use async_trait::async_trait;
+use dashmap::DashMap;
 use tokio::sync::mpsc;
 use tracing::{debug, trace, warn};
+
+use super::{Transport, TransportConfig, TransportStats};
+use crate::error::{MessageBusError, Result};
+use crate::{Message, MessageStream, SubscriptionId};
 
 /// In-memory transport implementation
 ///
@@ -58,13 +59,15 @@ impl MemoryTransportStats {
 
     fn record_publish(&self, bytes: usize) {
         self.messages_published.fetch_add(1, Ordering::Relaxed);
-        self.bytes_published.fetch_add(bytes as u64, Ordering::Relaxed);
+        self.bytes_published
+            .fetch_add(bytes as u64, Ordering::Relaxed);
     }
 
     #[allow(dead_code)]
     fn record_receive(&self, bytes: usize) {
         self.messages_received.fetch_add(1, Ordering::Relaxed);
-        self.bytes_received.fetch_add(bytes as u64, Ordering::Relaxed);
+        self.bytes_received
+            .fetch_add(bytes as u64, Ordering::Relaxed);
     }
 }
 
@@ -195,7 +198,10 @@ impl Transport for MemoryTransport {
                             trace!("Delivered to subscription {}", sub_id.0);
                         }
                         Err(_) => {
-                            warn!("Failed to deliver to subscription {} (receiver dropped)", sub_id.0);
+                            warn!(
+                                "Failed to deliver to subscription {} (receiver dropped)",
+                                sub_id.0
+                            );
                         }
                     }
                 }
@@ -232,7 +238,8 @@ impl Transport for MemoryTransport {
             .push((id, tx));
 
         // Store reverse mapping
-        self.subscription_topics.insert(id, topic_pattern.to_string());
+        self.subscription_topics
+            .insert(id, topic_pattern.to_string());
 
         debug!(
             subscription_id = %id.0,
@@ -267,14 +274,12 @@ impl Transport for MemoryTransport {
         }
     }
 
-    async fn request(
-        &self,
-        topic: &str,
-        request: Message,
-        timeout: Duration,
-    ) -> Result<Message> {
+    async fn request(&self, topic: &str, request: Message, timeout: Duration) -> Result<Message> {
         // Generate response topic
-        let correlation_id = request.metadata.correlation_id.clone()
+        let correlation_id = request
+            .metadata
+            .correlation_id
+            .clone()
             .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
         let response_topic = format!("{}/response/{}", topic, correlation_id);
 
@@ -310,24 +315,51 @@ mod tests {
     #[test]
     fn test_topic_matching() {
         // Exact match
-        assert!(MemoryTransport::topic_matches("agent/123/task", "agent/123/task"));
-        assert!(!MemoryTransport::topic_matches("agent/123/task", "agent/123/other"));
+        assert!(MemoryTransport::topic_matches(
+            "agent/123/task",
+            "agent/123/task"
+        ));
+        assert!(!MemoryTransport::topic_matches(
+            "agent/123/task",
+            "agent/123/other"
+        ));
 
         // Single-level wildcard
-        assert!(MemoryTransport::topic_matches("agent/+/task", "agent/123/task"));
-        assert!(MemoryTransport::topic_matches("agent/+/task", "agent/456/task"));
-        assert!(!MemoryTransport::topic_matches("agent/+/task", "agent/123/other"));
-        assert!(!MemoryTransport::topic_matches("agent/+/task", "agent/123/task/extra"));
+        assert!(MemoryTransport::topic_matches(
+            "agent/+/task",
+            "agent/123/task"
+        ));
+        assert!(MemoryTransport::topic_matches(
+            "agent/+/task",
+            "agent/456/task"
+        ));
+        assert!(!MemoryTransport::topic_matches(
+            "agent/+/task",
+            "agent/123/other"
+        ));
+        assert!(!MemoryTransport::topic_matches(
+            "agent/+/task",
+            "agent/123/task/extra"
+        ));
 
         // Multi-level wildcard
         assert!(MemoryTransport::topic_matches("agent/#", "agent/123"));
         assert!(MemoryTransport::topic_matches("agent/#", "agent/123/task"));
-        assert!(MemoryTransport::topic_matches("agent/#", "agent/123/task/start"));
+        assert!(MemoryTransport::topic_matches(
+            "agent/#",
+            "agent/123/task/start"
+        ));
         assert!(!MemoryTransport::topic_matches("agent/#", "other/123"));
 
         // Mixed wildcards
-        assert!(MemoryTransport::topic_matches("agent/+/task/#", "agent/123/task/start"));
-        assert!(MemoryTransport::topic_matches("agent/+/task/#", "agent/123/task/start/progress"));
+        assert!(MemoryTransport::topic_matches(
+            "agent/+/task/#",
+            "agent/123/task/start"
+        ));
+        assert!(MemoryTransport::topic_matches(
+            "agent/+/task/#",
+            "agent/123/task/start/progress"
+        ));
 
         // Edge cases
         assert!(!MemoryTransport::topic_matches("", "agent/123"));
@@ -363,7 +395,10 @@ mod tests {
 
         // Publish matching message
         let msg = Message::new("agent/123/task/start", b"data1".to_vec());
-        transport.publish("agent/123/task/start", msg).await.unwrap();
+        transport
+            .publish("agent/123/task/start", msg)
+            .await
+            .unwrap();
 
         // Should receive
         let received = rx.recv().await.unwrap();
@@ -371,7 +406,10 @@ mod tests {
 
         // Publish another matching message with different agent ID
         let msg2 = Message::new("agent/456/task/complete", b"data2".to_vec());
-        transport.publish("agent/456/task/complete", msg2).await.unwrap();
+        transport
+            .publish("agent/456/task/complete", msg2)
+            .await
+            .unwrap();
 
         let received2 = rx.recv().await.unwrap();
         assert_eq!(received2.payload, b"data2");
@@ -407,7 +445,10 @@ mod tests {
 
             while let Some(request) = rx.recv().await {
                 // Extract correlation ID from request
-                let correlation_id = request.metadata.correlation_id.clone()
+                let correlation_id = request
+                    .metadata
+                    .correlation_id
+                    .clone()
                     .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
                 // Send reply to the expected response topic
                 let reply_topic = format!("test/request/response/{}", correlation_id);

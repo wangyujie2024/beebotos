@@ -2,20 +2,20 @@
 //!
 //! Handles channel management and WeChat QR code login.
 
+use std::sync::Arc;
+
 use axum::extract::{Path, State};
 use axum::response::IntoResponse;
 use axum::Json;
+use beebotos_agents::communication::channel::{ChannelEvent, PersonalWeChatChannel};
+use beebotos_agents::communication::{Message, MessageType, PlatformType};
+use gateway::middleware::AuthUser;
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 use tracing::{error, info, warn};
+use uuid::Uuid;
 
 use crate::error::GatewayError;
 use crate::AppState;
-use gateway::middleware::AuthUser;
-
-use beebotos_agents::communication::channel::{ChannelEvent, PersonalWeChatChannel};
-use beebotos_agents::communication::{Message, MessageType, PlatformType};
-use uuid::Uuid;
 
 /// WeChat QR code response
 #[derive(Debug, Serialize)]
@@ -48,7 +48,9 @@ pub async fn get_wechat_qr(
     info!("Getting WeChat QR code for login");
 
     // Get personal_wechat channel from registry
-    let registry = state.channel_registry.as_ref()
+    let registry = state
+        .channel_registry
+        .as_ref()
         .ok_or_else(|| GatewayError::internal("Channel registry not initialized"))?
         .clone();
 
@@ -59,19 +61,26 @@ pub async fn get_wechat_qr(
         ch
     } else {
         warn!("personal_wechat not found in legacy_map, falling back to PlatformType::WeChat");
-        registry.get_channel_by_platform(PlatformType::WeChat).await
+        registry
+            .get_channel_by_platform(PlatformType::WeChat)
+            .await
             .ok_or_else(|| GatewayError::internal("Personal WeChat channel not initialized"))?
     };
 
     let qr_resp = {
         let guard = channel.read().await;
-        let pwc = guard.as_any().downcast_ref::<PersonalWeChatChannel>()
-            .ok_or_else(|| GatewayError::internal(
-                "Channel is not PersonalWeChatChannel. \
-                 Ensure 'personal_wechat' is enabled in config and not overwritten by 'wechat' (enterprise)."
-            ))?;
+        let pwc = guard
+            .as_any()
+            .downcast_ref::<PersonalWeChatChannel>()
+            .ok_or_else(|| {
+                GatewayError::internal(
+                    "Channel is not PersonalWeChatChannel. Ensure 'personal_wechat' is enabled in \
+                     config and not overwritten by 'wechat' (enterprise).",
+                )
+            })?;
         pwc.get_qr_code().await
-    }.map_err(|e| GatewayError::internal(format!("Failed to get QR code: {}", e)))?;
+    }
+    .map_err(|e| GatewayError::internal(format!("Failed to get QR code: {}", e)))?;
 
     info!("Successfully generated WeChat QR code");
 
@@ -101,29 +110,44 @@ pub async fn check_wechat_qr(
         Ok(status) => status,
         Err(e) => {
             error!("Failed to check QR status: {}", e);
-            return Err(GatewayError::internal(format!("Failed to check QR status: {}", e)));
+            return Err(GatewayError::internal(format!(
+                "Failed to check QR status: {}",
+                e
+            )));
         }
     };
 
     let status = if qr_status.status == "confirmed" {
-        if let (Some(token), Some(base_url)) = (qr_status.bot_token.clone(), qr_status.base_url.clone()) {
+        if let (Some(token), Some(base_url)) =
+            (qr_status.bot_token.clone(), qr_status.base_url.clone())
+        {
             info!("WeChat QR scan confirmed, completing login on channel...");
 
-            let registry = state.channel_registry.as_ref()
+            let registry = state
+                .channel_registry
+                .as_ref()
                 .ok_or_else(|| GatewayError::internal("Channel registry not initialized"))?
                 .clone();
 
-            let channel = registry.get_channel_by_platform(PlatformType::WeChat).await
+            let channel = registry
+                .get_channel_by_platform(PlatformType::WeChat)
+                .await
                 .ok_or_else(|| GatewayError::internal("Personal WeChat channel not initialized"))?;
 
-            let event_bus = state.channel_event_bus.as_ref()
+            let event_bus = state
+                .channel_event_bus
+                .as_ref()
                 .ok_or_else(|| GatewayError::internal("Channel event bus not initialized"))?
                 .clone();
 
             let login_result = {
                 let guard = channel.read().await;
-                let pwc = guard.as_any().downcast_ref::<PersonalWeChatChannel>()
-                    .ok_or_else(|| GatewayError::internal("Channel is not PersonalWeChatChannel"))?;
+                let pwc = guard
+                    .as_any()
+                    .downcast_ref::<PersonalWeChatChannel>()
+                    .ok_or_else(|| {
+                        GatewayError::internal("Channel is not PersonalWeChatChannel")
+                    })?;
                 pwc.complete_login(token, base_url, event_bus).await
             };
 
@@ -133,7 +157,10 @@ pub async fn check_wechat_qr(
                 }
                 Err(e) => {
                     error!("❌ Failed to complete login: {}", e);
-                    return Err(GatewayError::internal(format!("Failed to complete login: {}", e)));
+                    return Err(GatewayError::internal(format!(
+                        "Failed to complete login: {}",
+                        e
+                    )));
                 }
             }
         }
@@ -307,7 +334,9 @@ pub async fn send_webchat_message(
 ) -> Result<Json<serde_json::Value>, GatewayError> {
     info!("Received WebChat message from user: {}", user.user_id);
 
-    let event_bus = state.channel_event_bus.as_ref()
+    let event_bus = state
+        .channel_event_bus
+        .as_ref()
         .ok_or_else(|| GatewayError::internal("Channel event bus not initialized"))?
         .clone();
 
@@ -317,7 +346,14 @@ pub async fn send_webchat_message(
     let mut metadata = std::collections::HashMap::new();
     metadata.insert("sender_id".to_string(), user.user_id.clone());
     metadata.insert("session_id".to_string(), session_id.clone());
-    metadata.insert("message_id".to_string(), format!("webchat_{}_{}", user.user_id, chrono::Utc::now().timestamp_millis()));
+    metadata.insert(
+        "message_id".to_string(),
+        format!(
+            "webchat_{}_{}",
+            user.user_id,
+            chrono::Utc::now().timestamp_millis()
+        ),
+    );
 
     let message = Message {
         id: Uuid::new_v4(),
@@ -335,7 +371,9 @@ pub async fn send_webchat_message(
         message,
     };
 
-    event_bus.send(event).await
+    event_bus
+        .send(event)
+        .await
         .map_err(|e| GatewayError::internal(format!("Failed to send channel event: {}", e)))?;
 
     Ok(Json(serde_json::json!({
@@ -447,9 +485,10 @@ pub async fn update_channel(
                     })?;
                 }
             }
-            // Note: actual config fields (base_url, bot_token, auto_reconnect) are
-            // channel-type-specific. Full persistence would require a per-channel
-            // config table follow-up enhancement.
+            // Note: actual config fields (base_url, bot_token, auto_reconnect)
+            // are channel-type-specific. Full persistence would
+            // require a per-channel config table follow-up
+            // enhancement.
         }
     }
 
@@ -466,7 +505,8 @@ pub async fn set_channel_enabled(
     Path(id): Path<String>,
     Json(req): Json<serde_json::Value>,
 ) -> Result<Json<serde_json::Value>, GatewayError> {
-    let enabled = req.get("enabled")
+    let enabled = req
+        .get("enabled")
         .and_then(|v| v.as_bool())
         .ok_or_else(|| GatewayError::bad_request("Missing 'enabled' field"))?;
 

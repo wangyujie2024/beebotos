@@ -2,9 +2,10 @@
 //!
 //! Tests for retry logic, circuit breaker, and rate limiting.
 
+use std::time::Duration;
+
 use beebotos_chain::compat::retry::{with_retry, CircuitBreaker, RateLimiter, RetryConfig};
 use beebotos_chain::ChainError;
-use std::time::Duration;
 
 /// Test retry config default values
 #[test]

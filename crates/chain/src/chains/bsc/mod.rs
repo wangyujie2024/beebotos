@@ -9,10 +9,10 @@ pub mod client;
 pub mod types;
 
 // Re-export common types for convenience
-pub use crate::chains::common::TransactionPriority as BscPriority;
 pub use crate::chains::common::{
     format_native_token, parse_native_token, ContractCall, ContractDeploy, ContractInstance,
     EventFilter, EvmConfig, EvmError, EvmProvider, Mempool, TransactionBuilder,
+    TransactionPriority as BscPriority,
 };
 
 pub const BSC_MAINNET_CHAIN_ID: u64 = 56;

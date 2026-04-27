@@ -21,22 +21,16 @@ use leptos_meta::*;
 /// - form-action: Form submission targets
 #[component]
 pub fn ContentSecurityPolicy() -> impl IntoView {
-    // Generate nonce for inline scripts (would be generated server-side in production)
+    // Generate nonce for inline scripts (would be generated server-side in
+    // production)
     let nonce = generate_nonce();
 
     // CSP policy - restrictive by default
     let csp = format!(
-        "default-src 'self'; \
-         script-src 'self' 'nonce-{nonce}' 'strict-dynamic' 'wasm-unsafe-eval'; \
-         style-src 'self' 'unsafe-inline'; \
-         img-src 'self' data: https: blob:; \
-         connect-src 'self' https: wss:; \
-         font-src 'self'; \
-         frame-src 'none'; \
-         base-uri 'self'; \
-         form-action 'self'; \
-         upgrade-insecure-requests; \
-         block-all-mixed-content"
+        "default-src 'self'; script-src 'self' 'nonce-{nonce}' 'strict-dynamic' \
+         'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: blob:; \
+         connect-src 'self' https: wss:; font-src 'self'; frame-src 'none'; base-uri 'self'; \
+         form-action 'self'; upgrade-insecure-requests; block-all-mixed-content"
     );
 
     view! {

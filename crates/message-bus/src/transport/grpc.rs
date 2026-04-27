@@ -1,10 +1,11 @@
 //! gRPC Transport (Simplified)
-//! 
+//!
 //! This is a simplified version to fix compilation errors.
 //! Full implementation should be restored once basic structure works.
 
 use std::sync::Arc;
-use crate::{MessageBus, Message, Result, SubscriptionId, MessageStream, MessageBusError};
+
+use crate::{Message, MessageBus, MessageBusError, MessageStream, Result, SubscriptionId};
 
 /// Simplified gRPC transport placeholder
 pub struct GrpcTransport;
@@ -39,7 +40,14 @@ impl MessageBus for GrpcTransport {
         Ok(())
     }
 
-    async fn request(&self, _topic: &str, _message: Message, _timeout: std::time::Duration) -> Result<Message> {
-        Err(MessageBusError::internal("gRPC transport not fully implemented"))
+    async fn request(
+        &self,
+        _topic: &str,
+        _message: Message,
+        _timeout: std::time::Duration,
+    ) -> Result<Message> {
+        Err(MessageBusError::internal(
+            "gRPC transport not fully implemented",
+        ))
     }
 }

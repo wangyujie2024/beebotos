@@ -3,10 +3,11 @@
 //! Provides comprehensive performance monitoring and metrics collection
 //! for the brain module.
 
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
+
+use serde::{Deserialize, Serialize};
 
 /// Global metrics collector (singleton)
 static METRICS: once_cell::sync::Lazy<Arc<Mutex<MetricsCollector>>> =
@@ -98,12 +99,14 @@ impl MetricsCollector {
         })
     }
 
-    /// Record a generic metric value (alias for record_timing, for compatibility)
+    /// Record a generic metric value (alias for record_timing, for
+    /// compatibility)
     pub fn record(&mut self, name: &str, value: f64) {
         self.record_timing(name, value);
     }
 
-    /// Get average value for a metric (alias for get_average_timing, for compatibility)
+    /// Get average value for a metric (alias for get_average_timing, for
+    /// compatibility)
     pub fn average(&self, name: &str) -> Option<f64> {
         self.get_average_timing(name)
     }

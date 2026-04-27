@@ -1,7 +1,8 @@
 //! 消息输入组件
 
-use crate::utils::event_target_value;
 use leptos::prelude::*;
+
+use crate::utils::event_target_value;
 
 /// 消息输入组件
 #[component]
@@ -97,5 +98,3 @@ pub fn MessageInput(
         </div>
     }
 }
-
-

@@ -10,13 +10,14 @@
 
 #![allow(dead_code)]
 
-use anyhow::{Context, Result};
-use reqwest::header::HeaderValue;
-use reqwest::{Client, ClientBuilder, Proxy, Request, Response};
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+
+use anyhow::{Context, Result};
+use reqwest::header::HeaderValue;
+use reqwest::{Client, ClientBuilder, Proxy, Request, Response};
 use tokio::sync::RwLock;
 use tracing::{debug, warn};
 

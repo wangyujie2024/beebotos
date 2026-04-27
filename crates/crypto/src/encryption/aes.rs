@@ -1,8 +1,7 @@
+use aes_gcm::aead::{Aead, KeyInit};
+use aes_gcm::{Aes256Gcm, Nonce};
+
 use super::{EncryptedData, EncryptionAlgorithm, EncryptionError, EncryptionScheme};
-use aes_gcm::{
-    aead::{Aead, KeyInit},
-    Aes256Gcm, Nonce,
-};
 
 pub struct AES256GCMScheme {
     cipher: Aes256Gcm,

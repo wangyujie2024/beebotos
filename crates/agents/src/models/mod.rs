@@ -14,14 +14,14 @@ pub mod failover;
 pub mod router;
 
 // Re-export providers from llm module for backward compatibility
-pub use crate::llm::providers::*;
-
 pub use converter::{
     ConverterConfig, FunctionCall, LLMContent, LLMMessage, ModelInputConverter, ToolCall,
 };
 pub use cost::CostTracker;
 pub use failover::FailoverManager;
 pub use router::ModelRouter;
+
+pub use crate::llm::providers::*;
 
 /// Model configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]

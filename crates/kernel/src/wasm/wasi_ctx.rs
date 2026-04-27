@@ -2,18 +2,19 @@
 //!
 //! Provides production-ready WASI context creation for wasmtime 34.0.
 //!
-//! Note: wasmtime 34.0 uses the stable WASI API with a comprehensive WasiCtxBuilder.
-//! Most configuration is done at runtime through the WasiView trait.
-//! This module provides a capability-based configuration that can be
+//! Note: wasmtime 34.0 uses the stable WASI API with a comprehensive
+//! WasiCtxBuilder. Most configuration is done at runtime through the WasiView
+//! trait. This module provides a capability-based configuration that can be
 //! used by custom WasiView implementations.
 
-use crate::error::Result;
 use std::collections::HashMap;
 use std::path::PathBuf;
-use wasmtime_wasi::p2::WasiCtxBuilder;
 
 /// Re-export WasiCtx for convenience
 pub use wasmtime_wasi::p2::WasiCtx;
+use wasmtime_wasi::p2::WasiCtxBuilder;
+
+use crate::error::Result;
 
 /// WASI capability configuration
 ///
@@ -198,8 +199,9 @@ pub fn create_restricted_wasi_context(agent_id: &str) -> WasiCtx {
 
 /// WASI context with host context wrapper
 ///
-/// This allows using WASI with our HostContext for BeeBotOS-specific functionality.
-/// Note: Full integration requires implementing the WasiView trait.
+/// This allows using WASI with our HostContext for BeeBotOS-specific
+/// functionality. Note: Full integration requires implementing the WasiView
+/// trait.
 pub struct WasiHostContext {
     /// The WASI context
     pub wasi: WasiCtx,

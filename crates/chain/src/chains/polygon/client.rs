@@ -14,7 +14,8 @@ pub struct PolygonClient {
 impl PolygonClient {
     /// Create new Polygon client from RPC URL
     pub async fn new(rpc_url: &str) -> ChainResult<Self> {
-        let base = BaseEvmClient::new(rpc_url, crate::chains::polygon::POLYGON_MAINNET_CHAIN_ID).await?;
+        let base =
+            BaseEvmClient::new(rpc_url, crate::chains::polygon::POLYGON_MAINNET_CHAIN_ID).await?;
         Ok(Self {
             base,
             block_stats: PolygonBlockStats::default(),

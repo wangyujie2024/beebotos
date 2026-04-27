@@ -16,12 +16,12 @@ pub mod limit;
 pub mod metrics;
 pub mod monitor;
 
-pub use circuit_breaker::{CircuitBreaker, CircuitBreakerConfig, CircuitState, CircuitStats};
-pub use metrics::{MetricsCollector, Timer};
-
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Duration;
+
+pub use circuit_breaker::{CircuitBreaker, CircuitBreakerConfig, CircuitState, CircuitStats};
+pub use metrics::{MetricsCollector, Timer};
+use serde::{Deserialize, Serialize};
 
 /// Resource usage statistics for a process
 #[derive(Debug, Clone, Serialize, Deserialize)]

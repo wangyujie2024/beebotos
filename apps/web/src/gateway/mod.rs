@@ -139,7 +139,10 @@ impl GatewayClient {
 
     /// 检查是否已连接
     pub fn is_connected(&self) -> bool {
-        matches!(self.status, GatewayStatus::Connected | GatewayStatus::Authenticated)
+        matches!(
+            self.status,
+            GatewayStatus::Connected | GatewayStatus::Authenticated
+        )
     }
 
     /// 检查是否已认证
@@ -185,7 +188,9 @@ impl GatewayClient {
                 token: token.to_string(),
             };
 
-            ws.send(auth_msg).await.map_err(|e| GatewayError::AuthFailed(e.to_string()))?;
+            ws.send(auth_msg)
+                .await
+                .map_err(|e| GatewayError::AuthFailed(e.to_string()))?;
 
             self.status = GatewayStatus::Authenticated;
             Ok(())
@@ -197,7 +202,9 @@ impl GatewayClient {
     /// 订阅频道
     pub async fn subscribe(&mut self, channel: &str) -> Result<(), GatewayError> {
         if let Some(ws) = &mut self.websocket {
-            ws.subscribe(channel).await.map_err(|e| GatewayError::SubscribeFailed(e.to_string()))
+            ws.subscribe(channel)
+                .await
+                .map_err(|e| GatewayError::SubscribeFailed(e.to_string()))
         } else {
             Err(GatewayError::NotConnected)
         }
@@ -262,10 +269,7 @@ mod tests {
 
     #[test]
     fn test_gateway_config() {
-        let config = GatewayConfig::new(
-            "http://api.example.com",
-            "ws://ws.example.com",
-        );
+        let config = GatewayConfig::new("http://api.example.com", "ws://ws.example.com");
 
         assert_eq!(config.api_base_url, "http://api.example.com");
         assert_eq!(config.websocket_url, "ws://ws.example.com");

@@ -1223,7 +1223,7 @@ impl PlatformContent for SlackContent {
     }
 
     fn as_media(&self) -> Option<&MediaContent> {
-        // Slack content doesn't directly use MediaContent, 
+        // Slack content doesn't directly use MediaContent,
         // but we can convert for unified handling
         None
     }

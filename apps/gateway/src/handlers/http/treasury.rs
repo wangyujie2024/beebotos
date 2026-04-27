@@ -2,17 +2,16 @@
 //!
 //! Provides treasury overview and transfer operations.
 
+use std::sync::Arc;
+
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::Json;
-use gateway::{
-    error::GatewayError,
-    middleware::{require_any_role, AuthUser},
-};
+use gateway::error::GatewayError;
+use gateway::middleware::{require_any_role, AuthUser};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::sync::Arc;
 
 use crate::AppState;
 
@@ -51,10 +50,9 @@ pub async fn get_treasury(
 ) -> Result<Json<TreasuryResponse>, GatewayError> {
     require_any_role(&user, &["user", "admin"])?;
 
-    let wallet_service = state
-        .wallet_service
-        .as_ref()
-        .ok_or_else(|| GatewayError::service_unavailable("wallet", "Wallet service not initialized"))?;
+    let wallet_service = state.wallet_service.as_ref().ok_or_else(|| {
+        GatewayError::service_unavailable("wallet", "Wallet service not initialized")
+    })?;
 
     let info = wallet_service
         .get_wallet_info()
@@ -67,22 +65,25 @@ pub async fn get_treasury(
     // Query recent transfers from database (if any are tracked)
     let txs: Vec<TransferRow> = sqlx::query_as(
         "SELECT tx_hash, to_address, amount, status, created_at
-         FROM chain_transactions WHERE tx_type = 'transfer' ORDER BY created_at DESC LIMIT 10"
+         FROM chain_transactions WHERE tx_type = 'transfer' ORDER BY created_at DESC LIMIT 10",
     )
     .fetch_all(&state.db)
     .await
     .unwrap_or_default();
 
-    let transactions = txs.into_iter().map(|tx| TransactionResponse {
-        id: tx.tx_hash,
-        tx_type: "transfer".to_string(),
-        amount: tx.amount,
-        token: "ETH".to_string(),
-        from: address.clone(),
-        to: tx.to_address,
-        timestamp: tx.created_at,
-        status: tx.status,
-    }).collect();
+    let transactions = txs
+        .into_iter()
+        .map(|tx| TransactionResponse {
+            id: tx.tx_hash,
+            tx_type: "transfer".to_string(),
+            amount: tx.amount,
+            token: "ETH".to_string(),
+            from: address.clone(),
+            to: tx.to_address,
+            timestamp: tx.created_at,
+            status: tx.status,
+        })
+        .collect();
 
     Ok(Json(TreasuryResponse {
         total_balance: balance_str.clone(),
@@ -113,17 +114,21 @@ pub async fn transfer(
 ) -> Result<impl IntoResponse, GatewayError> {
     require_any_role(&user, &["admin"])?;
 
-    let wallet_service = state
-        .wallet_service
-        .as_ref()
-        .ok_or_else(|| GatewayError::service_unavailable("wallet", "Wallet service not initialized"))?;
+    let wallet_service = state.wallet_service.as_ref().ok_or_else(|| {
+        GatewayError::service_unavailable("wallet", "Wallet service not initialized")
+    })?;
 
     let to_address = parse_address(&req.to)?;
-    let amount = req.amount.parse::<u128>()
+    let amount = req
+        .amount
+        .parse::<u128>()
         .map_err(|_| GatewayError::bad_request("Invalid amount"))?;
 
     let tx_hash = wallet_service
-        .transfer(to_address.into(), beebotos_chain::compat::U256::from(amount))
+        .transfer(
+            to_address.into(),
+            beebotos_chain::compat::U256::from(amount),
+        )
         .await
         .map_err(|e| GatewayError::agent(format!("Transfer failed: {}", e)))?;
 
@@ -132,7 +137,7 @@ pub async fn transfer(
     // Record in database
     let _ = sqlx::query(
         "INSERT INTO chain_transactions (tx_hash, tx_type, to_address, amount, status, created_at)
-         VALUES (?1, 'transfer', ?2, ?3, 'pending', datetime('now'))"
+         VALUES (?1, 'transfer', ?2, ?3, 'pending', datetime('now'))",
     )
     .bind(&tx_hash_hex)
     .bind(&req.to)
@@ -152,8 +157,8 @@ pub async fn transfer(
 
 fn parse_address(addr: &str) -> Result<[u8; 20], GatewayError> {
     let addr = addr.strip_prefix("0x").unwrap_or(addr);
-    let bytes = hex::decode(addr)
-        .map_err(|_| GatewayError::bad_request("Invalid address format"))?;
+    let bytes =
+        hex::decode(addr).map_err(|_| GatewayError::bad_request("Invalid address format"))?;
     if bytes.len() != 20 {
         return Err(GatewayError::bad_request("Address must be 20 bytes"));
     }

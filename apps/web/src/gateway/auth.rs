@@ -57,8 +57,8 @@ impl GatewayAuth {
 
     /// 保存到本地存储
     pub fn save_to_storage(&self) -> Result<(), AuthError> {
-        let json = serde_json::to_string(self)
-            .map_err(|e| AuthError::Serialization(e.to_string()))?;
+        let json =
+            serde_json::to_string(self).map_err(|e| AuthError::Serialization(e.to_string()))?;
 
         LocalStorage::set(TOKEN_STORAGE_KEY, json)
             .map_err(|e| AuthError::Storage(e.to_string()))?;
@@ -213,7 +213,7 @@ pub struct LoginRequest {
     pub username: String,
     pub password: String,
     #[serde(default)]
-pub device_id: Option<String>,
+    pub device_id: Option<String>,
 }
 
 /// 登录响应
@@ -234,7 +234,6 @@ pub struct UserInfo {
     pub email: Option<String>,
     pub display_name: Option<String>,
     pub avatar_url: Option<String>,
-    pub roles: Vec<String>,
 }
 
 /// Token 刷新请求
@@ -280,7 +279,7 @@ mod tests {
         assert!(manager.is_authenticated());
         assert_eq!(manager.get_token(), Some("test-token".to_string()));
     }
-    
+
     #[test]
     #[cfg(not(target_arch = "wasm32"))]
     fn test_token_manager() {

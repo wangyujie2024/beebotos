@@ -28,6 +28,8 @@ pub mod tx_queue;
 pub use batch::{
     BatchOperation, BatchRequest, BatchResponse, BatchResultAggregator, TransactionBatch,
 };
+// Re-export chain configs from client module
+pub use client::chain_configs::{BeechainConfig, BscConfig, EthereumConfig, MonadConfig};
 pub use client::{
     BaseEvmClient, ChainClient, ChainClientBuilder, ChainConfig, EvmClient, EvmClientExt,
 };
@@ -53,9 +55,6 @@ pub use tx_queue::{
     QueueStatistics, QueuedTransaction, QueuedTxBuilder, TransactionQueue, TxBatchBuilder,
     TxBatchProcessor, TxId, TxQueueConfig, TxResult,
 };
-
-// Re-export chain configs from client module
-pub use client::chain_configs::{BeechainConfig, BscConfig, EthereumConfig, MonadConfig};
 
 use crate::compat::U256;
 use crate::constants::{

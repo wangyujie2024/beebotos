@@ -1,7 +1,7 @@
 //! Arbitrum Client
 
-use crate::chains::common::{BaseEvmClient, EvmClient, EvmConfig};
 use crate::chains::arbitrum::types::ArbitrumBlockStats;
+use crate::chains::common::{BaseEvmClient, EvmClient, EvmConfig};
 use crate::ChainResult;
 
 /// Arbitrum blockchain client
@@ -14,7 +14,8 @@ pub struct ArbitrumClient {
 impl ArbitrumClient {
     /// Create new Arbitrum client from RPC URL
     pub async fn new(rpc_url: &str) -> ChainResult<Self> {
-        let base = BaseEvmClient::new(rpc_url, crate::chains::arbitrum::ARBITRUM_MAINNET_CHAIN_ID).await?;
+        let base =
+            BaseEvmClient::new(rpc_url, crate::chains::arbitrum::ARBITRUM_MAINNET_CHAIN_ID).await?;
         Ok(Self {
             base,
             block_stats: ArbitrumBlockStats::default(),

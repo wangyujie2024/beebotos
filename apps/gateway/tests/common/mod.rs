@@ -32,14 +32,14 @@ where
 {
     let start = std::time::Instant::now();
     let timeout = std::time::Duration::from_millis(timeout_ms);
-    
+
     while start.elapsed() < timeout {
         if condition().await {
             return;
         }
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     }
-    
+
     panic!("Condition not met within {}ms", timeout_ms);
 }
 

@@ -1,6 +1,7 @@
+use std::sync::Arc;
+
 use leptos::prelude::*;
 use leptos::view;
-use std::sync::Arc;
 use wasm_bindgen::JsCast;
 
 #[derive(Clone, Debug)]

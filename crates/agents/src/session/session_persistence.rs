@@ -7,12 +7,14 @@
 //! - SQLite: Durable relational storage
 //! - In-memory: For testing
 
+use std::collections::HashMap;
+use std::sync::Arc;
+
+use async_trait::async_trait;
+use tokio::sync::RwLock;
+
 use crate::error::Result;
 use crate::session::unified_session::{SessionPersistence, UnifiedSession, UnifiedSessionState};
-use async_trait::async_trait;
-use std::sync::Arc;
-use tokio::sync::RwLock;
-use std::collections::HashMap;
 
 /// SQLite session persistence
 #[cfg(feature = "sqlite")]
@@ -64,27 +66,20 @@ impl SqliteSessionPersistence {
         .execute(pool)
         .await
         .map_err(|e| {
-            crate::error::AgentError::storage(format!(
-                "Failed to create sessions table: {}",
-                e
-            ))
+            crate::error::AgentError::storage(format!("Failed to create sessions table: {}", e))
         })?;
 
         // Create index on agent_id
-        sqlx::query(
-            "CREATE INDEX IF NOT EXISTS idx_sessions_agent_id ON sessions(agent_id)"
-        )
-        .execute(pool)
-        .await
-        .ok();
+        sqlx::query("CREATE INDEX IF NOT EXISTS idx_sessions_agent_id ON sessions(agent_id)")
+            .execute(pool)
+            .await
+            .ok();
 
         // Create index on state
-        sqlx::query(
-            "CREATE INDEX IF NOT EXISTS idx_sessions_state ON sessions(state)"
-        )
-        .execute(pool)
-        .await
-        .ok();
+        sqlx::query("CREATE INDEX IF NOT EXISTS idx_sessions_state ON sessions(state)")
+            .execute(pool)
+            .await
+            .ok();
 
         Ok(())
     }
@@ -95,17 +90,15 @@ impl SqliteSessionPersistence {
 impl SessionPersistence for SqliteSessionPersistence {
     async fn save_session(&self, session: &UnifiedSession) -> Result<()> {
         let session_json = serde_json::to_string(session).map_err(|e| {
-            crate::error::AgentError::serialization(format!(
-                "Failed to serialize session: {}",
-                e
-            ))
+            crate::error::AgentError::serialization(format!("Failed to serialize session: {}", e))
         })?;
-        let session_value: serde_json::Value = serde_json::from_str(&session_json).map_err(|e| {
-            crate::error::AgentError::serialization(format!(
-                "Failed to parse session JSON: {}",
-                e
-            ))
-        })?;
+        let session_value: serde_json::Value =
+            serde_json::from_str(&session_json).map_err(|e| {
+                crate::error::AgentError::serialization(format!(
+                    "Failed to parse session JSON: {}",
+                    e
+                ))
+            })?;
 
         sqlx::query(
             r#"
@@ -137,10 +130,7 @@ impl SessionPersistence for SqliteSessionPersistence {
         .execute(&self.pool)
         .await
         .map_err(|e| {
-            crate::error::AgentError::storage(format!(
-                "Failed to save session to SQLite: {}",
-                e
-            ))
+            crate::error::AgentError::storage(format!("Failed to save session to SQLite: {}", e))
         })?;
 
         debug!("Saved session to SQLite: {}", session.session_key);
@@ -148,7 +138,17 @@ impl SessionPersistence for SqliteSessionPersistence {
     }
 
     async fn load_session(&self, session_id: &str) -> Result<Option<UnifiedSession>> {
-        let row: Option<(String, String, String, String, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>)> = sqlx::query_as(
+        let row: Option<(
+            String,
+            String,
+            String,
+            String,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+        )> = sqlx::query_as(
             r#"
             SELECT
                 id, pool_session_id, agent_id, state, capabilities, context, metadata,
@@ -160,10 +160,7 @@ impl SessionPersistence for SqliteSessionPersistence {
         .fetch_optional(&self.pool)
         .await
         .map_err(|e| {
-            crate::error::AgentError::storage(format!(
-                "Failed to load session from SQLite: {}",
-                e
-            ))
+            crate::error::AgentError::storage(format!("Failed to load session from SQLite: {}", e))
         })?;
 
         match row {
@@ -171,18 +168,28 @@ impl SessionPersistence for SqliteSessionPersistence {
                 // Reconstruct session from parts
                 let session = UnifiedSession {
                     pool_session_id: pool_id.parse().map_err(|_| {
-                        crate::error::AgentError::serialization("Invalid pool_session_id".to_string())
+                        crate::error::AgentError::serialization(
+                            "Invalid pool_session_id".to_string(),
+                        )
                     })?,
                     session_key: id.parse().map_err(|_| {
                         crate::error::AgentError::serialization("Invalid session_key".to_string())
                     })?,
                     agent_id,
-                    capabilities: caps.and_then(|c| serde_json::from_str(&c).ok()).unwrap_or_default(),
+                    capabilities: caps
+                        .and_then(|c| serde_json::from_str(&c).ok())
+                        .unwrap_or_default(),
                     state: parse_state(&state_str),
-                    context: ctx.and_then(|c| serde_json::from_str(&c).ok()).unwrap_or_default(),
-                    metadata: meta.and_then(|m| serde_json::from_str(&m).ok()).unwrap_or_default(),
+                    context: ctx
+                        .and_then(|c| serde_json::from_str(&c).ok())
+                        .unwrap_or_default(),
+                    metadata: meta
+                        .and_then(|m| serde_json::from_str(&m).ok())
+                        .unwrap_or_default(),
                     parent_session: parent.and_then(|p| p.parse().ok()),
-                    child_sessions: children.and_then(|c| serde_json::from_str(&c).ok()).unwrap_or_default(),
+                    child_sessions: children
+                        .and_then(|c| serde_json::from_str(&c).ok())
+                        .unwrap_or_default(),
                 };
                 debug!("Loaded session from SQLite: {}", session_id);
                 Ok(Some(session))
@@ -208,7 +215,17 @@ impl SessionPersistence for SqliteSessionPersistence {
     }
 
     async fn list_sessions(&self) -> Result<Vec<UnifiedSession>> {
-        let rows: Vec<(String, String, String, String, Option<String>, Option<String>, Option<String>, Option<String>, Option<String>)> = sqlx::query_as(
+        let rows: Vec<(
+            String,
+            String,
+            String,
+            String,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+        )> = sqlx::query_as(
             r#"
             SELECT
                 id, pool_session_id, agent_id, state, capabilities, context, metadata,
@@ -221,10 +238,7 @@ impl SessionPersistence for SqliteSessionPersistence {
         .fetch_all(&self.pool)
         .await
         .map_err(|e| {
-            crate::error::AgentError::storage(format!(
-                "Failed to list sessions from SQLite: {}",
-                e
-            ))
+            crate::error::AgentError::storage(format!("Failed to list sessions from SQLite: {}", e))
         })?;
 
         let mut sessions = Vec::new();
@@ -234,12 +248,20 @@ impl SessionPersistence for SqliteSessionPersistence {
                     pool_session_id: pool_id,
                     session_key,
                     agent_id,
-                    capabilities: caps.and_then(|c| serde_json::from_str(&c).ok()).unwrap_or_default(),
+                    capabilities: caps
+                        .and_then(|c| serde_json::from_str(&c).ok())
+                        .unwrap_or_default(),
                     state: parse_state(&state_str),
-                    context: ctx.and_then(|c| serde_json::from_str(&c).ok()).unwrap_or_default(),
-                    metadata: meta.and_then(|m| serde_json::from_str(&m).ok()).unwrap_or_default(),
+                    context: ctx
+                        .and_then(|c| serde_json::from_str(&c).ok())
+                        .unwrap_or_default(),
+                    metadata: meta
+                        .and_then(|m| serde_json::from_str(&m).ok())
+                        .unwrap_or_default(),
                     parent_session: parent.and_then(|p| p.parse().ok()),
-                    child_sessions: children.and_then(|c| serde_json::from_str(&c).ok()).unwrap_or_default(),
+                    child_sessions: children
+                        .and_then(|c| serde_json::from_str(&c).ok())
+                        .unwrap_or_default(),
                 });
             }
         }
@@ -248,19 +270,17 @@ impl SessionPersistence for SqliteSessionPersistence {
     }
 
     async fn update_state(&self, session_id: &str, state: UnifiedSessionState) -> Result<()> {
-        sqlx::query(
-            "UPDATE sessions SET state = ?1, updated_at = datetime('now') WHERE id = ?2"
-        )
-        .bind(format!("{:?}", state))
-        .bind(session_id)
-        .execute(&self.pool)
-        .await
-        .map_err(|e| {
-            crate::error::AgentError::storage(format!(
-                "Failed to update session state in SQLite: {}",
-                e
-            ))
-        })?;
+        sqlx::query("UPDATE sessions SET state = ?1, updated_at = datetime('now') WHERE id = ?2")
+            .bind(format!("{:?}", state))
+            .bind(session_id)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| {
+                crate::error::AgentError::storage(format!(
+                    "Failed to update session state in SQLite: {}",
+                    e
+                ))
+            })?;
 
         Ok(())
     }
@@ -346,7 +366,9 @@ mod tests {
         // Create a mock session with valid session key format: agent:<id>:<type>:<uuid>
         let session = UnifiedSession {
             pool_session_id: uuid::Uuid::new_v4(),
-            session_key: format!("agent:test-agent:standard:{}", uuid::Uuid::new_v4()).parse().unwrap(),
+            session_key: format!("agent:test-agent:standard:{}", uuid::Uuid::new_v4())
+                .parse()
+                .unwrap(),
             agent_id: "test-agent".to_string(),
             capabilities: crate::runtime::session_pool::SessionCapabilities::default(),
             state: UnifiedSessionState::Active,
@@ -367,10 +389,17 @@ mod tests {
         assert_eq!(loaded.unwrap().agent_id, "test-agent");
 
         // Update state
-        persistence.update_state(&session_key, UnifiedSessionState::Busy).await.unwrap();
+        persistence
+            .update_state(&session_key, UnifiedSessionState::Busy)
+            .await
+            .unwrap();
 
         // Verify
-        let loaded = persistence.load_session(&session_key).await.unwrap().unwrap();
+        let loaded = persistence
+            .load_session(&session_key)
+            .await
+            .unwrap()
+            .unwrap();
         assert!(matches!(loaded.state, UnifiedSessionState::Busy));
 
         // Delete

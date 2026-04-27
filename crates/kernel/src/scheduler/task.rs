@@ -2,8 +2,9 @@
 //!
 //! Task control block for scheduling.
 
-use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
+
+use serde::{Deserialize, Serialize};
 
 // Re-export canonical types to avoid duplication
 pub use crate::capabilities::CapabilityLevel;

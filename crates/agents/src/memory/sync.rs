@@ -1,12 +1,14 @@
 //! Memory Synchronization
 
+use std::collections::HashMap;
+
+#[allow(unused_imports)]
+use uuid::Uuid;
+
 #[allow(unused_imports)]
 use super::MemoryEntry;
 #[allow(unused_imports)]
 use crate::error::Result;
-use std::collections::HashMap;
-#[allow(unused_imports)]
-use uuid::Uuid;
 
 /// Sync coordinator for distributed memory
 pub struct MemorySync {
