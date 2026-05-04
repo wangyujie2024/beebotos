@@ -418,6 +418,13 @@ pub enum Action {
     Delegate {
         agent_id: String,
         task: String,
+        skill_hint: Option<String>,
+        output_schema: Option<serde_json::Value>,
+    },
+    /// Parallel delegate to multiple sub-agents
+    ParallelDelegate {
+        branches: Vec<DelegateBranch>,
+        merge_strategy: MergeStrategy,
     },
     /// Wait for condition
     Wait {
@@ -428,6 +435,27 @@ pub enum Action {
     UserInteraction {
         question: String,
     },
+}
+
+/// Branch configuration for parallel delegation
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DelegateBranch {
+    pub branch_id: String,
+    /// Sub-agent configuration (LLM, Memory, etc.)
+    pub agent_config: crate::AgentConfig,
+    /// Task description for this branch
+    pub task: String,
+    /// Recommended skill to use
+    pub skill_hint: Option<String>,
+}
+
+/// How to merge parallel branch results
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum MergeStrategy {
+    Concat,
+    JsonMerge,
+    LlmSummarize,
+    Custom(String),
 }
 
 /// Planning error types

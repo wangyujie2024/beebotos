@@ -160,8 +160,8 @@ impl MessageDeduplicator {
                 > self.ttl_seconds
             {
                 // Record expired, remove it and allow reprocessing
-                messages.remove(message_id);
-                debug!("Message record expired: {}", message_id);
+                messages.remove(&key);
+                debug!("Message record expired: {}", key);
                 return true;
             }
 
@@ -177,8 +177,8 @@ impl MessageDeduplicator {
                 }
                 MessageStatus::Failed(_) => {
                     // Failed messages can be retried - remove old record and create new
-                    debug!("Retrying failed message: {}", message_id);
-                    messages.remove(message_id);
+                    debug!("Retrying failed message: {}", key);
+                    messages.remove(&key);
                     true
                 }
             }

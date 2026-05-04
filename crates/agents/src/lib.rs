@@ -80,6 +80,8 @@ pub mod security;
 pub mod session;
 pub mod skills;
 pub mod spawning;
+// 🟢 P1 FIX: Workflow orchestration module
+pub mod workflow;
 pub mod task;
 pub mod timeout;
 pub mod types;

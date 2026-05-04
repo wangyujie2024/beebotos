@@ -235,6 +235,247 @@ impl ApiService for TreasuryService {
     }
 }
 
+/// Workflow trigger info
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct WorkflowTriggerInfo {
+    pub trigger_type: String,
+    pub detail: String,
+}
+
+/// Workflow step info (for DAG visualization)
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct WorkflowStepInfo {
+    pub id: String,
+    pub name: String,
+    pub skill: String,
+    pub depends_on: Option<Vec<String>>,
+    pub condition: Option<String>,
+}
+
+/// Workflow info
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct WorkflowInfo {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub version: String,
+    pub author: Option<String>,
+    pub tags: Vec<String>,
+    pub steps_count: usize,
+    pub triggers: Vec<WorkflowTriggerInfo>,
+    pub steps: Vec<WorkflowStepInfo>,
+}
+
+/// Workflow instance summary
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct WorkflowInstanceSummary {
+    pub instance_id: String,
+    pub workflow_id: String,
+    pub workflow_name: String,
+    pub status: String,
+    pub completion_pct: f32,
+    pub duration_secs: u64,
+    pub started_at: String,
+    pub step_count: usize,
+}
+
+/// Dashboard stats response
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct DashboardStats {
+    pub total_workflows: usize,
+    pub total_instances: usize,
+    pub completed: usize,
+    pub failed: usize,
+    pub running: usize,
+    pub pending: usize,
+}
+
+/// Workflow execution request
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ExecuteWorkflowRequest {
+    #[serde(default)]
+    pub context: serde_json::Value,
+    pub agent_id: Option<String>,
+}
+
+/// Workflow execution response
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct WorkflowExecutionResponse {
+    pub instance_id: String,
+    pub workflow_id: String,
+    pub status: String,
+    pub message: String,
+}
+
+/// Install workflow request
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct InstallWorkflowRequest {
+    pub source_path: String,
+}
+
+/// Install workflow response
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct InstallWorkflowResponse {
+    pub success: bool,
+    pub id: String,
+    pub name: String,
+    pub message: String,
+    pub installed_path: String,
+}
+
+/// Workflow source response
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct WorkflowSourceResponse {
+    pub yaml: String,
+}
+
+/// Workflow API Service
+#[derive(Clone)]
+pub struct WorkflowService {
+    client: ApiClient,
+}
+
+impl WorkflowService {
+    pub fn new(client: ApiClient) -> Self {
+        Self { client }
+    }
+
+    pub async fn list(&self) -> Result<Vec<WorkflowInfo>, ApiError> {
+        self.client.get(ApiEndpoints::WORKFLOWS).await
+    }
+
+    pub async fn get(&self, id: &str) -> Result<WorkflowInfo, ApiError> {
+        self.client.get(&format!("{}{}", ApiEndpoints::WORKFLOW_DETAIL, js_sys::encode_uri_component(id))).await
+    }
+
+    pub async fn execute(&self, id: &str, req: &ExecuteWorkflowRequest) -> Result<WorkflowExecutionResponse, ApiError> {
+        self.client.post(&format!("{}{}", ApiEndpoints::WORKFLOW_EXECUTE, js_sys::encode_uri_component(id)), req).await
+    }
+
+    pub async fn dashboard_stats(&self) -> Result<DashboardStats, ApiError> {
+        self.client.get(ApiEndpoints::WORKFLOW_DASHBOARD_STATS).await
+    }
+
+    pub async fn recent_instances(&self, limit: usize) -> Result<Vec<WorkflowInstanceSummary>, ApiError> {
+        self.client.get(&format!("{}?limit={}", ApiEndpoints::WORKFLOW_DASHBOARD_RECENT, limit)).await
+    }
+
+    pub async fn workflow_stats(&self, id: &str) -> Result<serde_json::Value, ApiError> {
+        self.client.get(&format!("{}{}", ApiEndpoints::WORKFLOW_STATS, js_sys::encode_uri_component(id))).await
+    }
+
+    pub async fn get_source(&self, id: &str) -> Result<serde_json::Value, ApiError> {
+        self.client.get(&format!("{}{}source", ApiEndpoints::WORKFLOW_SOURCE, js_sys::encode_uri_component(id))).await
+    }
+
+    pub async fn delete(&self, id: &str) -> Result<(), ApiError> {
+        self.client.delete(&format!("{}{}", ApiEndpoints::WORKFLOW_DETAIL, js_sys::encode_uri_component(id))).await
+    }
+
+    pub async fn update(&self, id: &str, yaml: &str) -> Result<WorkflowInfo, ApiError> {
+        let req = UpdateWorkflowRequest { yaml: yaml.to_string() };
+        self.client.put(&format!("{}{}", ApiEndpoints::WORKFLOW_DETAIL, js_sys::encode_uri_component(id)), &req).await
+    }
+
+    pub async fn install(&self, req: &InstallWorkflowRequest) -> Result<InstallWorkflowResponse, ApiError> {
+        self.client.post(ApiEndpoints::WORKFLOW_INSTALL, req).await
+    }
+
+    pub async fn uninstall(&self, id: &str) -> Result<serde_json::Value, ApiError> {
+        self.client.post(&ApiEndpoints::WORKFLOW_UNINSTALL.replace("{id}", id), &serde_json::json!({})).await
+    }
+}
+
+impl ApiService for WorkflowService {
+    fn client(&self) -> &ApiClient {
+        &self.client
+    }
+}
+
+/// Update workflow request
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct UpdateWorkflowRequest {
+    pub yaml: String,
+}
+
+// ============================================================================
+// Composition API Service
+// ============================================================================
+
+/// Composition info returned by the API
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CompositionInfo {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub composition_type: String,
+    pub tags: Vec<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+/// Create composition request
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CreateCompositionRequest {
+    pub content: String,
+    pub id: Option<String>,
+}
+
+/// Execute composition request
+#[derive(Clone, Debug, Serialize, Deserialize, Default)]
+pub struct ExecuteCompositionRequest {
+    #[serde(default)]
+    pub input: String,
+    pub agent_id: Option<String>,
+}
+
+/// Composition execution response
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CompositionExecutionResponse {
+    pub composition_id: String,
+    pub status: String,
+    pub output: String,
+    pub message: String,
+}
+
+/// Composition API Service
+#[derive(Clone)]
+pub struct CompositionService {
+    client: ApiClient,
+}
+
+impl CompositionService {
+    pub fn new(client: ApiClient) -> Self {
+        Self { client }
+    }
+
+    pub async fn list(&self) -> Result<Vec<CompositionInfo>, ApiError> {
+        self.client.get(ApiEndpoints::COMPOSITIONS).await
+    }
+
+    pub async fn get(&self, id: &str) -> Result<CompositionInfo, ApiError> {
+        self.client.get(&format!("{}{}", ApiEndpoints::COMPOSITION_DETAIL, js_sys::encode_uri_component(id))).await
+    }
+
+    pub async fn create(&self, req: &CreateCompositionRequest) -> Result<CompositionInfo, ApiError> {
+        self.client.post(ApiEndpoints::COMPOSITIONS, req).await
+    }
+
+    pub async fn delete(&self, id: &str) -> Result<(), ApiError> {
+        self.client.delete(&format!("{}{}", ApiEndpoints::COMPOSITION_DETAIL, js_sys::encode_uri_component(id))).await
+    }
+
+    pub async fn execute(&self, id: &str, req: &ExecuteCompositionRequest) -> Result<CompositionExecutionResponse, ApiError> {
+        self.client.post(&ApiEndpoints::COMPOSITION_EXECUTE.replace("{id}", id), req).await
+    }
+}
+
+impl ApiService for CompositionService {
+    fn client(&self) -> &ApiClient {
+        &self.client
+    }
+}
+
 /// Settings API Service
 #[derive(Clone)]
 pub struct SettingsService {
@@ -287,19 +528,17 @@ impl AuthService {
     pub async fn register(
         &self,
         username: &str,
-        email: &str,
+        email: Option<&str>,
         password: &str,
     ) -> Result<LoginResponse, ApiError> {
-        self.client
-            .post(
-                "/auth/register",
-                &serde_json::json!({
-                    "username": username,
-                    "email": email,
-                    "password": password
-                }),
-            )
-            .await
+        let mut body = serde_json::json!({
+            "username": username,
+            "password": password
+        });
+        if let Some(e) = email {
+            body["email"] = serde_json::json!(e);
+        }
+        self.client.post("/auth/register", &body).await
     }
 
     pub async fn logout(&self) -> Result<serde_json::Value, ApiError> {
@@ -418,6 +657,11 @@ impl LlmConfigService {
     /// Get global LLM configuration (read-only, masked API keys)
     pub async fn get_config(&self) -> Result<LlmGlobalConfig, ApiError> {
         self.client.get("/llm/config").await
+    }
+
+    /// Update LLM provider configuration (model & temperature)
+    pub async fn update_config(&self, req: &UpdateLlmConfigRequest) -> Result<serde_json::Value, ApiError> {
+        self.client.put("/llm/config", req).await
     }
 
     /// Get LLM metrics
@@ -717,6 +961,15 @@ pub struct LlmProviderConfig {
     pub base_url: String,
     pub temperature: f32,
     pub context_window: Option<u32>,
+}
+
+/// Request to update LLM provider configuration
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct UpdateLlmConfigRequest {
+    pub provider: String,
+    pub model: String,
+    pub temperature: f32,
+    pub set_default: Option<bool>,
 }
 
 /// LLM Metrics Response

@@ -3,9 +3,8 @@
 //! Provides hot-reload for Gateway configuration using the local
 //! BeeBotOSConfig TOML file as the source of truth.
 
-use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{info, warn};
+use tracing::info;
 
 /// Simplified configuration manager for Gateway hot-reload
 pub struct GatewayConfigManager {
@@ -27,6 +26,11 @@ impl GatewayConfigManager {
     /// Get a read lock on the current config
     pub async fn config(&self) -> tokio::sync::RwLockReadGuard<'_, crate::config::BeeBotOSConfig> {
         self.config.read().await
+    }
+
+    /// Get the source configuration file path
+    pub fn source_path(&self) -> Option<&std::path::PathBuf> {
+        self.source_path.as_ref()
     }
 
     /// Check if reload is possible

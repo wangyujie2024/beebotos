@@ -16,7 +16,6 @@ pub mod dao_service;
 pub mod identity_cache;
 pub mod identity_service;
 pub mod llm_service;
-pub use llm_service::{LlmMetrics, MetricsSummary};
 pub mod message_processor;
 pub mod multichain_config;
 pub mod state_machine_service;

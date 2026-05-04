@@ -179,6 +179,15 @@ pub enum StateQuery {
         agent_id: AgentId,
         timestamp: DateTime<Utc>,
     },
+    /// List workflow instances
+    ListWorkflowInstances {
+        status: Option<String>,
+        limit: usize,
+    },
+    /// Get a single workflow instance
+    GetWorkflowInstance {
+        instance_id: String,
+    },
 }
 
 /// Filter for listing agents
@@ -234,6 +243,15 @@ pub enum QueryResult {
         agent_id: AgentId,
         state: AgentState,
         timestamp: DateTime<Utc>,
+    },
+    /// Workflow instance list
+    WorkflowInstanceList {
+        instances: Vec<serde_json::Value>,
+        total: usize,
+    },
+    /// Single workflow instance
+    WorkflowInstance {
+        instance: Option<serde_json::Value>,
     },
 }
 
@@ -470,6 +488,12 @@ impl StateStore {
             }
             StateQuery::GetStateAt { agent_id, timestamp } => {
                 self.query_state_at(agent_id, *timestamp).await?
+            }
+            StateQuery::ListWorkflowInstances { status, limit } => {
+                self.query_list_workflow_instances(status.as_deref(), *limit).await?
+            }
+            StateQuery::GetWorkflowInstance { instance_id } => {
+                self.query_workflow_instance(instance_id).await?
             }
         };
 
@@ -937,6 +961,134 @@ impl StateStore {
         }
 
         Err(GatewayError::not_found("agent state at time", format!("{}@{}", agent_id, timestamp)))
+    }
+
+    /// Query workflow instances
+    async fn query_list_workflow_instances(
+        &self,
+        status: Option<&str>,
+        limit: usize,
+    ) -> Result<QueryResult> {
+        let rows: Vec<(String, String, String, String)> = if let Some(s) = status {
+            sqlx::query_as(
+                r#"
+                SELECT id, workflow_id, status, trigger_context
+                FROM workflow_instances
+                WHERE status = ?1
+                ORDER BY started_at DESC
+                LIMIT ?2
+                "#
+            )
+            .bind(s)
+            .bind(limit as i64)
+            .fetch_all(&self.db)
+            .await
+            .map_err(|e| GatewayError::state(format!("Database error: {}", e)))?
+        } else {
+            sqlx::query_as(
+                r#"
+                SELECT id, workflow_id, status, trigger_context
+                FROM workflow_instances
+                ORDER BY started_at DESC
+                LIMIT ?1
+                "#
+            )
+            .bind(limit as i64)
+            .fetch_all(&self.db)
+            .await
+            .map_err(|e| GatewayError::state(format!("Database error: {}", e)))?
+        };
+
+        let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM workflow_instances")
+            .fetch_one(&self.db)
+            .await
+            .map_err(|e| GatewayError::state(format!("Database error: {}", e)))?;
+
+        let instances: Vec<serde_json::Value> = rows.into_iter().map(|(id, workflow_id, status, trigger_context)| {
+            serde_json::json!({
+                "instance_id": id,
+                "workflow_id": workflow_id,
+                "status": status,
+                "trigger_context": serde_json::from_str::<serde_json::Value>(&trigger_context).unwrap_or(serde_json::Value::Null),
+            })
+        }).collect();
+
+        Ok(QueryResult::WorkflowInstanceList { instances, total: total as usize })
+    }
+
+    /// Query a single workflow instance
+    async fn query_workflow_instance(&self, instance_id: &str) -> Result<QueryResult> {
+        let row: Option<(String, String, String, String, String, String, String, Option<String>)> = sqlx::query_as(
+            r#"
+            SELECT id, workflow_id, status, trigger_context, step_states, error_log, started_at, completed_at
+            FROM workflow_instances
+            WHERE id = ?1
+            "#
+        )
+        .bind(instance_id)
+        .fetch_optional(&self.db)
+        .await
+        .map_err(|e| GatewayError::state(format!("Database error: {}", e)))?;
+
+        let instance = row.map(|(id, workflow_id, status, trigger_context, step_states, error_log, started_at, completed_at)| {
+            serde_json::json!({
+                "instance_id": id,
+                "workflow_id": workflow_id,
+                "status": status,
+                "trigger_context": serde_json::from_str::<serde_json::Value>(&trigger_context).unwrap_or(serde_json::Value::Null),
+                "step_states": serde_json::from_str::<serde_json::Value>(&step_states).unwrap_or(serde_json::Value::Null),
+                "error_log": serde_json::from_str::<serde_json::Value>(&error_log).unwrap_or(serde_json::Value::Null),
+                "started_at": started_at,
+                "completed_at": completed_at,
+            })
+        });
+
+        Ok(QueryResult::WorkflowInstance { instance })
+    }
+
+    /// Upsert a workflow instance directly (bypasses event sourcing)
+    pub async fn upsert_workflow_instance(
+        &self,
+        instance_id: &str,
+        workflow_id: &str,
+        status: &str,
+        trigger_context: &serde_json::Value,
+        step_states: &serde_json::Value,
+        error_log: &serde_json::Value,
+        started_at: DateTime<Utc>,
+        completed_at: Option<DateTime<Utc>>,
+    ) -> Result<()> {
+        let trigger_ctx_str = serde_json::to_string(trigger_context).unwrap_or_default();
+        let step_states_str = serde_json::to_string(step_states).unwrap_or_default();
+        let error_log_str = serde_json::to_string(error_log).unwrap_or_default();
+        let completed_at_str = completed_at.map(|dt| dt.to_rfc3339());
+
+        sqlx::query(
+            r#"
+            INSERT INTO workflow_instances (id, workflow_id, status, trigger_context, step_states, error_log, started_at, completed_at, updated_at)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, datetime('now'))
+            ON CONFLICT(id) DO UPDATE SET
+                status = excluded.status,
+                trigger_context = excluded.trigger_context,
+                step_states = excluded.step_states,
+                error_log = excluded.error_log,
+                completed_at = excluded.completed_at,
+                updated_at = datetime('now')
+            "#
+        )
+        .bind(instance_id)
+        .bind(workflow_id)
+        .bind(status)
+        .bind(&trigger_ctx_str)
+        .bind(&step_states_str)
+        .bind(&error_log_str)
+        .bind(started_at.to_rfc3339())
+        .bind(&completed_at_str)
+        .execute(&self.db)
+        .await
+        .map_err(|e| GatewayError::state(format!("Failed to upsert workflow instance: {}", e)))?;
+
+        Ok(())
     }
 }
 

@@ -6,13 +6,15 @@
 //!
 //! 🆕 FIX: Now parses deep markdown sections (Prompt Template, Examples,
 //! Capabilities) so high-quality skills actually deliver their full value.
+//! 🆕 FIX: Supports both directory-based skills (SKILL.md) and legacy flat .md files.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use crate::skills::discovery::SkillDiscovery;
 use crate::skills::loader::{LoadedSkill, SkillManifest};
-use crate::skills::registry::{SkillRegistry, Version};
+use crate::skills::registry::SkillRegistry;
 
 /// Parse a markdown file into structured sections.
 /// Returns a map: section_name -> content (without the ## heading line)
@@ -114,129 +116,101 @@ fn build_tags(content: &str) -> Vec<String> {
     tags
 }
 
-/// Scan `skills/` directory and register all `.md` skills into the given registry.
+/// Scan `skills/` directory and register all skills into the given registry.
 pub async fn load_builtin_skills(registry: &Arc<SkillRegistry>) {
-    let skills_dir = PathBuf::from("skills");
-    if !skills_dir.exists() || !skills_dir.is_dir() {
-        return;
-    }
+    let mut discovery = SkillDiscovery::new();
+    discovery.add_path("skills");
 
+    let metas = discovery.scan().await;
     let mut registered = 0;
-    let mut entries = match tokio::fs::read_dir(&skills_dir).await {
-        Ok(e) => e,
-        Err(_) => return,
-    };
 
-    while let Ok(Some(entry)) = entries.next_entry().await {
-        let category_dir = entry.path();
-        if !category_dir.is_dir() {
-            continue;
-        }
-
-        let mut md_entries = match tokio::fs::read_dir(&category_dir).await {
-            Ok(e) => e,
-            Err(_) => continue,
-        };
-
-        while let Ok(Some(md_entry)) = md_entries.next_entry().await {
-            let path = md_entry.path();
-            if path.extension().and_then(|e| e.to_str()) != Some("md") {
+    for meta in metas {
+        let content = if meta.path.is_dir() {
+            let md_path = meta.path.join("SKILL.md");
+            if md_path.exists() {
+                tokio::fs::read_to_string(&md_path).await.unwrap_or_default()
+            } else {
                 continue;
             }
+        } else {
+            tokio::fs::read_to_string(&meta.path).await.unwrap_or_default()
+        };
 
-            let content = match tokio::fs::read_to_string(&path).await {
-                Ok(c) => c,
-                Err(_) => continue,
-            };
+        // Parse deep markdown sections
+        let sections = parse_markdown_sections(&content);
 
-            // Parse skill name from first heading
-            let first_line = content.lines().next().unwrap_or("").trim();
-            let (skill_name, skill_id) = if first_line.starts_with("# ") {
-                let name = first_line[2..].trim().to_string();
-                let id = name
-                    .to_lowercase()
-                    .replace(' ', "_")
-                    .replace(|c: char| !c.is_alphanumeric() && c != '_', "");
-                (name, id)
-            } else {
-                let stem = path
-                    .file_stem()
-                    .and_then(|s| s.to_str())
-                    .unwrap_or("unknown")
-                    .to_string();
-                (stem.clone(), stem.to_lowercase().replace(' ', "_"))
-            };
+        let description = sections
+            .get("description")
+            .cloned()
+            .unwrap_or_else(|| {
+                content
+                    .lines()
+                    .skip(1)
+                    .skip_while(|l| l.trim().is_empty() || l.trim().starts_with('#'))
+                    .take_while(|l| !l.trim().starts_with('#') && !l.trim().starts_with("```"))
+                    .collect::<Vec<_>>()
+                    .join(" ")
+                    .trim()
+                    .to_string()
+            });
 
-            // 🆕 FIX: Parse deep markdown sections
-            let sections = parse_markdown_sections(&content);
+        let description = if description.is_empty() {
+            meta.description.clone()
+        } else {
+            description
+        };
 
-            // Description: first paragraph after any heading, fallback to Description section
-            let description = sections
-                .get("description")
-                .cloned()
-                .unwrap_or_else(|| {
-                    content
-                        .lines()
-                        .skip(1)
-                        .skip_while(|l| l.trim().is_empty() || l.trim().starts_with('#'))
-                        .take_while(|l| !l.trim().starts_with('#') && !l.trim().starts_with("```"))
-                        .collect::<Vec<_>>()
-                        .join(" ")
-                        .trim()
-                        .to_string()
-                });
+        let prompt_template = sections.get("prompt_template").cloned().unwrap_or_default();
+        let examples = sections.get("examples").cloned().unwrap_or_default();
+        let capabilities = sections
+            .get("capabilities")
+            .map(|text| parse_capabilities(text))
+            .unwrap_or_default();
 
-            let description = if description.is_empty() {
-                format!("Built-in skill: {}", skill_name)
-            } else {
-                description
-            };
+        let tags = if meta.tags.is_empty() {
+            build_tags(&content)
+        } else {
+            meta.tags.clone()
+        };
 
-            // 🆕 FIX: Extract prompt template and examples from markdown sections
-            let prompt_template = sections.get("prompt_template").cloned().unwrap_or_default();
-            let examples = sections.get("examples").cloned().unwrap_or_default();
-
-            // 🆕 FIX: Parse capabilities from bullet points in Capabilities section
-            let capabilities = sections
-                .get("capabilities")
-                .map(|text| parse_capabilities(text))
-                .unwrap_or_default();
-
-            // Build tags from full content
-            let tags = build_tags(&content);
-
-            let skill = LoadedSkill {
-                id: skill_id.clone(),
-                name: skill_name.clone(),
-                version: Version::new(1, 0, 0),
-                wasm_path: PathBuf::new(), // No WASM — execution falls back to LLM
-                manifest: SkillManifest {
-                    id: skill_id.clone(),
-                    name: skill_name.clone(),
-                    version: Version::new(1, 0, 0),
-                    description: description.clone(),
-                    author: "BeeBotOS".to_string(),
-                    capabilities: if capabilities.is_empty() {
-                        tags.clone()
-                    } else {
-                        capabilities
-                    },
-                    permissions: vec!["llm:chat".to_string()],
-                    entry_point: "run".to_string(),
-                    license: "MIT".to_string(),
-                    functions: vec![],
-                    prompt_template,
-                    examples,
+        let skill = LoadedSkill {
+            id: meta.id.clone(),
+            name: meta.name.clone(),
+            version: meta.version.clone(),
+            wasm_path: PathBuf::new(),
+            source_path: meta.path.clone(),
+            manifest: SkillManifest {
+                id: meta.id.clone(),
+                name: meta.name.clone(),
+                version: meta.version.clone(),
+                description: description.clone(),
+                author: "BeeBotOS".to_string(),
+                capabilities: if capabilities.is_empty() {
+                    tags.clone()
+                } else {
+                    capabilities
                 },
-            };
+                permissions: vec!["llm:chat".to_string()],
+                entry_point: "run".to_string(),
+                license: "MIT".to_string(),
+                functions: vec![],
+                prompt_template,
+                examples,
+            },
+        };
 
-            let category = category_dir
-                .file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or("general");
-            registry.register(skill, category, tags).await;
-            registered += 1;
-        }
+        let category = if meta.category.is_empty() {
+            if meta.path.is_dir() {
+                meta.path.file_name().and_then(|n| n.to_str()).unwrap_or("general")
+            } else {
+                meta.path.parent().and_then(|p| p.file_name()).and_then(|n| n.to_str()).unwrap_or("general")
+            }
+        } else {
+            &meta.category
+        };
+
+        registry.register(skill, category, tags).await;
+        registered += 1;
     }
 
     if registered > 0 {

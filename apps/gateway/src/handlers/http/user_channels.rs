@@ -12,7 +12,7 @@ use axum::Json;
 use gateway::middleware::{require_any_role, AuthUser};
 use serde::Deserialize;
 use serde_json::json;
-use tracing::{info, warn};
+use tracing::info;
 
 use crate::error::GatewayError;
 use crate::AppState;

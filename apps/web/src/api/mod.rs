@@ -37,14 +37,20 @@ pub use client::{
 // Re-export 服务
 pub use services::{
     AgentInfo, AgentLogEntry, AgentService, AgentStatus, ApiService, AssetInfo, AuthService,
-    ChannelConfig, ChannelInfo, ChannelService, ChannelStatus, CreateAgentRequest,
-    CreateInstanceRequest, CreateProposalRequest, DaoService, DaoSummary, ExecuteSkillResponse,
-    InstanceInfo, InstallSkillRequest, InstallSkillResponse, LoginResponse, LlmConfigService,
-    LlmGlobalConfig, LlmHealthResponse, LlmLatency, LlmMetricsResponse, LlmProviderConfig,
-    LlmProviderHealth, LlmSummary, LlmTokens, PaginatedResponse, ProposalInfo, ProposalStatus,
-    QrStatusResponse, Settings, SettingsService, SkillCategory, SkillInfo, SkillService,
-    TestConnectionResponse, Theme, TokenRefreshResponse, TransactionInfo, TransactionStatus,
-    TransactionType, TreasuryInfo, TreasuryService, UpdateAgentRequest, UserInfo, WeChatQrResponse,
+    ChannelConfig, ChannelInfo, ChannelService, ChannelStatus, CompositionExecutionResponse,
+    CompositionInfo, CompositionService, CreateAgentRequest, CreateCompositionRequest,
+    CreateInstanceRequest, CreateProposalRequest, DashboardStats, DaoService, DaoSummary,
+    ExecuteCompositionRequest, ExecuteSkillResponse, ExecuteWorkflowRequest, InstanceInfo,
+    InstallSkillRequest, InstallSkillResponse, InstallWorkflowRequest, InstallWorkflowResponse,
+    LoginResponse, LlmConfigService, LlmGlobalConfig,
+    LlmHealthResponse, LlmLatency, LlmMetricsResponse, LlmProviderConfig, LlmProviderHealth,
+    LlmSummary, LlmTokens, PaginatedResponse, ProposalInfo, ProposalStatus, QrStatusResponse,
+    UpdateLlmConfigRequest,
+    Settings, SettingsService, SkillCategory, SkillInfo, SkillService, TestConnectionResponse,
+    Theme, TokenRefreshResponse, TransactionInfo, TransactionStatus, TransactionType,
+    TreasuryInfo, TreasuryService, UpdateAgentRequest, UpdateWorkflowRequest, UserInfo,
+    WeChatQrResponse, WorkflowExecutionResponse, WorkflowInfo, WorkflowInstanceSummary,
+    WorkflowService, WorkflowSourceResponse, WorkflowStepInfo, WorkflowTriggerInfo,
 };
 
 /// 创建默认 API 客户端

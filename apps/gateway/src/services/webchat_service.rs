@@ -6,7 +6,7 @@
 use chrono::{DateTime, Utc};
 use serde_json::Value;
 use sqlx::SqlitePool;
-use tracing::{error, info, warn};
+use tracing::{error, info};
 
 use crate::error::AppError;
 

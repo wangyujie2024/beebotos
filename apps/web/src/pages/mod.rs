@@ -9,6 +9,7 @@ pub mod channels;
 pub mod dao;
 pub mod home;
 pub mod llm_config;
+pub mod llm_settings;
 pub mod login;
 pub mod not_found;
 pub mod register;
@@ -18,6 +19,8 @@ pub mod skill_instances;
 pub mod skills;
 pub mod treasury;
 pub mod webchat;
+pub mod workflow_detail;
+pub mod workflows;
 
 pub use agent_detail::AgentDetail;
 pub use agents::AgentsPage;
@@ -26,6 +29,7 @@ pub use channels::ChannelsPage;
 pub use dao::DaoPage;
 pub use home::Home;
 pub use llm_config::LlmConfigPage;
+pub use llm_settings::LlmSettingsPage;
 pub use login::LoginPage;
 pub use not_found::NotFound;
 pub use register::RegisterPage;
@@ -35,6 +39,8 @@ pub use skill_instances::SkillInstancesPage;
 pub use skills::SkillsPage;
 pub use treasury::{TreasuryPage, TreasuryTransactionsPage};
 pub use webchat::WebchatPage;
+pub use workflow_detail::WorkflowDetailPage;
+pub use workflows::WorkflowDashboardPage;
 
 #[cfg(test)]
 mod tests {

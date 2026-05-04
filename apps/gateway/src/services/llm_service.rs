@@ -311,13 +311,16 @@ impl LlmService {
             return Err(format!("API key not set for provider '{}'", name));
         }
 
+        let timeout_secs = config.models.request_timeout;
+        let timeout = std::time::Duration::from_secs(timeout_secs);
+
         match name {
             "kimi" => {
                 let kimi_config = KimiConfig {
                     base_url: Self::get_base_url(name, &provider_config),
                     api_key: api_key.unwrap_or_default(),
                     default_model: Self::get_model(name, &provider_config),
-                    timeout: std::time::Duration::from_secs(90),
+                    timeout,
                     retry_policy: beebotos_agents::llm::traits::RetryPolicy::default(),
                     mode: beebotos_agents::llm::providers::ProviderMode::Merge,
                 };
@@ -333,7 +336,7 @@ impl LlmService {
                     base_url: Self::get_base_url(name, &provider_config),
                     api_key: api_key.unwrap_or_default(),
                     default_model: Self::get_model(name, &provider_config),
-                    timeout: std::time::Duration::from_secs(90),
+                    timeout,
                     retry_policy: beebotos_agents::llm::traits::RetryPolicy::default(),
                     organization: None,
                 };
@@ -349,7 +352,7 @@ impl LlmService {
                     base_url: Self::get_base_url(name, &provider_config),
                     api_key: api_key.unwrap_or_default(),
                     default_model: Self::get_model(name, &provider_config),
-                    timeout: std::time::Duration::from_secs(90),
+                    timeout,
                     retry_policy: beebotos_agents::llm::traits::RetryPolicy::default(),
                 };
 
@@ -364,7 +367,7 @@ impl LlmService {
                     base_url: Self::get_base_url(name, &provider_config),
                     api_key: api_key.unwrap_or_default(),
                     default_model: Self::get_model(name, &provider_config),
-                    timeout: std::time::Duration::from_secs(90),
+                    timeout,
                     retry_policy: beebotos_agents::llm::traits::RetryPolicy::default(),
                 };
 
@@ -528,13 +531,14 @@ impl LlmService {
     ///
     /// 🆕 FIX: Supports proper system/user/assistant role separation
     /// to avoid double-flattening in Agent→Gateway path.
-    pub async fn chat(&self, messages: Vec<LLMMessage>) -> Result<String, GatewayError> {
+    /// 🆕 FIX: Accept optional max_tokens override from caller (e.g. Agent extra_params).
+    pub async fn chat(&self, messages: Vec<LLMMessage>, max_tokens_override: Option<u32>) -> Result<String, GatewayError> {
         let start_time = std::time::Instant::now();
 
         let request_config = RequestConfig {
             model: self.get_default_model(),
             temperature: self.get_default_temperature(),
-            max_tokens: Some(self.config.models.max_tokens),
+            max_tokens: max_tokens_override.or(Some(self.config.models.max_tokens)),
             stream: Some(false),
             ..Default::default()
         };

@@ -150,7 +150,7 @@ pub async fn get_agent(
     check_ownership(&user, &agent)?;
 
     // Get status history
-    let history: Vec<crate::models::AgentStatusHistory> = sqlx::query_as(
+    let _history: Vec<crate::models::AgentStatusHistory> = sqlx::query_as(
         "SELECT * FROM agent_status_history WHERE agent_id = $1 ORDER BY created_at DESC LIMIT 10",
     )
     .bind(agent_id)
@@ -163,7 +163,7 @@ pub async fn get_agent(
 
     // 🔒 P0 FIX: Get runtime state from unified state manager instead of local
     // cache
-    let runtime_state = state
+    let _runtime_state = state
         .state_manager
         .get_record(&id)
         .await
@@ -178,7 +178,7 @@ pub async fn get_agent(
         });
 
     // Get kernel task ID if available
-    let kernel_task_id = state
+    let _kernel_task_id = state
         .agent_runtime_manager
         .get_kernel_task_id(&id)
         .await

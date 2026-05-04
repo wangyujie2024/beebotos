@@ -13,7 +13,7 @@ use gateway::{
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::sync::Arc;
-use tracing::{error, info, warn};
+use tracing::info;
 
 use crate::AppState;
 
@@ -433,10 +433,10 @@ pub async fn import_session(
 
 /// Send a streaming message (stub — returns a stream ID)
 pub async fn send_message_streaming(
-    State(state): State<Arc<AppState>>,
+    State(_state): State<Arc<AppState>>,
     user: AuthUser,
     Path(id): Path<String>,
-    Json(req): Json<serde_json::Value>,
+    Json(_req): Json<serde_json::Value>,
 ) -> Result<Json<serde_json::Value>, GatewayError> {
     require_any_role(&user, &["user", "admin"])?;
 

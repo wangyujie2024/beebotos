@@ -3,7 +3,6 @@
 //! Handles channel management and WeChat QR code login.
 
 use axum::extract::{Path, State};
-use axum::response::IntoResponse;
 use axum::Json;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -124,12 +123,23 @@ pub async fn check_wechat_qr(
                 let guard = channel.read().await;
                 let pwc = guard.as_any().downcast_ref::<PersonalWeChatChannel>()
                     .ok_or_else(|| GatewayError::internal("Channel is not PersonalWeChatChannel"))?;
-                pwc.complete_login(token, base_url, event_bus).await
+                pwc.complete_login(token, base_url, event_bus.clone()).await
             };
 
             match login_result {
                 Ok(_) => {
-                    info!("✅ Personal WeChat login completed and listener started");
+                    info!("✅ Personal WeChat login completed");
+                    // 🛡️ FIX: Explicitly start listener after login, since complete_login no longer does it
+                    let channel_clone = channel.clone();
+                    let event_bus_clone = event_bus.clone();
+                    tokio::spawn(async move {
+                        let guard = channel_clone.write().await;
+                        if let Err(e) = guard.start_listener(event_bus_clone).await {
+                            warn!("❌ Failed to start personal_wechat listener after login: {}", e);
+                        } else {
+                            info!("✅ Personal WeChat listener started after login");
+                        }
+                    });
                 }
                 Err(e) => {
                     error!("❌ Failed to complete login: {}", e);

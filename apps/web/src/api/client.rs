@@ -29,7 +29,8 @@ pub struct ClientConfig {
 impl Default for ClientConfig {
     fn default() -> Self {
         Self {
-            base_url: "/api/v1".to_string(),
+            // Gateway API runs on port 8000 per project docs
+            base_url: "http://localhost:8000/api/v1".to_string(),
             timeout_ms: DEFAULT_TIMEOUT_MS,
             retry_attempts: DEFAULT_RETRY_ATTEMPTS,
             retry_delay_ms: DEFAULT_RETRY_DELAY_MS,
@@ -256,7 +257,7 @@ impl ApiClient {
         } else if api_response.status == 401 {
             Err(ApiError::Unauthorized)
         } else {
-            Err(ApiError::from_status(api_response.status))
+            Err(ApiError::from_response(api_response.status, &api_response.body))
         }
     }
 
@@ -460,7 +461,7 @@ impl ApiClient {
                     self.store_cache(&cache_key, data);
                     response.json()
                 } else {
-                    Err(ApiError::from_status(response.status))
+                    Err(ApiError::from_response(response.status, &response.body))
                 }
             }
             Err(e) => Err(e),
@@ -483,7 +484,7 @@ impl ApiClient {
         if response.is_success() {
             response.json()
         } else {
-            Err(ApiError::from_status(response.status))
+            Err(ApiError::from_response(response.status, &response.body))
         }
     }
 
@@ -502,7 +503,7 @@ impl ApiClient {
         if response.is_success() {
             response.json()
         } else {
-            Err(ApiError::from_status(response.status))
+            Err(ApiError::from_response(response.status, &response.body))
         }
     }
 
@@ -516,7 +517,7 @@ impl ApiClient {
         if response.is_success() || response.status == 204 {
             Ok(())
         } else {
-            Err(ApiError::from_status(response.status))
+            Err(ApiError::from_response(response.status, &response.body))
         }
     }
 }
@@ -527,6 +528,21 @@ impl Default for ApiClient {
     }
 }
 
+/// Backend error response structure (mirrors gateway-lib ErrorResponse)
+#[derive(Debug, Clone, serde::Deserialize)]
+struct BackendErrorResponse {
+    #[allow(dead_code)]
+    success: bool,
+    error: BackendErrorDetail,
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+struct BackendErrorDetail {
+    #[allow(dead_code)]
+    code: String,
+    message: String,
+}
+
 /// API Error types
 #[derive(Debug, Clone, PartialEq)]
 pub enum ApiError {
@@ -535,21 +551,26 @@ pub enum ApiError {
     NotFound,
     Unauthorized,
     Forbidden,
-    ClientError(u16),
-    ServerError(u16),
+    ClientError(u16, Option<String>),
+    ServerError(u16, Option<String>),
     Timeout,
     Cancelled,
     Unknown,
 }
 
 impl ApiError {
-    fn from_status(status: u16) -> Self {
+    fn from_response(status: u16, body: &[u8]) -> Self {
+        // Try to parse backend error response for a better message
+        let backend_msg = serde_json::from_slice::<BackendErrorResponse>(body)
+            .ok()
+            .map(|r| r.error.message);
+
         match status {
             401 => ApiError::Unauthorized,
             403 => ApiError::Forbidden,
             404 => ApiError::NotFound,
-            400..=499 => ApiError::ClientError(status),
-            500..=599 => ApiError::ServerError(status),
+            400..=499 => ApiError::ClientError(status, backend_msg),
+            500..=599 => ApiError::ServerError(status, backend_msg),
             _ => ApiError::Unknown,
         }
     }
@@ -558,7 +579,7 @@ impl ApiError {
     pub fn is_retryable(&self) -> bool {
         matches!(
             self,
-            ApiError::Network(_) | ApiError::ServerError(_) | ApiError::Timeout | ApiError::Unknown
+            ApiError::Network(_) | ApiError::ServerError(_, _) | ApiError::Timeout | ApiError::Unknown
         )
     }
 
@@ -570,10 +591,15 @@ impl ApiError {
             ApiError::Forbidden => "You don't have permission to do this".to_string(),
             ApiError::NotFound => "Resource not found".to_string(),
             ApiError::Timeout => "Request timed out, please try again".to_string(),
-            ApiError::ServerError(code) => {
-                format!("Server error ({}), please try again later", code)
+            ApiError::ServerError(code, msg) => {
+                msg.clone().unwrap_or_else(|| format!("Server error ({}), please try again later", code))
             }
-            _ => "An unexpected error occurred".to_string(),
+            ApiError::ClientError(code, msg) => {
+                msg.clone().unwrap_or_else(|| format!("Request failed ({})", code))
+            }
+            ApiError::Serialization(msg) => format!("Failed to parse response: {}", msg),
+            ApiError::Cancelled => "Request was cancelled".to_string(),
+            ApiError::Unknown => "An unexpected error occurred".to_string(),
         }
     }
 }

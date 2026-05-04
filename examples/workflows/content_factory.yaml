@@ -1,0 +1,91 @@
+id: content_factory
+name: "multi_agent_content_factory"
+description: "针对特定主题，自动完成调研、撰写、整合的全套内容生产流程"
+version: "1.0.0"
+author: "BeeBotOS Team"
+tags: ["content", "multi-agent", "research", "writing"]
+triggers:
+  - type: manual
+  - type: webhook
+    path: "/webhook/content-factory"
+    method: "POST"
+    auth: "cf-secret-token"
+
+config:
+  timeout_sec: 600
+  continue_on_failure: false
+  notify_on_complete: true
+
+steps:
+  # Step 1: 主编 Agent 拆解任务
+  - id: plan_tasks
+    name: "Plan Content Tasks"
+    skill: planning_engine
+    params:
+      goal: "为 '{{input.topic}}' 生成一份完整的市场分析报告"
+      strategy: "hybrid"
+    timeout_sec: 60
+
+  # Step 2: 并行执行三个子 Agent 调研
+  - id: research_parallel
+    name: "Parallel Research"
+    skill: parallel_delegate
+    depends_on:
+      - plan_tasks
+    params:
+      branches:
+        - agent_role: "market_researcher"
+          task: "研究 '{{input.topic}}' 的市场规模与竞争格局"
+          skill_hint: "market_analysis"
+        - agent_role: "tech_researcher"
+          task: "研究 '{{input.topic}}' 的技术趋势与核心专利"
+          skill_hint: "tech_research"
+        - agent_role: "user_researcher"
+          task: "研究 '{{input.topic}}' 的用户画像与需求痛点"
+          skill_hint: "user_research"
+      merge_strategy: "json_merge"
+    timeout_sec: 120
+
+  # Step 3: 写手 Agent 基于调研报告创作文案
+  - id: draft_content
+    name: "Draft Content"
+    skill: content_writer
+    depends_on:
+      - research_parallel
+    params:
+      research_data: "{{steps.research_parallel.output}}"
+      style: "{{input.style}}"
+      word_count: 2000
+    timeout_sec: 120
+
+  # Step 4: 审核 Agent 质量检查
+  - id: review_content
+    name: "Review Content"
+    skill: content_reviewer
+    depends_on:
+      - draft_content
+    params:
+      content: "{{steps.draft_content.output.article}}"
+      criteria:
+        - "准确性"
+        - "可读性"
+        - "原创性"
+    timeout_sec: 60
+
+  # Step 5: 条件分支：审核通过则发布，否则返修
+  - id: publish_or_revise
+    name: "Publish or Revise"
+    skill: conditional_router
+    depends_on:
+      - review_content
+    condition: "{{steps.review_content.output.score}} >= 80"
+    params:
+      then_skill: "publisher"
+      then_params:
+        content: "{{steps.draft_content.output.article}}"
+        channel: "{{input.publish_channel}}"
+      else_skill: "content_writer"
+      else_params:
+        research_data: "{{steps.research_parallel.output}}"
+        revision_notes: "{{steps.review_content.output.feedback}}"
+    timeout_sec: 30

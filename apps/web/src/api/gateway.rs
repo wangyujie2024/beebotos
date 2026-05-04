@@ -185,6 +185,22 @@ impl ApiEndpoints {
     pub const INSTANCES: &'static str = "/instances";
     pub const INSTANCE_DETAIL: &'static str = "/instances/"; // + id
     pub const INSTANCE_EXECUTE: &'static str = "/instances/{id}/execute";
+
+    // Workflow API (v2)
+    pub const WORKFLOWS: &'static str = "/workflows";
+    pub const WORKFLOW_DETAIL: &'static str = "/workflows/"; // + id
+    pub const WORKFLOW_EXECUTE: &'static str = "/workflows/{id}/execute";
+    pub const WORKFLOW_INSTALL: &'static str = "/workflows/install";
+    pub const WORKFLOW_UNINSTALL: &'static str = "/workflows/{id}/uninstall";
+    pub const WORKFLOW_SOURCE: &'static str = "/workflows/"; // + id + /source
+    pub const WORKFLOW_DASHBOARD_STATS: &'static str = "/workflows/dashboard/stats";
+    pub const WORKFLOW_DASHBOARD_RECENT: &'static str = "/workflows/dashboard/recent-instances";
+    pub const WORKFLOW_STATS: &'static str = "/workflows/"; // + id + /stats
+
+    // Composition API (v2)
+    pub const COMPOSITIONS: &'static str = "/compositions";
+    pub const COMPOSITION_DETAIL: &'static str = "/compositions/"; // + id
+    pub const COMPOSITION_EXECUTE: &'static str = "/compositions/{id}/execute";
 }
 
 /// Gateway 服务

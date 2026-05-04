@@ -209,6 +209,10 @@ pub struct PersonalWeChatChannel {
     welcomed_users: Arc<RwLock<HashMap<String, bool>>>,
     /// Session persistence file path
     session_store_path: PathBuf,
+    /// Recently processed message seqs to deduplicate iLink duplicate pushes
+    recent_seqs: Arc<RwLock<std::collections::VecDeque<(i64, chrono::DateTime<chrono::Utc>)>>>,
+    /// Serialize start_listener calls to prevent race conditions
+    start_listener_lock: Arc<tokio::sync::Mutex<()>>,
 }
 
 impl PersonalWeChatChannel {
@@ -238,6 +242,8 @@ impl PersonalWeChatChannel {
             event_sender: Arc::new(RwLock::new(None)),
             welcomed_users: Arc::new(RwLock::new(HashMap::new())),
             session_store_path,
+            recent_seqs: Arc::new(RwLock::new(std::collections::VecDeque::with_capacity(100))),
+            start_listener_lock: Arc::new(tokio::sync::Mutex::new(())),
         }
     }
 
@@ -438,14 +444,35 @@ impl PersonalWeChatChannel {
         // rather than in message_type. Use item_type when available.
         let actual_type = msg.item_list.first().map(|item| item.item_type).unwrap_or(msg_type);
 
+        // 🛡️ DEDUP FIX: Check seq-based local deduplication to prevent iLink duplicate pushes
+        let seq = msg.seq.unwrap_or(0);
+        if seq > 0 {
+            let mut recent_seqs = self.recent_seqs.write().await;
+            let now = chrono::Utc::now();
+            // Evict entries older than 60 seconds
+            while let Some((_, ts)) = recent_seqs.front() {
+                if now.signed_duration_since(*ts).num_seconds() > 60 {
+                    recent_seqs.pop_front();
+                } else {
+                    break;
+                }
+            }
+            // Check if this seq was recently processed
+            if recent_seqs.iter().any(|(s, _)| *s == seq) {
+                warn!("🔄 Duplicate iLink message detected (seq={}), skipping", seq);
+                return Ok(());
+            }
+            recent_seqs.push_back((seq, now));
+        }
+
         // Log raw message structure for debugging
         if let Ok(json) = serde_json::to_string(&msg) {
             info!("📨 RAW iLink message: {}", json);
         }
 
         debug!(
-            "收到个人微信消息 from={}, message_type={}, actual_item_type={}",
-            from_id, msg_type, actual_type
+            "收到个人微信消息 from={}, message_type={}, actual_item_type={}, seq={}",
+            from_id, msg_type, actual_type, seq
         );
 
         // Create metadata
@@ -458,6 +485,9 @@ impl PersonalWeChatChannel {
         if let Some(msg_id) = msg.message_id {
             metadata.insert("msg_id".to_string(), msg_id.to_string());
             metadata.insert("message_id".to_string(), msg_id.to_string());
+        } else if seq > 0 {
+            // 🛡️ DEDUP FIX: Fallback to seq when message_id is missing
+            metadata.insert("message_id".to_string(), format!("seq:{}", seq));
         }
 
         // Handle different message types based on actual item type
@@ -784,7 +814,7 @@ impl PersonalWeChatChannel {
         &self,
         bot_token: String,
         base_url: String,
-        event_bus: mpsc::Sender<ChannelEvent>,
+        _event_bus: mpsc::Sender<ChannelEvent>,
     ) -> Result<()> {
         let session = BotSession {
             bot_token,
@@ -804,13 +834,7 @@ impl PersonalWeChatChannel {
 
         self.start_reconnect_monitor();
 
-        info!("🎧 启动个人微信消息监听...");
-        if let Err(e) = self.start_listener(event_bus).await {
-            error!("❌ 启动个人微信消息监听失败: {}", e);
-            return Err(e);
-        }
-
-        info!("✅ 个人微信消息监听已启动");
+        info!("✅ 个人微信登录完成，等待 start_listener() 启动消息监听");
         Ok(())
     }
 }
@@ -950,6 +974,9 @@ impl Channel for PersonalWeChatChannel {
     }
 
     async fn start_listener(&self, event_bus: mpsc::Sender<ChannelEvent>) -> Result<()> {
+        // 🛡️ FIX: Serialize start_listener to prevent race conditions from concurrent calls
+        let _guard = self.start_listener_lock.lock().await;
+
         self.stop_listener().await?;
 
         if !*self.connected.read().await {
@@ -1073,6 +1100,8 @@ impl Clone for PersonalWeChatChannel {
             event_sender: self.event_sender.clone(),
             welcomed_users: self.welcomed_users.clone(),
             session_store_path: self.session_store_path.clone(),
+            recent_seqs: self.recent_seqs.clone(),
+            start_listener_lock: self.start_listener_lock.clone(),
         }
     }
 }

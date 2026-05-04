@@ -474,6 +474,7 @@ impl DagScheduler {
                                     Ok(task_result) => {
                                         Self::complete_task(
                                             &instances,
+                                            &ready_queue,
                                             &request,
                                             task_result,
                                             duration_ms,
@@ -483,6 +484,7 @@ impl DagScheduler {
                                     Err(e) => {
                                         Self::fail_task(
                                             &instances,
+                                            &ready_queue,
                                             &request,
                                             e.to_string(),
                                             duration_ms,
@@ -494,6 +496,7 @@ impl DagScheduler {
                                 warn!("No executor found for task {}", request.task_id);
                                 Self::fail_task(
                                     &instances,
+                                    &ready_queue,
                                     &request,
                                     "No suitable executor found".to_string(),
                                     0,
@@ -802,6 +805,7 @@ impl DagScheduler {
     /// Complete a task
     async fn complete_task(
         instances: &Arc<RwLock<HashMap<String, WorkflowInstance>>>,
+        ready_queue: &Arc<Mutex<VecDeque<TaskExecutionRequest>>>,
         request: &TaskExecutionRequest,
         result: TaskResult,
         duration_ms: u64,
@@ -827,7 +831,7 @@ impl DagScheduler {
         drop(instances_guard);
         
         // Update downstream tasks
-        Self::update_downstream_tasks(instances, &request.instance_id, &request.task_id, event_sender).await;
+        Self::update_downstream_tasks(instances, ready_queue, &request.instance_id, &request.task_id, event_sender).await;
         
         // Check if workflow is complete
         Self::check_workflow_completion(instances, &request.instance_id, event_sender).await;
@@ -836,6 +840,7 @@ impl DagScheduler {
     /// Fail a task
     async fn fail_task(
         instances: &Arc<RwLock<HashMap<String, WorkflowInstance>>>,
+        ready_queue: &Arc<Mutex<VecDeque<TaskExecutionRequest>>>,
         request: &TaskExecutionRequest,
         error: String,
         _duration_ms: u64,
@@ -843,7 +848,7 @@ impl DagScheduler {
     ) {
         let mut instances_guard = instances.write().await;
         
-        let should_replan = if let Some(instance) = instances_guard.get_mut(&request.instance_id) {
+        let (should_replan, continue_on_failure) = if let Some(instance) = instances_guard.get_mut(&request.instance_id) {
             if let Some(state) = instance.task_states.get_mut(&request.task_id) {
                 // Check if we should retry
                 if state.retry_count < instance.workflow.config.retry_policy.max_retries {
@@ -858,7 +863,7 @@ impl DagScheduler {
                     
                     // For simplicity, just mark as ready again
                     state.status = TaskExecutionStatus::Ready;
-                    true
+                    (true, false)
                 } else {
                     state.status = TaskExecutionStatus::Failed;
                     state.completed_at = Some(Utc::now());
@@ -870,13 +875,14 @@ impl DagScheduler {
                         error: error.clone(),
                     }).await;
                     
-                    instance.workflow.config.enable_replanning && !instance.workflow.config.continue_on_failure
+                    let should_replan = instance.workflow.config.enable_replanning && !instance.workflow.config.continue_on_failure;
+                    (should_replan, instance.workflow.config.continue_on_failure)
                 }
             } else {
-                false
+                (false, false)
             }
         } else {
-            false
+            (false, false)
         };
         
         drop(instances_guard);
@@ -889,13 +895,19 @@ impl DagScheduler {
             }).await;
         }
         
+        // If continue_on_failure is enabled, allow downstream tasks to proceed
+        if continue_on_failure {
+            Self::update_downstream_tasks(instances, ready_queue, &request.instance_id, &request.task_id, event_sender).await;
+        }
+        
         // Check if workflow should fail
         Self::check_workflow_completion(instances, &request.instance_id, event_sender).await;
     }
 
-    /// Update downstream tasks after a task completes
+    /// Update downstream tasks after a task completes or fails with continue_on_failure
     async fn update_downstream_tasks(
         instances: &Arc<RwLock<HashMap<String, WorkflowInstance>>>,
+        ready_queue: &Arc<Mutex<VecDeque<TaskExecutionRequest>>>,
         instance_id: &str,
         completed_task_id: &str,
         _event_sender: &mpsc::Sender<SchedulerEvent>,
@@ -926,18 +938,20 @@ impl DagScheduler {
                 if let Some(instance) = instances_guard.get(instance_id) {
                     if let Some(state) = instance.task_states.get(task_id) {
                         if state.status == TaskExecutionStatus::Pending {
-                            // Check if all dependencies are completed
+                            // Check if all dependencies are completed (or failed with continue_on_failure)
                             let deps = instance.workflow.dependencies.get(task_id)
                                 .cloned()
                                 .unwrap_or_default();
                             
-                            let all_deps_completed = deps.iter().all(|dep| {
+                            let all_deps_ready = deps.iter().all(|dep| {
                                 instance.task_states.get(dep)
-                                    .map(|s| s.status == TaskExecutionStatus::Completed)
+                                    .map(|s| {
+                                        matches!(s.status, TaskExecutionStatus::Completed | TaskExecutionStatus::Failed)
+                                    })
                                     .unwrap_or(false)
                             });
                             
-                            if all_deps_completed {
+                            if all_deps_ready {
                                 return Some(task_id.clone());
                             }
                         }
@@ -947,13 +961,22 @@ impl DagScheduler {
             })
             .collect();
         
+        // Collect task clones for newly ready tasks before dropping read lock
+        let ready_task_clones: Vec<DagTask> = ready_tasks.iter()
+            .filter_map(|task_id| {
+                instances_guard.get(instance_id)
+                    .and_then(|i| i.task_states.get(task_id))
+                    .map(|s| s.task.clone())
+            })
+            .collect();
+        
         drop(instances_guard);
         
         // Mark ready tasks
         let mut instances_guard = instances.write().await;
-        for task_id in ready_tasks {
+        for task_id in &ready_tasks {
             if let Some(instance) = instances_guard.get_mut(instance_id) {
-                if let Some(state) = instance.task_states.get_mut(&task_id) {
+                if let Some(state) = instance.task_states.get_mut(task_id) {
                     state.status = TaskExecutionStatus::Ready;
                 }
             }
@@ -961,8 +984,18 @@ impl DagScheduler {
         
         drop(instances_guard);
         
-        // Queue ready tasks
-        // This would need the scheduler instance, so we skip for now
+        // Queue ready tasks into the ready queue
+        let mut queue = ready_queue.lock().await;
+        for (task_id, task) in ready_tasks.into_iter().zip(ready_task_clones.into_iter()) {
+            let request = TaskExecutionRequest {
+                instance_id: instance_id.to_string(),
+                task_id: task_id.clone(),
+                task,
+                session_key: None,
+            };
+            queue.push_back(request);
+            debug!("Queued downstream task {} for instance {}", task_id, instance_id);
+        }
     }
 
     /// Check if workflow is complete
@@ -1002,6 +1035,14 @@ impl DagScheduler {
     pub async fn get_instance(&self, instance_id: &str) -> Option<WorkflowInstance> {
         let instances = self.instances.read().await;
         instances.get(instance_id).cloned()
+    }
+
+    /// Get task result from a workflow instance
+    pub async fn get_task_result(&self, instance_id: &str, task_id: &str) -> Option<TaskResult> {
+        let instances = self.instances.read().await;
+        instances.get(instance_id)
+            .and_then(|i| i.task_states.get(task_id))
+            .and_then(|s| s.result.clone())
     }
 
     /// Get scheduler metrics
@@ -1280,5 +1321,109 @@ mod tests {
         
         assert_eq!(workflow.name, "Test Workflow");
         assert_eq!(workflow.tasks.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_multi_level_dag_execution() {
+        use tokio::time::{timeout, Duration};
+
+        let config = SchedulerConfig {
+            max_concurrency: 2,
+            health_check_interval_sec: 1,
+            ..SchedulerConfig::default()
+        };
+        let (scheduler, mut receiver) = DagScheduler::new(config);
+
+        scheduler.start().await;
+        scheduler.register_executor(Arc::new(MockExecutor)).await;
+
+        // Build a 3-level DAG:
+        //       task1
+        //       /   \
+        //    task2  task3
+        //       \   /
+        //       task4
+        let workflow = DagWorkflowBuilder::new("Multi-Level DAG")
+            .description("Tests downstream task queuing")
+            .add_task(DagTask {
+                id: "task1".to_string(),
+                name: "Root Task".to_string(),
+                description: String::new(),
+                task_type: TaskType::LlmChat,
+                parameters: HashMap::new(),
+                priority: TaskPriority::Normal,
+                estimated_duration_sec: None,
+                required_capabilities: vec![],
+                resource_requirements: ResourceRequirements::default(),
+            })
+            .depends_on(vec!["task1".to_string()])
+            .add_task(DagTask {
+                id: "task2".to_string(),
+                name: "Level 2 A".to_string(),
+                description: String::new(),
+                task_type: TaskType::LlmChat,
+                parameters: HashMap::new(),
+                priority: TaskPriority::Normal,
+                estimated_duration_sec: None,
+                required_capabilities: vec![],
+                resource_requirements: ResourceRequirements::default(),
+            })
+            .depends_on(vec!["task1".to_string()])
+            .add_task(DagTask {
+                id: "task3".to_string(),
+                name: "Level 2 B".to_string(),
+                description: String::new(),
+                task_type: TaskType::LlmChat,
+                parameters: HashMap::new(),
+                priority: TaskPriority::Normal,
+                estimated_duration_sec: None,
+                required_capabilities: vec![],
+                resource_requirements: ResourceRequirements::default(),
+            })
+            .depends_on(vec!["task2".to_string(), "task3".to_string()])
+            .add_task(DagTask {
+                id: "task4".to_string(),
+                name: "Leaf Task".to_string(),
+                description: String::new(),
+                task_type: TaskType::LlmChat,
+                parameters: HashMap::new(),
+                priority: TaskPriority::Normal,
+                estimated_duration_sec: None,
+                required_capabilities: vec![],
+                resource_requirements: ResourceRequirements::default(),
+            })
+            .build();
+
+        let instance = scheduler.submit_workflow(workflow).await.unwrap();
+        let instance_id = instance.instance_id;
+
+        // Wait for workflow completion event
+        let completed = timeout(Duration::from_secs(5), async {
+            while let Some(event) = receiver.recv().await {
+                if let SchedulerEvent::WorkflowCompleted { instance_id: id, success, .. } = &event {
+                    if id == &instance_id {
+                        return *success;
+                    }
+                }
+            }
+            false
+        }).await;
+
+        assert!(completed.is_ok(), "Workflow timed out — downstream tasks were never queued");
+        assert!(completed.unwrap(), "Workflow failed");
+
+        // Verify all tasks completed
+        let final_instance = scheduler.get_instance(&instance_id).await.unwrap();
+        assert_eq!(final_instance.task_states.len(), 4);
+        for (task_id, state) in &final_instance.task_states {
+            assert_eq!(
+                state.status,
+                TaskExecutionStatus::Completed,
+                "Task {} did not complete (status: {:?})",
+                task_id, state.status
+            );
+        }
+
+        scheduler.shutdown().await;
     }
 }

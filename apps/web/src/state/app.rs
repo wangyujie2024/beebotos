@@ -9,8 +9,9 @@
 //! - Gateway 连接服务
 
 use crate::api::{
-    AgentService, ApiClient, AuthService, BrowserApiService, DaoService, LlmConfigService,
-    SettingsService, SkillService, TreasuryService, WebchatApiService,
+    AgentService, ApiClient, AuthService, BrowserApiService, CompositionService, DaoService,
+    LlmConfigService, SettingsService, SkillService, TreasuryService, WebchatApiService,
+    WorkflowService,
 };
 use crate::state::{
     agent::{provide_agent_state, AgentState},
@@ -163,6 +164,16 @@ impl AppState {
     /// Get LLM config service
     pub fn llm_config_service(&self) -> LlmConfigService {
         LlmConfigService::new(self.api_client())
+    }
+
+    /// Get workflow service
+    pub fn workflow_service(&self) -> WorkflowService {
+        WorkflowService::new(self.api_client())
+    }
+
+    /// Get composition service
+    pub fn composition_service(&self) -> CompositionService {
+        CompositionService::new(self.api_client())
     }
 
     /// Set online status

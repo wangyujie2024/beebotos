@@ -209,8 +209,13 @@ impl LLMProvider for KimiProvider {
         self.capabilities.clone()
     }
 
-    async fn complete(&self, request: LLMRequest) -> LLMResult<LLMResponse> {
+    async fn complete(&self, mut request: LLMRequest) -> LLMResult<LLMResponse> {
         debug!("Sending completion request to Kimi");
+
+        // Kimi k2.6 only supports temperature=1
+        if request.config.model.contains("k2.6") {
+            request.config.temperature = Some(1.0);
+        }
 
         let body = self.request_builder.build_body(request);
         let response = self.http_client.execute_with_retry(
@@ -232,12 +237,15 @@ impl LLMProvider for KimiProvider {
         Ok(llm_response)
     }
 
-    async fn complete_stream(&self, request: LLMRequest) -> LLMResult<mpsc::Receiver<StreamChunk>> {
+    async fn complete_stream(&self, mut request: LLMRequest) -> LLMResult<mpsc::Receiver<StreamChunk>> {
         debug!("Sending streaming request to Kimi");
 
         let (tx, rx) = mpsc::channel(100);
 
-        let mut request = request;
+        // Kimi k2.6 only supports temperature=1
+        if request.config.model.contains("k2.6") {
+            request.config.temperature = Some(1.0);
+        }
         request.config.stream = Some(true);
 
         let body = self.request_builder.build_body(request);

@@ -169,6 +169,71 @@ pub trait ActionHandler: Send + Sync {
     fn can_handle(&self, action: &Action) -> bool;
 }
 
+/// Resolver for delegation requests (maps branch config to actual agent output)
+#[async_trait::async_trait]
+pub trait DelegateResolver: Send + Sync {
+    /// Execute a single delegate branch and return the result
+    async fn resolve(&self, branch: &super::plan::DelegateBranch) -> Result<String, String>;
+}
+
+/// Delegate resolver that spawns real sub-agents via Agent::spawn_sub_agent.
+/// Uses Weak<Agent> to avoid circular references with PlanExecutor.
+pub struct AgentDelegateResolver {
+    parent: std::sync::Weak<crate::agent_impl::Agent>,
+}
+
+impl AgentDelegateResolver {
+    pub fn new(parent: std::sync::Weak<crate::agent_impl::Agent>) -> Self {
+        Self { parent }
+    }
+}
+
+#[async_trait::async_trait]
+impl DelegateResolver for AgentDelegateResolver {
+    async fn resolve(&self, branch: &super::plan::DelegateBranch) -> Result<String, String> {
+        let parent = self.parent.upgrade()
+            .ok_or_else(|| "Parent agent no longer available".to_string())?;
+
+        let mut child = parent.spawn_sub_agent(branch.agent_config.clone())
+            .map_err(|e| format!("Failed to spawn sub-agent: {}", e))?;
+
+        info!(
+            "Sub-agent {} executing branch '{}' task: {}",
+            child.get_config().id,
+            branch.branch_id,
+            branch.task
+        );
+
+        // Execute the task using the sub-agent
+        let result = if let Some(ref skill_hint) = branch.skill_hint {
+            child.execute_skill_by_id(skill_hint, &branch.task, None).await
+                .map_err(|e| format!("Sub-agent skill execution failed: {}", e))?
+        } else {
+            // Fallback: use LLM to process the task directly
+            let llm_result = child.call_llm_prompt(
+                branch.task.clone(),
+                Some::<String>("你是一个专家助手，请完成给定的任务。".to_string())
+            ).await.map_err(|e| format!("Sub-agent LLM call failed: {}", e))?;
+            crate::skills::executor::SkillExecutionResult {
+                task_id: branch.branch_id.clone(),
+                success: true,
+                output: llm_result,
+                structured_output: None,
+                execution_time_ms: 0,
+            }
+        };
+
+        info!(
+            "Sub-agent {} completed branch '{}' in {}ms",
+            child.get_config().id,
+            branch.branch_id,
+            result.execution_time_ms
+        );
+
+        Ok(result.output)
+    }
+}
+
 /// Default action handler with actual tool execution support
 /// 
 /// ARCHITECTURE FIX: Now supports real tool calls through a tool registry.
@@ -176,6 +241,8 @@ pub trait ActionHandler: Send + Sync {
 pub struct DefaultActionHandler {
     /// Tool registry for looking up and executing tools
     tool_registry: Arc<RwLock<HashMap<String, Box<dyn ToolExecutor>>>>,
+    /// Optional delegate resolver for real sub-agent spawning
+    delegate_resolver: Option<Arc<dyn DelegateResolver>>,
 }
 
 /// Tool executor trait for actual tool implementations
@@ -198,7 +265,21 @@ impl DefaultActionHandler {
     pub fn new() -> Self {
         Self {
             tool_registry: Arc::new(RwLock::new(HashMap::new())),
+            delegate_resolver: None,
         }
+    }
+
+    /// Create handler with a delegate resolver for real ParallelDelegate execution
+    pub fn with_delegate_resolver(resolver: Arc<dyn DelegateResolver>) -> Self {
+        Self {
+            tool_registry: Arc::new(RwLock::new(HashMap::new())),
+            delegate_resolver: Some(resolver),
+        }
+    }
+
+    /// Set the delegate resolver
+    pub fn set_delegate_resolver(&mut self, resolver: Arc<dyn DelegateResolver>) {
+        self.delegate_resolver = Some(resolver);
     }
     
     /// Register a tool for execution
@@ -211,6 +292,54 @@ impl DefaultActionHandler {
     pub async fn has_tool(&self, name: &str) -> bool {
         let registry = self.tool_registry.read().await;
         registry.contains_key(name)
+    }
+
+    /// Merge parallel branch results according to the given strategy
+    fn merge_branch_results(
+        branch_results: &HashMap<String, Result<String, String>>,
+        strategy: &super::plan::MergeStrategy,
+    ) -> serde_json::Value {
+        match strategy {
+            super::plan::MergeStrategy::Concat => {
+                let texts: Vec<String> = branch_results.values()
+                    .filter_map(|r| r.as_ref().ok().cloned())
+                    .collect();
+                serde_json::json!({ "merged": texts.join("\n---\n"), "strategy": "concat" })
+            }
+            super::plan::MergeStrategy::JsonMerge => {
+                let mut merged = serde_json::Map::new();
+                for (id, result) in branch_results {
+                    if let Ok(text) = result {
+                        if let Ok(val) = serde_json::from_str::<serde_json::Value>(text) {
+                            merged.insert(id.clone(), val);
+                        } else {
+                            merged.insert(id.clone(), serde_json::Value::String(text.clone()));
+                        }
+                    }
+                }
+                serde_json::Value::Object(merged)
+            }
+            super::plan::MergeStrategy::LlmSummarize => {
+                let texts: Vec<String> = branch_results.values()
+                    .filter_map(|r| r.as_ref().ok().cloned())
+                    .collect();
+                serde_json::json!({
+                    "texts": texts,
+                    "strategy": "llm_summarize",
+                    "note": "LLM summarization should be performed by caller"
+                })
+            }
+            super::plan::MergeStrategy::Custom(name) => {
+                let texts: Vec<String> = branch_results.values()
+                    .filter_map(|r| r.as_ref().ok().cloned())
+                    .collect();
+                serde_json::json!({
+                    "texts": texts,
+                    "strategy": name,
+                    "note": "Custom merge strategy should be performed by caller"
+                })
+            }
+        }
     }
 }
 
@@ -276,26 +405,78 @@ impl ActionHandler for DefaultActionHandler {
                     "status": "delegated"
                 })))
             }
-            Action::Delegate { agent_id, task } => {
+            Action::Delegate { agent_id, task, skill_hint, output_schema } => {
                 info!("Delegating to agent {}: {}", agent_id, task);
                 ExecutionResult::success(Some(serde_json::json!({
                     "delegate_to": agent_id,
                     "task": task,
+                    "skill_hint": skill_hint,
+                    "output_schema": output_schema,
                     "status": "delegated"
                 })))
+            }
+            Action::ParallelDelegate { branches, merge_strategy } => {
+                info!("Parallel delegating to {} branches", branches.len());
+
+                if let Some(resolver) = &self.delegate_resolver {
+                    let mut handles = Vec::new();
+                    for branch in branches {
+                        let resolver = Arc::clone(resolver);
+                        let branch = branch.clone();
+                        handles.push(tokio::spawn(async move {
+                            let result = resolver.resolve(&branch).await;
+                            (branch.branch_id.clone(), result)
+                        }));
+                    }
+
+                    let mut branch_results: HashMap<String, Result<String, String>> = HashMap::new();
+                    for handle in handles {
+                        match handle.await {
+                            Ok((id, result)) => { branch_results.insert(id, result); }
+                            Err(e) => {
+                                let err_id = format!("join_error_{}", uuid::Uuid::new_v4());
+                                branch_results.insert(err_id, Err(format!("Task join failed: {}", e)));
+                            }
+                        }
+                    }
+
+                    let merged = Self::merge_branch_results(&branch_results, merge_strategy);
+                    let all_ok = branch_results.values().all(|r| r.is_ok());
+
+                    if all_ok {
+                        ExecutionResult::success(Some(merged))
+                    } else {
+                        let errors: Vec<String> = branch_results.iter()
+                            .filter_map(|(id, r)| r.as_ref().err().map(|e| format!("{}: {}", id, e)))
+                            .collect();
+                        ExecutionResult::failure(format!(
+                            "Parallel delegation failed for {} branches. Errors: {:?}",
+                            errors.len(), errors
+                        ))
+                    }
+                } else {
+                    // No resolver configured — return mock response
+                    ExecutionResult::success(Some(serde_json::json!({
+                        "branches": branches.len(),
+                        "merge_strategy": format!("{:?}", merge_strategy),
+                        "status": "delegated",
+                        "note": "No delegate resolver configured; mock response returned"
+                    })))
+                }
             }
         }
     }
 
     fn can_handle(&self, action: &Action) -> bool {
         // Can handle all action types
-        matches!(action, 
-            Action::ToolUse { .. } | 
-            Action::LLMReasoning { .. } | 
-            Action::Wait { .. } | 
+        matches!(action,
+            Action::ToolUse { .. } |
+            Action::LLMReasoning { .. } |
+            Action::Wait { .. } |
             Action::UserInteraction { .. } |
             Action::SubPlan { .. } |
-            Action::Delegate { .. }
+            Action::Delegate { .. } |
+            Action::ParallelDelegate { .. }
         )
     }
 }
@@ -760,7 +941,58 @@ impl Default for ParallelExecutor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::planning::plan::{PlanStep, StepStatus};
+    use crate::planning::plan::{PlanStep, StepStatus, DelegateBranch, MergeStrategy};
+
+    struct MockDelegateResolver;
+
+    #[async_trait::async_trait]
+    impl DelegateResolver for MockDelegateResolver {
+        async fn resolve(&self, branch: &DelegateBranch) -> Result<String, String> {
+            Ok(format!("Result for {}: {}", branch.branch_id, branch.task))
+        }
+    }
+
+    #[tokio::test]
+    async fn test_parallel_delegate_with_resolver() {
+        let resolver: Arc<dyn DelegateResolver> = Arc::new(MockDelegateResolver);
+        let handler = DefaultActionHandler::with_delegate_resolver(resolver);
+
+        let branches = vec![
+            DelegateBranch {
+                branch_id: "b1".to_string(),
+                agent_config: crate::AgentConfig::default(),
+                task: "task1".to_string(),
+                skill_hint: None,
+            },
+            DelegateBranch {
+                branch_id: "b2".to_string(),
+                agent_config: crate::AgentConfig::default(),
+                task: "task2".to_string(),
+                skill_hint: None,
+            },
+        ];
+
+        let action = Action::ParallelDelegate {
+            branches,
+            merge_strategy: MergeStrategy::Concat,
+        };
+
+        let context = ExecutionContext {
+            plan_id: crate::planning::plan::PlanId("test".to_string()),
+            step_index: 0,
+            step_id: "step1".to_string(),
+            previous_results: HashMap::new(),
+            attempt: 1,
+            timeout: Duration::from_secs(10),
+        };
+
+        let result = handler.execute(&action, &context).await;
+        assert!(result.success);
+        let data = result.data.unwrap();
+        let merged = data.get("merged").unwrap().as_str().unwrap();
+        assert!(merged.contains("Result for b1: task1"));
+        assert!(merged.contains("Result for b2: task2"));
+    }
 
     #[tokio::test]
     async fn test_sequential_execution() {

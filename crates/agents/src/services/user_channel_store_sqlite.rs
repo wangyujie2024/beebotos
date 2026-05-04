@@ -47,8 +47,8 @@ impl UserChannelStore for SqliteUserChannelStore {
         // so we upsert a minimal placeholder before inserting the user_channel binding.
         sqlx::query(
             r#"
-            INSERT OR IGNORE INTO users (id, username, email, password_hash, roles, permissions)
-            VALUES (?1, ?2, ?3, 'no_password', 'member', 'agentRead,agentCreate,daoVote,settingsRead')
+            INSERT OR IGNORE INTO users (id, username, email, password_hash)
+            VALUES (?1, ?2, ?3, 'no_password')
             "#,
         )
         .bind(&binding.user_id)

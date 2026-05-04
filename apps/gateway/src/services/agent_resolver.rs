@@ -26,6 +26,8 @@ pub struct AgentResolver {
     agent_channel_service: Option<Arc<beebotos_agents::services::AgentChannelService>>,
     /// User channel service (for auto-creating user_channel on agent auto-create)
     user_channel_service: Option<Arc<beebotos_agents::services::UserChannelService>>,
+    /// Global configuration for LLM settings (model, temperature, etc.)
+    config: crate::config::BeeBotOSConfig,
 }
 
 impl AgentResolver {
@@ -34,6 +36,7 @@ impl AgentResolver {
         default_agent_id: Option<String>,
         state_store: Arc<gateway::StateStore>,
         agent_runtime: Arc<dyn gateway::AgentRuntime>,
+        config: crate::config::BeeBotOSConfig,
     ) -> Self {
         Self {
             default_agent_id,
@@ -42,6 +45,7 @@ impl AgentResolver {
             channel_binding_store: None,
             agent_channel_service: None,
             user_channel_service: None,
+            config,
         }
     }
 
@@ -192,48 +196,48 @@ impl AgentResolver {
             }
         }
 
-        // 2. Query StateStore for the first available agent
-        let query_result = self
-            .state_store
-            .query(gateway::StateQuery::ListAgents {
-                filter: Some(gateway::AgentFilter {
-                    state: None,
-                    has_capability: None,
-                    created_after: None,
-                    created_before: None,
-                }),
-                limit: 100,
-                offset: 0,
-            })
+        // 2. Query AgentRuntime for the first available agent
+        // 🟢 P2 FIX: Use agent_runtime.list_agents() instead of state_store.query()
+        // because GatewayAgentRuntime maintains its own AgentStateManager state,
+        // which may not be synchronized with the separate StateStore instance.
+        let runtime_agents = self
+            .agent_runtime
+            .list_agents()
             .await
             .map_err(|e| GatewayError::Internal {
-                message: format!("Failed to list agents from state store: {}", e),
+                message: format!("Failed to list agents from runtime: {}", e),
                 correlation_id: uuid::Uuid::new_v4().to_string(),
             })?;
 
-        if let gateway::QueryResult::AgentList { agents, .. } = query_result {
-            for agent_info in agents {
-                if agent_info.current_state != gateway::AgentState::Stopped
-                    && agent_info.current_state != gateway::AgentState::Error
-                {
-                    info!(
-                        "Resolved agent {} from StateStore (first available)",
-                        agent_info.agent_id
-                    );
-                    return Ok(agent_info.agent_id);
-                }
+        for agent_status in runtime_agents {
+            if agent_status.state != gateway::AgentState::Stopped
+                && agent_status.state != gateway::AgentState::Error
+            {
+                info!(
+                    "Resolved agent {} from AgentRuntime (first available)",
+                    agent_status.agent_id
+                );
+                return Ok(agent_status.agent_id);
             }
         }
 
-        // 3. Auto-create a default agent
+        // 3. Auto-create a default agent using global LLM config
         let agent_id = format!("auto-agent-{}-{}", platform_str, channel_id);
         let agent_name = format!("Auto Agent {} {}", platform_str, channel_id);
+
+        let models = &self.config.models;
+        let default_provider = &models.default_provider;
+        let provider_cfg = models.providers.get(default_provider);
+
         let llm_config = gateway::LlmConfig {
-            provider: "kimi".to_string(),
-            model: "kimi-k2.5".to_string(),
-            api_key: None,
-            temperature: 0.7,
-            max_tokens: 800,
+            provider: default_provider.clone(),
+            model: provider_cfg
+                .as_ref()
+                .and_then(|p| p.model.clone())
+                .unwrap_or_else(|| beebotos_agents::llm::types::kimi_models::KIMI_PRO.to_string()),
+            api_key: provider_cfg.as_ref().and_then(|p| p.api_key.clone()),
+            temperature: provider_cfg.as_ref().map(|p| p.temperature).unwrap_or(0.7),
+            max_tokens: models.max_tokens as u32,
         };
         let agent_config = gateway::AgentConfigBuilder::new(&agent_id, &agent_name)
             .description("Auto-created default agent for incoming messages")
@@ -241,13 +245,19 @@ impl AgentResolver {
             .build();
 
         info!("🆕 No available agent found, auto-creating default agent {}", agent_id);
-        self.agent_runtime.spawn(agent_config).await.map_err(|e| {
-            error!("❌ Failed to auto-create default agent {}: {}", agent_id, e);
-            GatewayError::Internal {
-                message: format!("Failed to auto-create default agent: {}", e),
-                correlation_id: uuid::Uuid::new_v4().to_string(),
+        match self.agent_runtime.spawn(agent_config).await {
+            Ok(_) => {}
+            Err(ref e) if e.to_string().contains("already exists") => {
+                info!("Agent {} already exists, reusing it", agent_id);
             }
-        })?;
+            Err(e) => {
+                error!("❌ Failed to auto-create default agent {}: {}", agent_id, e);
+                return Err(GatewayError::Internal {
+                    message: format!("Failed to auto-create default agent: {}", e),
+                    correlation_id: uuid::Uuid::new_v4().to_string(),
+                });
+            }
+        }
 
         // 🟢 P1 FIX: Skip LEGACY binding — new system now fully handles agent-channel binding.
         // LEGACY ChannelBindingStore binding is deprecated and removed to prevent duplicate

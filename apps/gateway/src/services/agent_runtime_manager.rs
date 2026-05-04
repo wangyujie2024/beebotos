@@ -35,7 +35,7 @@ impl beebotos_agents::communication::LLMCallInterface for GatewayLLMInterface {
         messages: Vec<beebotos_agents::communication::Message>,
         _context: Option<std::collections::HashMap<String, String>>,
     ) -> beebotos_agents::error::Result<String> {
-        use beebotos_agents::llm::{Message as LLMMessage, Role};
+        use beebotos_agents::llm::Message as LLMMessage;
 
         // 🆕 FIX: 避免 double-flattening，保留 system/user/assistant 角色分离
         let mut system_parts = Vec::new();
@@ -69,7 +69,12 @@ impl beebotos_agents::communication::LLMCallInterface for GatewayLLMInterface {
             llm_messages
         };
 
-        self.llm_service.chat(final_messages).await.map_err(|e| {
+        // 🆕 FIX: Pass max_tokens override from Agent extra_params to control output length
+        let max_tokens_override = _context
+            .as_ref()
+            .and_then(|c| c.get("max_tokens"))
+            .and_then(|t| t.parse::<u32>().ok());
+        self.llm_service.chat(final_messages, max_tokens_override).await.map_err(|e| {
             beebotos_agents::error::AgentError::Execution(format!("LLM call failed: {}", e))
         })
     }

@@ -1,0 +1,11 @@
+[build]
+target = "index.html"
+public_url = "/"
+# Use release profile for smaller WASM builds
+cargo_profile = "release"
+# Minify assets in release mode
+minify = "on_release"
+
+[[build.targets]]
+target_type = "wasm"
+crate_type = "cdylib"

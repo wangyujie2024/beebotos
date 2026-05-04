@@ -1,154 +1,68 @@
-# Example: Data Processing Workflow
-# This workflow demonstrates a multi-agent data processing pipeline
-
-name: data-processing-pipeline
-version: "1.0"
-description: Process and analyze data using specialized agents
-
+id: data_processing_pipeline
+name: "Data Processing Pipeline"
+description: "Process and analyze data using specialized skills"
+version: "1.0.0"
+author: "BeeBotOS"
+tags: ["data", "pipeline", "analytics"]
 triggers:
-  - type: schedule
-    cron: "0 */6 * * *"  # Every 6 hours
+  - type: cron
+    schedule: "0 */6 * * *"
+    timezone: "UTC"
   - type: webhook
-    endpoint: /ingest/data
+    path: "/ingest/data"
+    method: "POST"
+config:
+  timeout_sec: 1800
+  continue_on_failure: false
+steps:
+  - id: fetch_data
+    name: "Fetch Data"
+    skill: http_request
+    params:
+      url: "https://api.datasource.com/v1/data"
+      method: "GET"
+    timeout_sec: 300
+    retries: 3
 
-agents:
-  # Data ingestion agent
-  - name: ingestor
-    type: data-ingestor
-    config:
-      sources:
-        - type: api
-          url: https://api.datasource.com/v1/data
-          auth: ${API_KEY}
-        - type: s3
-          bucket: raw-data
-          region: us-east-1
-    capabilities:
-      - L3_NetworkOut
-      - L2_FileWrite
-    memory: 256MB
+  - id: validate
+    name: "Validate Schema"
+    skill: data_validator
+    depends_on:
+      - fetch_data
+    params:
+      input: "{{steps.fetch_data.output}}"
+      schema: "schemas/data_v1.json"
+    timeout_sec: 120
 
-  # Data validation agent
-  - name: validator
-    type: data-validator
-    config:
-      schema: schemas/data_v1.json
-      rules:
-        - field: timestamp
-          type: datetime
-          required: true
-        - field: value
-          type: number
-          min: 0
-          max: 1000000
-    capabilities:
-      - L1_FileRead
-      - L2_FileWrite
-    memory: 128MB
-    depends_on: [ingestor]
-
-  # Data transformation agent
-  - name: transformer
-    type: data-transformer
-    config:
+  - id: transform
+    name: "Transform Data"
+    skill: data_transformer
+    depends_on:
+      - validate
+    params:
+      input: "{{steps.validate.output}}"
       operations:
-        - type: normalize
-          fields: [value, score]
-        - type: aggregate
-          group_by: category
-          functions: [sum, avg, count]
-    capabilities:
-      - L1_FileRead
-      - L2_FileWrite
-      - L0_LocalCompute
-    memory: 512MB
-    depends_on: [validator]
+        - normalize
+        - aggregate
+    timeout_sec: 600
 
-  # Analysis agent
-  - name: analyzer
-    type: ml-analyzer
-    config:
-      model: models/trend_predictor.onnx
-      batch_size: 1000
-      output_format: json
-    capabilities:
-      - L1_FileRead
-      - L2_FileWrite
-      - L0_LocalCompute
-    memory: 1GB
-    depends_on: [transformer]
+  - id: analyze
+    name: "Analyze Trends"
+    skill: ml_analyzer
+    depends_on:
+      - transform
+    params:
+      input: "{{steps.transform.output}}"
+      model: "trend_predictor"
+    timeout_sec: 1800
 
-  # Notification agent
-  - name: notifier
-    type: notification-agent
-    config:
-      channels:
-        - type: webhook
-          url: ${WEBHOOK_URL}
-        - type: email
-          to: admin@example.com
-          template: analysis_complete
-    capabilities:
-      - L3_NetworkOut
-    memory: 64MB
-    depends_on: [analyzer]
-
-workflow:
-  steps:
-    - name: ingest
-      agent: ingestor
-      action: fetch_data
-      timeout: 5m
-      retry: 3
-
-    - name: validate
-      agent: validator
-      action: validate_schema
-      input: ${ingest.output}
-      timeout: 2m
-
-    - name: transform
-      agent: transformer
-      action: transform_data
-      input: ${validate.valid_records}
-      timeout: 10m
-
-    - name: analyze
-      agent: analyzer
-      action: predict_trends
-      input: ${transform.aggregated_data}
-      timeout: 30m
-
-    - name: notify
-      agent: notifier
-      action: send_notification
-      input:
-        summary: ${analyze.summary}
-        insights: ${analyze.insights}
-        records_processed: ${transform.record_count}
-      timeout: 1m
-
-error_handling:
-  on_failure:
-    - agent: notifier
-      action: send_alert
-      params:
-        severity: error
-        message: "Pipeline failed at step ${failed_step}"
-
-monitoring:
-  metrics:
-    - name: records_processed
-      type: counter
-    - name: processing_time
-      type: histogram
-    - name: error_rate
-      type: gauge
-
-  alerts:
-    - condition: error_rate > 0.05
-      action: send_alert
-      severity: warning
-    - condition: processing_time > 1800
-      action: send_alert
-      severity: warning
+  - id: notify
+    name: "Send Notification"
+    skill: webhook_sender
+    depends_on:
+      - analyze
+    params:
+      url: "{{input.webhook_url}}"
+      payload:
+        summary: "{{steps.analyze.output}}"
+    timeout_sec: 60

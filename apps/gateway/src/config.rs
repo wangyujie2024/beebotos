@@ -10,7 +10,7 @@ use config::{Config, ConfigError, Environment, File};
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 
-use crate::color_theme::{ColorTheme, WizardConfig};
+use crate::color_theme::WizardConfig;
 
 /// Unified BeeBotOS configuration (TOML format)
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -66,7 +66,7 @@ pub struct ServerConfig {
     pub cors: CorsConfig,
 }
 
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct CorsConfig {
     #[serde(default = "default_allowed_origins")]
     pub allowed_origins: Vec<String>,
@@ -76,6 +76,17 @@ pub struct CorsConfig {
     pub allowed_headers: Vec<String>,
     #[serde(default)]
     pub allow_credentials: bool,
+}
+
+impl Default for CorsConfig {
+    fn default() -> Self {
+        Self {
+            allowed_origins: default_allowed_origins(),
+            allowed_methods: default_allowed_methods(),
+            allowed_headers: default_allowed_headers(),
+            allow_credentials: false,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -185,7 +196,7 @@ fn default_timeout_seconds() -> u64 { 30 }
 fn default_max_body_size_mb() -> usize { 10 }
 fn default_allowed_origins() -> Vec<String> { vec!["*".to_string()] }
 fn default_allowed_methods() -> Vec<String> { vec!["GET".to_string(), "POST".to_string(), "PUT".to_string(), "DELETE".to_string(), "OPTIONS".to_string()] }
-fn default_allowed_headers() -> Vec<String> { vec!["Content-Type".to_string(), "Authorization".to_string()] }
+fn default_allowed_headers() -> Vec<String> { vec!["Content-Type".to_string(), "Authorization".to_string(), "X-Requested-With".to_string(), "X-CSRF-Token".to_string()] }
 fn default_kernel_url() -> String { "http://localhost:9000".to_string() }
 fn default_kernel_timeout() -> u64 { 30 }
 fn default_chain_url() -> String { "http://localhost:8545".to_string() }

@@ -37,6 +37,10 @@ async-trait = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 
+# Cron scheduling for workflow triggers
+cron = "0.12"
+tokio-cron-scheduler = "0.15"
+
 # Database (SQLite)
 sqlx = { version = "0.8", features = ["runtime-tokio-native-tls", "sqlite", "migrate", "chrono", "uuid", "macros"], default-features = false }
 

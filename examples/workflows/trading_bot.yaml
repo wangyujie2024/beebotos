@@ -1,198 +1,74 @@
-# Example: Automated Trading Bot
-# A sophisticated trading agent with risk management
-
-name: trading-bot
-version: "1.0"
-description: Automated trading with risk management and compliance
-
+id: trading_bot
+name: "Automated Trading Bot"
+description: "Automated trading with risk management and compliance checks"
+version: "1.0.0"
+author: "BeeBotOS"
+tags: ["trading", "finance", "automation"]
 triggers:
-  - type: schedule
-    cron: "*/5 * * * *"  # Every 5 minutes
-  - type: price
-    condition: btc_usd_change > 0.02  # 2% price movement
+  - type: cron
+    schedule: "*/5 * * * *"
+    timezone: "UTC"
+  - type: event
+    source: "price_feed"
+    filter: "btc_usd_change > 0.02"
+config:
+  timeout_sec: 300
+  continue_on_failure: false
+  notify_on_complete: true
+steps:
+  - id: fetch_market_data
+    name: "Fetch Market Data"
+    skill: market_data_fetcher
+    params:
+      exchange: "binance"
+      symbols:
+        - "BTC/USDT"
+        - "ETH/USDT"
+      timeframe: "5m"
+    timeout_sec: 30
+    retries: 2
 
-agents:
-  # Market data collector
-  - name: market_data
-    type: market-data-agent
-    config:
-      exchanges:
-        - name: binance
-          symbols: [BTC/USDT, ETH/USDT, SOL/USDT]
-          timeframe: 5m
-        - name: coinbase
-          symbols: [BTC/USD, ETH/USD]
-          timeframe: 5m
-      indicators:
-        - rsi
-        - macd
-        - bollinger_bands
-    capabilities:
-      - L3_NetworkOut
-      - L2_FileWrite
-    memory: 256MB
-
-  # Strategy analyzer
-  - name: strategy
-    type: trading-strategy
-    config:
+  - id: analyze_signals
+    name: "Analyze Signals"
+    skill: strategy_analyzer
+    depends_on:
+      - fetch_market_data
+    params:
+      input: "{{steps.fetch_market_data.output}}"
       strategies:
-        - name: trend_following
-          weight: 0.4
-          params:
-            short_ema: 12
-            long_ema: 26
-        - name: mean_reversion
-          weight: 0.3
-          params:
-            lookback: 20
-            threshold: 2.0
-        - name: momentum
-          weight: 0.3
-          params:
-            period: 14
-    capabilities:
-      - L1_FileRead
-      - L0_LocalCompute
-    memory: 512MB
-    depends_on: [market_data]
+        - trend_following
+        - mean_reversion
+    timeout_sec: 60
 
-  # Risk manager
-  - name: risk_manager
-    type: risk-agent
-    config:
-      max_position_size: 0.1  # 10% of portfolio
-      max_drawdown: 0.05      # 5% max drawdown
-      stop_loss: 0.02         # 2% stop loss
-      take_profit: 0.05       # 5% take profit
-      daily_trade_limit: 10
-      cooldown_period: 300    # 5 minutes
-    capabilities:
-      - L7_ChainRead
-    memory: 128MB
-    depends_on: [strategy]
+  - id: assess_risk
+    name: "Assess Risk"
+    skill: risk_manager
+    depends_on:
+      - analyze_signals
+    params:
+      input: "{{steps.analyze_signals.output}}"
+      max_position_size: 0.1
+      max_drawdown: 0.05
+    timeout_sec: 30
+    condition: "{{steps.analyze_signals.output.has_signal}} == true"
 
-  # Execution agent
-  - name: executor
-    type: trade-executor
-    config:
-      exchange: binance
-      order_type: limit
-      slippage_tolerance: 0.001
-      timeout: 30
-    capabilities:
-      - L8_ChainWriteLow
-      - L3_NetworkOut
-    memory: 256MB
-    depends_on: [risk_manager]
-    tee_required: true  # Sensitive operation
+  - id: execute_trade
+    name: "Execute Trade"
+    skill: trade_executor
+    depends_on:
+      - assess_risk
+    params:
+      input: "{{steps.assess_risk.output}}"
+      exchange: "binance"
+      order_type: "limit"
+    timeout_sec: 60
+    condition: "{{steps.assess_risk.output.approved}} == true"
 
-  # Compliance agent
-  - name: compliance
-    type: compliance-agent
-    config:
-      rules:
-        - check_trading_hours
-        - check_position_limits
-        - check_wash_trading
-      report_destination: ${COMPLIANCE_WEBHOOK}
-    capabilities:
-      - L3_NetworkOut
-    memory: 128MB
-    depends_on: [executor]
-
-  # Portfolio tracker
-  - name: portfolio
-    type: portfolio-agent
-    config:
-      rebalance_threshold: 0.05
-      target_allocation:
-        BTC: 0.4
-        ETH: 0.3
-        SOL: 0.2
-        USDT: 0.1
-    capabilities:
-      - L7_ChainRead
-    memory: 256MB
-
-workflow:
-  steps:
-    - name: collect_data
-      agent: market_data
-      action: fetch_ohlcv
-      timeout: 30s
-      retry: 3
-
-    - name: analyze
-      agent: strategy
-      action: generate_signals
-      input: ${collect_data.ohlcv}
-      timeout: 1m
-
-    - name: assess_risk
-      agent: risk_manager
-      action: evaluate_trade
-      input:
-        signals: ${analyze.signals}
-        portfolio: ${portfolio.current}
-      timeout: 30s
-
-    - name: check_compliance
-      agent: compliance
-      action: pre_trade_check
-      input: ${assess_risk.proposed_trade}
-      condition: ${assess_risk.approved} == true
-      timeout: 10s
-
-    - name: execute
-      agent: executor
-      action: place_order
-      input: ${assess_risk.proposed_trade}
-      condition: ${check_compliance.approved} == true
-      timeout: 1m
-
-    - name: update_portfolio
-      agent: portfolio
-      action: update_positions
-      input: ${execute.fill}
-      timeout: 30s
-
-    - name: report_trade
-      agent: compliance
-      action: log_trade
-      input:
-        trade: ${execute.fill}
-        risk: ${assess_risk.metrics}
-      timeout: 10s
-
-risk_controls:
-  circuit_breakers:
-    - condition: daily_loss > 0.05
-      action: halt_trading
-      duration: 24h
-    - condition: consecutive_errors > 5
-      action: notify_admin
-      action2: pause_strategy
-
-  kill_switch:
-    enabled: true
-    trigger: ${KILL_SWITCH_WEBHOOK}
-    action: close_all_positions
-
-monitoring:
-  dashboard:
-    enabled: true
-    port: 9090
-  
-  metrics:
-    - pnl
-    - sharpe_ratio
-    - max_drawdown
-    - win_rate
-    - trade_count
-  
-  alerts:
-    - condition: daily_pnl < -1000
-      severity: critical
-    - condition: drawdown > 0.03
-      severity: warning
+  - id: log_trade
+    name: "Log Trade"
+    skill: trade_logger
+    depends_on:
+      - execute_trade
+    params:
+      input: "{{steps.execute_trade.output}}"
+    timeout_sec: 10

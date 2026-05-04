@@ -39,10 +39,7 @@ pub async fn register_agent_identity(
 
     check_ownership(&user, &agent)?;
 
-    let chain_service = state
-        .chain_service
-        .as_ref()
-        .ok_or_else(|| GatewayError::service_unavailable("Chain", "Chain service not available"))?;
+    let chain_service = state.chain()?;
 
     let public_key_bytes = hex::decode(&req.public_key)
         .map_err(|_| GatewayError::bad_request("Invalid public key format"))?;
@@ -82,12 +79,7 @@ pub async fn get_agent_identity(
 
     check_ownership(&user, &agent)?;
 
-    let chain_service = state
-        .chain_service
-        .as_ref()
-        .ok_or_else(|| GatewayError::service_unavailable("Chain", "Chain service not available"))?;
-
-    let identity = chain_service.get_agent_identity(&id).await?;
+    let identity = state.chain()?.get_agent_identity(&id).await?;
 
     Ok(Json(json!({
         "agent_id": id,
@@ -125,10 +117,7 @@ pub async fn create_dao_proposal(
 ) -> Result<Json<serde_json::Value>, GatewayError> {
     require_any_role(&user, &["user", "admin"])?;
 
-    let chain_service = state
-        .chain_service
-        .as_ref()
-        .ok_or_else(|| GatewayError::service_unavailable("DAO", "DAO service not available"))?;
+    let chain_service = state.chain()?;
 
     let proposal_type = match req.proposal_type.as_str() {
         "funding" => beebotos_chain::dao::ProposalType::Standard,
@@ -158,10 +147,7 @@ pub async fn cast_vote(
 ) -> Result<Json<serde_json::Value>, GatewayError> {
     require_any_role(&user, &["user", "admin"])?;
 
-    let chain_service = state
-        .chain_service
-        .as_ref()
-        .ok_or_else(|| GatewayError::service_unavailable("DAO", "DAO service not available"))?;
+    let chain_service = state.chain()?;
 
     let proposal_id = proposal_id
         .parse::<u64>()
@@ -191,16 +177,9 @@ pub async fn get_proposal(
     State(state): State<Arc<AppState>>,
     Path(proposal_id): Path<String>,
 ) -> Result<Json<serde_json::Value>, GatewayError> {
-    let chain_service = state
-        .chain_service
-        .as_ref()
-        .ok_or_else(|| GatewayError::service_unavailable("DAO", "DAO service not available"))?;
-
-    let proposal_id = proposal_id
-        .parse::<u64>()
-        .map_err(|_| GatewayError::bad_request("Invalid proposal ID"))?;
-
-    let proposal = chain_service.get_proposal(proposal_id).await?;
+    let proposal = state.chain()?.get_proposal(
+        proposal_id.parse::<u64>().map_err(|_| GatewayError::bad_request("Invalid proposal ID"))?
+    ).await?;
 
     let status_str = format!("{:?}", proposal.status).to_lowercase();
     let votes_for = proposal.votes_for.parse::<u64>().unwrap_or(0);
@@ -224,12 +203,7 @@ pub async fn get_proposal(
 pub async fn list_proposals(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<Vec<serde_json::Value>>, GatewayError> {
-    let chain_service = state
-        .chain_service
-        .as_ref()
-        .ok_or_else(|| GatewayError::service_unavailable("DAO", "DAO service not available"))?;
-
-    let proposals = chain_service.list_active_proposals().await?;
+    let proposals = state.chain()?.list_active_proposals().await?;
 
     let proposal_list: Vec<_> = proposals
         .into_iter()
@@ -259,12 +233,7 @@ pub async fn list_proposals(
 pub async fn get_dao_summary(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<serde_json::Value>, GatewayError> {
-    let chain_service = state
-        .chain_service
-        .as_ref()
-        .ok_or_else(|| GatewayError::service_unavailable("DAO", "DAO service not available"))?;
-
-    let proposal_count = chain_service.get_proposal_count().await.unwrap_or(0);
+    let proposal_count = state.chain()?.get_proposal_count().await.unwrap_or(0);
 
     Ok(Json(json!({
         "member_count": 0u64,

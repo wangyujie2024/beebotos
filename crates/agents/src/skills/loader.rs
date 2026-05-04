@@ -20,6 +20,8 @@ pub struct LoadedSkill {
     pub name: String,
     pub version: Version,
     pub wasm_path: PathBuf,
+    /// Path to the skill source directory or file (for lazy loading and script resolution)
+    pub source_path: PathBuf,
     pub manifest: SkillManifest,
 }
 
@@ -110,6 +112,7 @@ impl SkillLoader {
                     name: manifest.name.clone(),
                     version: manifest.version.clone(),
                     wasm_path,
+                    source_path: skill_path.to_path_buf(),
                     manifest,
                 };
 

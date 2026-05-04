@@ -54,7 +54,7 @@ use components::{AuthGuard, ContentSecurityPolicy, GlobalErrorHandler, Sidebar};
 use i18n::{init_i18n, I18nContext};
 use leptos_router::hooks::use_location;
 use pages::{
-    AgentDetail, AgentsPage, ChannelsPage, DaoPage, Home, LlmConfigPage, LoginPage, NotFound, RegisterPage, SettingsPage, SetupPage, SkillInstancesPage, SkillsPage, TreasuryPage, TreasuryTransactionsPage,
+    AgentDetail, AgentsPage, ChannelsPage, DaoPage, Home, LlmConfigPage, LlmSettingsPage, LoginPage, NotFound, RegisterPage, SettingsPage, SetupPage, SkillInstancesPage, SkillsPage, TreasuryPage, TreasuryTransactionsPage, WorkflowDashboardPage, WorkflowDetailPage,
 };
 use components::AccessDenied;
 use state::provide_app_state;
@@ -76,8 +76,10 @@ fn PageTitle() -> impl IntoView {
             p if p.starts_with("/skill-instances") => i18n.t("nav-skill-instances"),
             p if p.starts_with("/skills") => i18n.t("nav-skills"),
             p if p.starts_with("/settings") => i18n.t("nav-settings"),
+            p if p.starts_with("/llm-settings") => i18n.t("nav-llm-settings"),
             p if p.starts_with("/llm-config") => i18n.t("nav-llm-config"),
             p if p.starts_with("/browser") => i18n.t("nav-browser"),
+            p if p.starts_with("/workflows") => i18n.t("nav-workflows"),
             p if p.starts_with("/chat") => i18n.t("nav-chat"),
             _ => i18n.t("nav-home"),
         }
@@ -270,6 +272,15 @@ pub fn App() -> impl IntoView {
                                         </AuthGuard>
                                     }
                                 />
+                                // LLM 模型设置
+                                <Route
+                                    path=StaticSegment("llm-settings")
+                                    view=move || view! {
+                                        <AuthGuard>
+                                            <LlmSettingsPage />
+                                        </AuthGuard>
+                                    }
+                                />
 
                                 // 浏览器自动化（OpenClaw V2026.3.13 新增）
                                 <Route
@@ -287,6 +298,24 @@ pub fn App() -> impl IntoView {
                                     view=move || view! {
                                         <AuthGuard>
                                             <pages::WebchatPage />
+                                        </AuthGuard>
+                                    }
+                                />
+
+                                // Workflow Dashboard
+                                <Route
+                                    path=StaticSegment("workflows")
+                                    view=move || view! {
+                                        <AuthGuard>
+                                            <WorkflowDashboardPage />
+                                        </AuthGuard>
+                                    }
+                                />
+                                <Route
+                                    path=(StaticSegment("workflows"), StaticSegment(":id"))
+                                    view=move || view! {
+                                        <AuthGuard>
+                                            <WorkflowDetailPage />
                                         </AuthGuard>
                                     }
                                 />

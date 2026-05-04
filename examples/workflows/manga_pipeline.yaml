@@ -1,0 +1,112 @@
+id: manga_video_pipeline
+name: "manga_video_pipeline"
+description: "从创意主题到 AI 漫剧短视频的端到端自动化生产"
+version: "1.0.0"
+author: "BeeBotOS Team"
+tags: ["manga", "video", "ai-generation", "pipeline"]
+triggers:
+  - type: cron
+    schedule: "0 2 * * *"
+    timezone: "Asia/Shanghai"
+  - type: manual
+
+config:
+  timeout_sec: 1800
+  max_retries: 2
+  continue_on_failure: false
+
+steps:
+  # Step 1: 创意生成
+  - id: generate_idea
+    name: "Generate Story Idea"
+    skill: story_idea_generator
+    params:
+      theme: "{{input.theme}}"
+      genre: "{{input.genre}}"
+      target_duration: "{{input.duration}}"
+    timeout_sec: 60
+
+  # Step 2: 剧本生成
+  - id: generate_script
+    name: "Generate Script"
+    skill: seed_script_gen
+    depends_on:
+      - generate_idea
+    params:
+      idea: "{{steps.generate_idea.output.idea}}"
+      characters: "{{input.characters}}"
+      scenes: "{{input.scenes}}"
+    timeout_sec: 120
+
+  # Step 3: 分镜设计
+  - id: storyboard_design
+    name: "Design Storyboard"
+    skill: seed_storyboard
+    depends_on:
+      - generate_script
+    params:
+      script: "{{steps.generate_script.output.script}}"
+      art_style: "{{input.art_style}}"
+    timeout_sec: 300
+    retries: 2
+
+  # Step 4: 素材生成（图像 + 语音）
+  - id: generate_assets
+    name: "Generate Assets"
+    skill: seed_asset_gen
+    depends_on:
+      - storyboard_design
+    params:
+      storyboard: "{{steps.storyboard_design.output.storyboard}}"
+      voice_actor: "{{input.voice_actor}}"
+    timeout_sec: 600
+
+  # Step 5: 视频合成
+  - id: video_compose
+    name: "Compose Video"
+    skill: seed_video_gen
+    depends_on:
+      - generate_assets
+    params:
+      assets: "{{steps.generate_assets.output.assets}}"
+      bgm: "{{input.bgm}}"
+      resolution: "{{input.resolution}}"
+    timeout_sec: 600
+
+  # Step 6: 后处理（字幕、转码、封面）
+  - id: post_process
+    name: "Post Process"
+    skill: video_post_processor
+    depends_on:
+      - video_compose
+    params:
+      video: "{{steps.video_compose.output.video_url}}"
+      add_subtitles: true
+      generate_thumbnail: true
+    timeout_sec: 120
+
+  # Step 7: 发布到平台
+  - id: publish
+    name: "Publish Video"
+    skill: video_publisher
+    depends_on:
+      - post_process
+    params:
+      video: "{{steps.post_process.output.final_video}}"
+      thumbnail: "{{steps.post_process.output.thumbnail}}"
+      platforms: "{{input.platforms}}"
+      title: "{{steps.generate_script.output.title}}"
+    timeout_sec: 60
+
+  # Step 8: 完成通知
+  - id: notify_complete
+    name: "Notify Completion"
+    skill: feishu_bot
+    depends_on:
+      - publish
+    params:
+      message: |
+        🎬 漫剧《{{steps.generate_script.output.title}}》已自动完成！
+        观看链接：{{steps.publish.output.urls}}
+        制作耗时：{{workflow.duration}} 秒
+    timeout_sec: 15

@@ -4,7 +4,6 @@
 //! Acts as a proxy to ClawHub/BeeHub for skill downloads.
 
 use axum::extract::{Path, Query, State};
-use axum::response::IntoResponse;
 use axum::Json;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -280,7 +279,7 @@ pub async fn install_skill(
 
 /// List installed skills or search from hub
 pub async fn list_skills(
-    State(state): State<Arc<AppState>>,
+    State(_state): State<Arc<AppState>>,
     Query(query): Query<ListSkillsQuery>,
 ) -> Result<Json<Vec<SkillInfoResponse>>, GatewayError> {
     let hub_type = query.hub
@@ -363,7 +362,7 @@ pub async fn get_skill(
 ) -> Result<Json<SkillInfoResponse>, GatewayError> {
     let skill = get_skill_info(&id)
         .await
-        .map_err(|e| GatewayError::NotFound {
+        .map_err(|_e| GatewayError::NotFound {
             resource: format!("Skill: {}", id),
             id: id.clone(),
         })?;
@@ -891,7 +890,7 @@ async fn install_skill_package(
     let package_path = skill_dir.join("package.zip");
     tokio::fs::write(&package_path, package_bytes).await?;
     
-    // Extract archive in blocking task
+    // Extract archive in blocking task with ZIP Slip protection
     let skill_dir_clone = skill_dir.clone();
     let package_path_clone = package_path.clone();
     tokio::task::spawn_blocking(move || {
@@ -899,39 +898,112 @@ async fn install_skill_package(
             .map_err(|e| format!("Failed to open package: {}", e))?;
         let mut archive = zip::ZipArchive::new(file)
             .map_err(|e| format!("Failed to read zip archive: {}", e))?;
-        archive.extract(&skill_dir_clone)
-            .map_err(|e| format!("Failed to extract archive: {}", e))?;
+        
+        for i in 0..archive.len() {
+            let mut entry = archive.by_index(i)
+                .map_err(|e| format!("Failed to read zip entry {}: {}", i, e))?;
+            let entry_name = entry.name();
+            
+            // ZIP Slip protection: reject paths containing ".." or absolute paths
+            if entry_name.contains("..") || entry_name.starts_with('/') || entry_name.starts_with('\\') {
+                return Err(format!("ZIP Slip attack detected in entry: {}", entry_name));
+            }
+            
+            let out_path = skill_dir_clone.join(entry_name);
+            // Ensure the resolved path is still inside skill_dir
+            let canonical_out = out_path.canonicalize().unwrap_or_else(|_| out_path.clone());
+            let canonical_skill = skill_dir_clone.canonicalize().unwrap_or_else(|_| skill_dir_clone.clone());
+            if !canonical_out.starts_with(&canonical_skill) {
+                return Err(format!("ZIP entry escapes target directory: {}", entry_name));
+            }
+            
+            if entry.is_dir() {
+                std::fs::create_dir_all(&out_path)
+                    .map_err(|e| format!("Failed to create directory {}: {}", out_path.display(), e))?;
+            } else {
+                if let Some(parent) = out_path.parent() {
+                    std::fs::create_dir_all(parent)
+                        .map_err(|e| format!("Failed to create parent directory for {}: {}", out_path.display(), e))?;
+                }
+                let mut out_file = std::fs::File::create(&out_path)
+                    .map_err(|e| format!("Failed to create file {}: {}", out_path.display(), e))?;
+                std::io::copy(&mut entry, &mut out_file)
+                    .map_err(|e| format!("Failed to extract file {}: {}", out_path.display(), e))?;
+            }
+        }
+        
         Ok::<(), String>(())
     }).await
     .map_err(|e| format!("Blocking task failed: {}", e))?
     .map_err(|e| format!("Extraction failed: {}", e))?;
     
-    // Create skill.yaml manifest if not present in archive
-    let manifest_path = skill_dir.join("skill.yaml");
-    if !manifest_path.exists() {
-        let manifest = serde_yaml::to_string(&serde_json::json!({
-            "id": metadata.id,
-            "name": metadata.name,
-            "version": metadata.version,
-            "description": metadata.description,
-            "author": metadata.author,
-            "license": metadata.license,
-            "capabilities": metadata.capabilities,
-            "entry_point": "skill.wasm",
-        }))?;
-        
-        tokio::fs::write(&manifest_path, manifest).await?;
-    }
+    // Remove temporary package.zip after extraction
+    let _ = tokio::fs::remove_file(&package_path).await;
     
-    // Validate WASM if present
-    let wasm_path = skill_dir.join("skill.wasm");
-    if wasm_path.exists() {
+    // Detect skill kind after extraction
+    let has_skill_md = skill_dir.join("SKILL.md").exists();
+    let has_skill_yaml = skill_dir.join("skill.yaml").exists();
+    let has_skill_wasm = skill_dir.join("skill.wasm").exists();
+
+    if has_skill_md {
+        info!("Detected directory-based skill (SKILL.md) in package");
+        // SKILL.md is the source of truth; create a minimal skill.yaml for loader compatibility
+        if !has_skill_yaml {
+            let manifest = serde_yaml::to_string(&serde_json::json!({
+                "id": metadata.id,
+                "name": metadata.name,
+                "version": metadata.version,
+                "description": metadata.description,
+                "author": metadata.author,
+                "license": metadata.license,
+                "capabilities": metadata.capabilities,
+                "entry_point": "run",
+                "runtime": { "type": "skill_md" },
+            }))?;
+            tokio::fs::write(skill_dir.join("skill.yaml"), manifest).await?;
+        }
+    } else if has_skill_wasm {
+        info!("Detected WASM skill package");
+        // Create skill.yaml manifest if not present in archive
+        let manifest_path = skill_dir.join("skill.yaml");
+        if !manifest_path.exists() {
+            let manifest = serde_yaml::to_string(&serde_json::json!({
+                "id": metadata.id,
+                "name": metadata.name,
+                "version": metadata.version,
+                "description": metadata.description,
+                "author": metadata.author,
+                "license": metadata.license,
+                "capabilities": metadata.capabilities,
+                "entry_point": "skill.wasm",
+            }))?;
+            tokio::fs::write(&manifest_path, manifest).await?;
+        }
+
+        // Validate WASM if present
+        let wasm_path = skill_dir.join("skill.wasm");
         let wasm_bytes = tokio::fs::read(&wasm_path).await?;
         let validator = beebotos_agents::skills::SkillSecurityValidator::new(
             beebotos_agents::skills::SkillSecurityPolicy::default()
         );
         validator.validate(&wasm_bytes)
             .map_err(|e| format!("WASM security validation failed: {}", e))?;
+    } else {
+        // Neither SKILL.md nor WASM — create a fallback manifest
+        let manifest_path = skill_dir.join("skill.yaml");
+        if !manifest_path.exists() {
+            let manifest = serde_yaml::to_string(&serde_json::json!({
+                "id": metadata.id,
+                "name": metadata.name,
+                "version": metadata.version,
+                "description": metadata.description,
+                "author": metadata.author,
+                "license": metadata.license,
+                "capabilities": metadata.capabilities,
+                "entry_point": null,
+            }))?;
+            tokio::fs::write(&manifest_path, manifest).await?;
+        }
     }
     
     info!("Installed skill package to {:?}", skill_dir);
@@ -948,6 +1020,28 @@ fn yaml_string_array(value: &serde_yaml::Value) -> Vec<String> {
                 .collect()
         })
         .unwrap_or_default()
+}
+
+/// Parse simple YAML front matter from SKILL.md (lines between ---...---)
+fn parse_skill_md_front_matter(content: &str) -> std::collections::HashMap<String, String> {
+    let mut map = std::collections::HashMap::new();
+    let trimmed = content.trim_start();
+    if !trimmed.starts_with("---") {
+        return map;
+    }
+    let after = &trimmed[3..];
+    if let Some(end) = after.find("---") {
+        for line in after[..end].lines() {
+            let line = line.trim();
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+            if let Some((k, v)) = line.split_once(':') {
+                map.insert(k.trim().to_string(), v.trim().to_string());
+            }
+        }
+    }
+    map
 }
 
 async fn list_installed_skills() -> Result<Vec<SkillInfoResponse>, Box<dyn std::error::Error>> {
@@ -980,7 +1074,27 @@ async fn list_installed_skills() -> Result<Vec<SkillInfoResponse>, Box<dyn std::
                             downloads: 0,
                             rating: 0.0,
                         });
+                        continue;
                     }
+                }
+
+                // Fallback: read SKILL.md front matter
+                let skill_md = path.join("SKILL.md");
+                if let Ok(content) = tokio::fs::read_to_string(&skill_md).await {
+                    let fm = parse_skill_md_front_matter(&content);
+                    skills.push(SkillInfoResponse {
+                        id: skill_id.clone(),
+                        name: fm.get("name").cloned().unwrap_or_else(|| skill_id.clone()),
+                        version: fm.get("version").cloned().unwrap_or_else(|| "1.0.0".to_string()),
+                        description: fm.get("description").cloned().unwrap_or_default(),
+                        author: fm.get("author").cloned().unwrap_or_else(|| "Unknown".to_string()),
+                        license: fm.get("license").cloned().unwrap_or_else(|| "MIT".to_string()),
+                        installed: true,
+                        capabilities: vec![],
+                        tags: vec![],
+                        downloads: 0,
+                        rating: 0.0,
+                    });
                 }
             }
         }
@@ -993,20 +1107,39 @@ async fn list_installed_skills() -> Result<Vec<SkillInfoResponse>, Box<dyn std::
 async fn get_skill_info(skill_id: &str) -> Result<SkillInfoResponse, Box<dyn std::error::Error>> {
     let skill_dir = get_skill_install_path(skill_id);
     let manifest_path = skill_dir.join("skill.yaml");
-    
-    let content = tokio::fs::read_to_string(&manifest_path).await?;
-    let manifest: serde_yaml::Value = serde_yaml::from_str(&content)?;
-    
+
+    if let Ok(content) = tokio::fs::read_to_string(&manifest_path).await {
+        if let Ok(manifest) = serde_yaml::from_str::<serde_yaml::Value>(&content) {
+            return Ok(SkillInfoResponse {
+                id: skill_id.to_string(),
+                name: manifest["name"].as_str().unwrap_or(skill_id).to_string(),
+                version: manifest["version"].as_str().unwrap_or("1.0.0").to_string(),
+                description: manifest["description"].as_str().unwrap_or("").to_string(),
+                author: manifest["author"].as_str().unwrap_or("Unknown").to_string(),
+                license: manifest["license"].as_str().unwrap_or("MIT").to_string(),
+                installed: true,
+                capabilities: yaml_string_array(&manifest["capabilities"]),
+                tags: yaml_string_array(&manifest["tags"]),
+                downloads: 0,
+                rating: 0.0,
+            });
+        }
+    }
+
+    // Fallback: read SKILL.md front matter
+    let skill_md = skill_dir.join("SKILL.md");
+    let content = tokio::fs::read_to_string(&skill_md).await?;
+    let fm = parse_skill_md_front_matter(&content);
     Ok(SkillInfoResponse {
         id: skill_id.to_string(),
-        name: manifest["name"].as_str().unwrap_or(skill_id).to_string(),
-        version: manifest["version"].as_str().unwrap_or("1.0.0").to_string(),
-        description: manifest["description"].as_str().unwrap_or("").to_string(),
-        author: manifest["author"].as_str().unwrap_or("Unknown").to_string(),
-        license: manifest["license"].as_str().unwrap_or("MIT").to_string(),
+        name: fm.get("name").cloned().unwrap_or_else(|| skill_id.to_string()),
+        version: fm.get("version").cloned().unwrap_or_else(|| "1.0.0".to_string()),
+        description: fm.get("description").cloned().unwrap_or_default(),
+        author: fm.get("author").cloned().unwrap_or_else(|| "Unknown".to_string()),
+        license: fm.get("license").cloned().unwrap_or_else(|| "MIT".to_string()),
         installed: true,
-        capabilities: yaml_string_array(&manifest["capabilities"]),
-        tags: yaml_string_array(&manifest["tags"]),
+        capabilities: vec![],
+        tags: vec![],
         downloads: 0,
         rating: 0.0,
     })

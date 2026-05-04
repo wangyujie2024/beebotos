@@ -1,94 +1,111 @@
-# BeeBotOS Gateway 统一配置文件
-# 所有配置项（敏感信息除外）均收敛于此文件
+[channels]
+auto_download_media = false
+auto_reply = true
+context_window_size = 20
+enable_typing_indicator = true
+enabled_platforms = [
+    "personal_wechat",
+    "lark",
+    "wechat",
+]
+max_file_size_mb = 50
+media_storage_path = "./data/media"
 
-[server]
-host = "0.0.0.0"
-port = 8000
-timeout_seconds = 30
-max_body_size = 10485760  # 10MB
-max_connections = 1000
-keepalive_seconds = 75
-cors_origins = ["*"]
+[channels.lark]
+app_id = "cli_a92ba86d9978dbcd"
+enabled = true
+encrypt_key = ""
+verification_token = ""
+
+[channels.personal_wechat]
+agent_id = "beebotos-gateway"
+api_key = ""
+base_url = "https://ilinkai.weixin.qq.com"
+device_id = ""
+device_name = "BeeBotOS Gateway"
+enabled = true
+
+[channels.wechat]
+agent_id = "1000004"
+corp_id = "ww812fdb0ce621af12"
+enabled = true
 
 [database]
-url = "sqlite:data/beebotos.db"
-max_connections = 20
-min_connections = 5
 connect_timeout_seconds = 10
 idle_timeout_seconds = 600
+max_connections = 20
+min_connections = 5
 run_migrations = true
+url = "sqlite:data/beebotos.db"
 
 [jwt]
-expiry_hours = 24
-refresh_expiry_hours = 168  # 7 days
-issuer = "beebotos-gateway"
 audience = "beebotos-api"
-
-[tls]
-enabled = false
-cert_path = "data/certs/server.crt"
-key_path = "data/certs/server.key"
-mutual_tls = false
-
-[rate_limit]
-enabled = true
-requests_per_second = 10
-burst_size = 50
-window_seconds = 60
+expiry_hours = 24
+issuer = "beebotos-gateway"
+refresh_expiry_hours = 168
 
 [logging]
-level = "info"
 format = "json"
+level = "info"
 otel_enabled = false
 otel_endpoint = "http://localhost:4317"
-
-[services]
-kernel_url = "http://localhost:9000"
-kernel_timeout_seconds = 30
-chain_url = "http://localhost:8545"
-chain_timeout_seconds = 30
 
 [models]
 default_provider = "kimi"
 fallback_chain = []
-request_timeout = 60
 max_tokens = 4096
+request_timeout = 180
 system_prompt = "你是 BeeBotOS 的个人 AI 助手，由 BeeBotOS 团队开发。请始终以这个身份回答用户问题。"
 
 [models.kimi]
-model = "kimi-k2.5"
 base_url = "https://api.moonshot.cn/v1"
+model = "kimi-k2.6"
 temperature = 1.0
 
 [models.zhipu]
-model = "glm-4"
 base_url = "https://open.bigmodel.cn/api/paas/v4"
+model = "glm-4"
 temperature = 0.7
 
-[channels]
-enabled_platforms = ["personal_wechat", "lark", "wechat"]
-auto_download_media = false
-media_storage_path = "./data/media"
-max_file_size_mb = 50
-context_window_size = 20
-auto_reply = true
-enable_typing_indicator = true
-
-[channels.lark]
+[rate_limit]
+burst_size = 50
 enabled = true
-app_id = "cli_a92ba86d9978dbcd"
-verification_token = ""
-encrypt_key = ""
+requests_per_second = 10
+window_seconds = 60
 
-[channels.wechat]
-enabled = true
-corp_id = "ww812fdb0ce621af12"
-agent_id = "1000004"
+[server]
+host = "0.0.0.0"
+keepalive_seconds = 75
+max_body_size = 10485760
+max_connections = 1000
+port = 8000
+timeout_seconds = 30
 
-[channels.personal_wechat]
-enabled = true
-base_url = "https://ilinkai.weixin.qq.com"
-api_key = ""
-agent_id = "beebotos-gateway"
-device_id = ""
-device_name = "BeeBotOS Gateway"
+[server.cors]
+allow_credentials = false
+allowed_headers = [
+    "Content-Type",
+    "Authorization",
+    "X-Requested-With",
+    "X-CSRF-Token",
+]
+allowed_methods = [
+    "GET",
+    "POST",
+    "PUT",
+    "DELETE",
+    "OPTIONS",
+]
+allowed_origins = ["*"]
+
+[services]
+chain_timeout_seconds = 30
+chain_url = "http://localhost:8545"
+kernel_timeout_seconds = 30
+kernel_url = "http://localhost:9000"
+
+[tls]
+cert_path = "data/certs/server.crt"
+enabled = false
+key_path = "data/certs/server.key"
+mutual_tls = false

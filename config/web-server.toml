@@ -6,7 +6,7 @@ port = 8090
 
 [static_file]
 # 静态文件根目录（相对于可执行文件或绝对路径）
-path = "apps/web"
+path = "apps/web/dist"
 # 默认索引文件
 index = "index.html"
 # 缓存控制（开发模式可禁用）

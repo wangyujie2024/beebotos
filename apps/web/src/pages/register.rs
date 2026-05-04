@@ -55,9 +55,11 @@ pub fn RegisterPage() -> impl IntoView {
                 let auth_service = AuthService::new(client);
 
                 // Try to register via API
+                let email_val = email.get();
+                let email_opt = if email_val.trim().is_empty() { None } else { Some(email_val) };
                 match auth_service.register(
                     &username.get(),
-                    &email.get(),
+                    email_opt.as_deref(),
                     &password.get(),
                 ).await {
                     Ok(response) => {

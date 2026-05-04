@@ -11,6 +11,7 @@ pub mod browser;
 pub mod chain;
 pub mod chain_v2;
 pub mod channels;
+pub mod compositions;
 pub mod llm_config;
 pub mod llm_metrics;
 pub mod skills;
@@ -21,6 +22,7 @@ pub mod user_channels;
 pub mod user_settings;
 pub mod webchat;
 pub mod webhooks;
+pub mod workflows;
 
 use axum::response::IntoResponse;
 use axum::Json;

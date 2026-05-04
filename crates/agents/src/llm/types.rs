@@ -61,6 +61,9 @@ pub struct LLMMessage {
     /// Tool call ID (for tool messages)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_call_id: Option<String>,
+    /// 🆕 FIX: Kimi k2.6 reasoning_content — model may consume all tokens here leaving content empty
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_content: Option<String>,
 }
 
 /// Type alias for backward compatibility
@@ -75,6 +78,7 @@ impl LLMMessage {
             name: None,
             tool_calls: None,
             tool_call_id: None,
+            reasoning_content: None,
         }
     }
 
@@ -101,6 +105,7 @@ impl LLMMessage {
             name: None,
             tool_calls: None,
             tool_call_id: None,
+            reasoning_content: None,
         }
     }
 
@@ -129,14 +134,21 @@ impl LLMMessage {
 
     /// Get text content (concatenates all text parts)
     pub fn text_content(&self) -> String {
-        self.content
+        let text = self.content
             .iter()
             .filter_map(|c| match c {
                 Content::Text { text } => Some(text.as_str()),
                 Content::ImageUrl { .. } | Content::File { .. } => None,
             })
             .collect::<Vec<_>>()
-            .join("")
+            .join("");
+        // 🆕 FIX: Fallback to reasoning_content when content is empty (Kimi k2.6)
+        if text.is_empty() {
+            if let Some(ref reasoning) = self.reasoning_content {
+                return reasoning.clone();
+            }
+        }
+        text
     }
 }
 
@@ -513,8 +525,8 @@ pub type LLMResult<T> = Result<T, LLMError>;
 pub mod kimi_models {
     pub const KIMI_LATEST: &str = "kimi-latest";
     pub const KIMI_FLASH: &str = "kimi-flash";
-    pub const KIMI_PRO: &str = "kimi-k2.5";
-    pub const KIMI_K2_5: &str = "kimi-k2.5";
+    pub const KIMI_PRO: &str = "kimi-k2.6";
+    pub const KIMI_K2_5: &str = "kimi-k2.6";
 }
 
 /// OpenAI model names (for compatibility)

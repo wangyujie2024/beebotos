@@ -505,6 +505,13 @@ impl WebSocketManager {
                     Message::Pong(_) => {
                         debug!(connection_id = %connection_id, "Received pong");
                         *last_pong_clone.write().await = Instant::now();
+                        // Update activity to prevent stale cleanup
+                        {
+                            let mut states = self.states.write().await;
+                            if let Some(state) = states.get_mut(&connection_id) {
+                                state.touch();
+                            }
+                        }
                     }
                     Message::Close(frame) => {
                         info!(

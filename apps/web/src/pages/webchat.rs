@@ -109,7 +109,13 @@ pub fn WebchatPage() -> impl IntoView {
     // WebSocket 连接：订阅 webchat 频道接收 Agent 回复
     let chat_state_for_effect = chat_state.clone();
     let auth_state_for_ws = auth_state.clone();
+    let ws_needs_reconnect = RwSignal::new(true);
     Effect::new(move |_| {
+        if !ws_needs_reconnect.get() {
+            return Some(());
+        }
+        ws_needs_reconnect.set(false);
+
         let window = web_sys::window()?;
         let location = window.location();
         let protocol = location.protocol().ok()?;
@@ -150,6 +156,8 @@ pub fn WebchatPage() -> impl IntoView {
 
         let ws_for_open = ws.clone();
         let user_id = auth_state_for_ws.user.get().as_ref().map(|u| u.id.clone()).unwrap_or_else(get_user_id);
+        let chat_state_for_open = chat_state_for_effect.clone();
+        let auth_state_for_open = auth_state_for_ws.clone();
         let onopen = Closure::wrap(Box::new(move |_e: web_sys::Event| {
             let subscribe = serde_json::json!({
                 "type": "subscribe",
@@ -157,6 +165,29 @@ pub fn WebchatPage() -> impl IntoView {
                 "user_id": user_id
             });
             let _ = ws_for_open.send_with_str(&subscribe.to_string());
+
+            // 重连后拉取最新消息，补全可能丢失的 Agent 回复
+            let chat_state_refresh = chat_state_for_open.clone();
+            let auth_state_refresh = auth_state_for_open.clone();
+            wasm_bindgen_futures::spawn_local(async move {
+                gloo_timers::future::TimeoutFuture::new(500).await;
+                let client = create_client();
+                client.set_auth_token(auth_state_refresh.get_token());
+                let service = create_webchat_service(client);
+                if let Some(session_id) = chat_state_refresh.current_session_id.get() {
+                    match service.get_messages(&session_id).await {
+                        Ok(msgs) => {
+                            chat_state_refresh.current_messages.set(msgs.clone());
+                            chat_state_refresh.message_cache.update(|cache| {
+                                cache.insert(session_id, msgs);
+                            });
+                        }
+                        Err(e) => {
+                            let _ = web_sys::console::warn_1(&format!("[webchat] refresh messages failed: {}", e).into());
+                        }
+                    }
+                }
+            });
         }) as Box<dyn FnMut(_)>);
         ws.set_onopen(Some(onopen.as_ref().unchecked_ref()));
         onopen.forget();
@@ -168,8 +199,13 @@ pub fn WebchatPage() -> impl IntoView {
         ws.set_onerror(Some(onerror.as_ref().unchecked_ref()));
         onerror.forget();
 
+        let ws_needs_reconnect_err = ws_needs_reconnect.clone();
         let onclose = Closure::wrap(Box::new(move |_e: web_sys::Event| {
-            // 连接关闭，可选：自动重连逻辑
+            // 延迟 3 秒后触发重连
+            wasm_bindgen_futures::spawn_local(async move {
+                gloo_timers::future::TimeoutFuture::new(3_000).await;
+                ws_needs_reconnect_err.set(true);
+            });
         }) as Box<dyn FnMut(_)>);
         ws.set_onclose(Some(onclose.as_ref().unchecked_ref()));
         onclose.forget();

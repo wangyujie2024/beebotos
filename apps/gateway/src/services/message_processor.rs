@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::{info, warn, error, debug};
 use uuid::Uuid;
+use regex::Regex;
 
 use beebotos_agents::{
     ChannelRegistry,
@@ -19,6 +20,7 @@ use crate::services::llm_service::LlmService;
 use crate::services::agent_resolver::AgentResolver;
 use crate::services::webchat_service::WebchatService;
 use crate::error::GatewayError;
+use crate::clients::{ClawHubClient, HubError};
 
 /// 消息处理器
 pub struct MessageProcessor {
@@ -38,6 +40,10 @@ pub struct MessageProcessor {
     webchat_service: Option<Arc<WebchatService>>,
     /// Skill 注册表
     skill_registry: Option<Arc<beebotos_agents::skills::SkillRegistry>>,
+    /// Workflow 注册表
+    workflow_registry: Option<Arc<tokio::sync::RwLock<beebotos_agents::workflow::WorkflowRegistry>>>,
+    /// ClawHub 客户端（技能市场）
+    clawhub_client: Option<ClawHubClient>,
 }
 
 impl MessageProcessor {
@@ -48,6 +54,8 @@ impl MessageProcessor {
         memory_system: Option<Arc<beebotos_agents::memory::UnifiedMemorySystem>>,
         webchat_service: Option<Arc<WebchatService>>,
         skill_registry: Option<Arc<beebotos_agents::skills::SkillRegistry>>,
+        workflow_registry: Option<Arc<tokio::sync::RwLock<beebotos_agents::workflow::WorkflowRegistry>>>,
+        clawhub_client: Option<ClawHubClient>,
     ) -> Self {
         Self {
             deduplicator: Arc::new(MessageDeduplicator::default()),
@@ -58,6 +66,8 @@ impl MessageProcessor {
             memory_system,
             webchat_service,
             skill_registry,
+            workflow_registry,
+            clawhub_client,
         }
     }
 
@@ -142,6 +152,55 @@ impl MessageProcessor {
         // 3. 处理多模态内容（下载图片等）
         let (content, images) = self.process_multimodal(&message).await?;
 
+        // 🟢 P1 FIX: Check for /workflow command trigger
+        if let Some(workflow_result) = self.try_execute_workflow_command(&content).await {
+            match workflow_result {
+                Ok(result_text) => {
+                    // Add workflow command to history
+                    self.session_manager
+                        .add_message(&session.id, "user", &content, false, vec![])
+                        .await
+                        .ok();
+                    // Add workflow result as assistant response
+                    self.session_manager
+                        .add_message(&session.id, "assistant", &result_text, false, vec![])
+                        .await
+                        .ok();
+                    // Send reply
+                    self.send_reply(platform, channel_id, &message, &result_text).await?;
+                    return Ok(());
+                }
+                Err(e) => {
+                    let error_msg = format!("Workflow execution error: {}", e);
+                    self.send_reply(platform, channel_id, &message, &error_msg).await?;
+                    return Ok(());
+                }
+            }
+        }
+
+        // 🟢 P1 FIX: Try natural-language workflow matching
+        if let Some(workflow_result) = self.try_match_workflow_by_content(&content).await {
+            match workflow_result {
+                Ok(result_text) => {
+                    self.session_manager
+                        .add_message(&session.id, "user", &content, false, vec![])
+                        .await
+                        .ok();
+                    self.session_manager
+                        .add_message(&session.id, "assistant", &result_text, false, vec![])
+                        .await
+                        .ok();
+                    self.send_reply(platform, channel_id, &message, &result_text).await?;
+                    return Ok(());
+                }
+                Err(e) => {
+                    let error_msg = format!("Workflow execution error: {}", e);
+                    self.send_reply(platform, channel_id, &message, &error_msg).await?;
+                    return Ok(());
+                }
+            }
+        }
+
         // 4. 添加用户消息到会话历史
         let image_urls: Vec<String> = images.iter()
             .map(|img| format!("data:{};base64,{},", img.mime_type, img.data))
@@ -172,13 +231,20 @@ impl MessageProcessor {
         }
 
         // 5. 构建 LLM 上下文（包含历史消息）
+        // 🆕 FIX: Limit history to 6 turns and truncate long messages.
         let history = self.session_manager
-            .get_history_for_llm(&session.id, 20)
+            .get_history_for_llm(&session.id, 6)
             .await
             .map_err(|e| GatewayError::Internal {
                 message: format!("Failed to get session history: {}", e),
                 correlation_id: Uuid::new_v4().to_string(),
             })?;
+        let history: Vec<_> = history.into_iter().map(|mut m| {
+            if m.content.chars().count() > 300 {
+                m.content = m.content.chars().take(300).collect::<String>() + "...";
+            }
+            m
+        }).collect();
 
         // 5.5 Memory 检索
         let (memory_context, _direct_answer) = self.build_memory_context(&content, &None).await;
@@ -333,6 +399,29 @@ impl MessageProcessor {
         // 3. 处理多模态内容（下载图片等）
         let (content, images) = self.process_multimodal(&message).await?;
 
+        // 🟢 P1 FIX: Check for /workflow command trigger (same as handle_message)
+        if let Some(workflow_result) = self.try_execute_workflow_command(&content).await {
+            match workflow_result {
+                Ok(result_text) => {
+                    self.session_manager
+                        .add_message(&session.id, "user", &content, false, vec![])
+                        .await
+                        .ok();
+                    self.session_manager
+                        .add_message(&session.id, "assistant", &result_text, false, vec![])
+                        .await
+                        .ok();
+                    self.send_reply(platform, channel_id, &message, &result_text).await?;
+                    return Ok(());
+                }
+                Err(e) => {
+                    let error_msg = format!("Workflow execution error: {}", e);
+                    self.send_reply(platform, channel_id, &message, &error_msg).await?;
+                    return Ok(());
+                }
+            }
+        }
+
         // 4. 添加用户消息到会话历史
         let image_urls: Vec<String> = images.iter()
             .map(|img| format!("data:{};base64,{},", img.mime_type, img.data))
@@ -365,18 +454,61 @@ impl MessageProcessor {
         // 5. 解析 agent_id
         let agent_id = resolver.resolve(platform, channel_id, &user_id).await?;
 
+        // 6.5 Memory 检索
+        // 🆕 FIX: 先匹配 skill，统一在 build_memory_context 内注入 skill prompt 并控制总预算
+        let mut skill_match = self.try_match_skill(&content).await;
+        
+        // 🆕 FIX: Session-level skill inheritance. If current message doesn't match any skill,
+        // but the session has an active_skill from previous turns, inherit it to avoid
+        // losing skill context in multi-turn conversations (e.g. travel_planner follow-ups).
+        if skill_match.is_none() {
+            let active_skill = session.metadata.get("active_skill").cloned();
+            if let Some(skill_id) = active_skill {
+                // Check if user explicitly wants to exit the skill
+                let exit_keywords = ["结束", "退出", "不用了", "谢谢", "再见", "stop", "exit", "quit", "done", "thanks", "bye"];
+                let is_exit = exit_keywords.iter().any(|kw| content.contains(kw));
+                if is_exit {
+                    let _ = self.session_manager.update_metadata(&session.id, "active_skill", "").await;
+                    info!("🎯 Cleared active_skill '{}' (user exit detected)", skill_id);
+                } else if let Some(ref registry) = self.skill_registry {
+                    if let Some(skill) = registry.get(&skill_id).await {
+                        if skill.enabled {
+                            skill_match = Some((
+                                skill_id.clone(),
+                                skill.skill.name.clone(),
+                                skill.skill.manifest.description.clone(),
+                                skill.skill.manifest.prompt_template.clone(),
+                            ));
+                            info!("🎯 Inherited active skill '{}' for query '{}'", skill_id, content.chars().take(40).collect::<String>());
+                        }
+                    }
+                }
+            }
+        } else {
+            // Update active_skill in session metadata when a new skill is matched
+            if let Some((ref skill_id, _, _, _)) = skill_match {
+                let _ = self.session_manager.update_metadata(&session.id, "active_skill", skill_id).await;
+            }
+        }
+
         // 6. 构建 LLM 上下文（包含历史消息）
+        // 🆕 FIX: Limit history to 6 turns for ALL skills to prevent prompt bloat.
+        let history_limit = 6;
         let history = self.session_manager
-            .get_history_for_llm(&session.id, 20)
+            .get_history_for_llm(&session.id, history_limit)
             .await
             .map_err(|e| GatewayError::Internal {
                 message: format!("Failed to get session history: {}", e),
                 correlation_id: Uuid::new_v4().to_string(),
             })?;
-
-        // 6.5 Memory 检索
-        // 🆕 FIX: 先匹配 skill，统一在 build_memory_context 内注入 skill prompt 并控制总预算
-        let skill_match = self.try_match_skill(&content).await;
+        // 🆕 FIX: Truncate each history message to max 300 chars to keep prompt small.
+        let history: Vec<_> = history.into_iter().map(|mut m| {
+            if m.content.chars().count() > 300 {
+                m.content = m.content.chars().take(300).collect::<String>() + "...";
+            }
+            m
+        }).collect();
+        
         let (memory_context, direct_answer) = self.build_memory_context(&content, &skill_match).await;
 
         // 🟢 P2 FIX: Memory 精确匹配直接返回，跳过 LLM
@@ -397,7 +529,7 @@ impl MessageProcessor {
 
         // 7. 处理 Skill planning 判断
         let mut has_skill_plan = false;
-        if let Some((ref skill_name, _, _)) = skill_match {
+        if let Some((_, ref skill_name, _, _)) = skill_match {
             // 复杂 skill 强制触发 agent 端 planning
             // 🆕 FIX: 结合 skill 类型与 query 复杂度综合判断是否启用 planning
             let skill_lower = skill_name.to_lowercase();
@@ -411,8 +543,12 @@ impl MessageProcessor {
             
             let query_complexity = Self::estimate_query_complexity(&content);
             let is_high_complexity = query_complexity == QueryComplexity::High;
-            
-            if is_analytical_skill && !is_generative_skill {
+            // Travel planner does not need ReAct; direct generation is faster and sufficient
+            let is_travel_planner = skill_lower.contains("travel") && skill_lower.contains("planner");
+
+            if is_travel_planner {
+                info!("🎯 Travel planner skill matched, skipping plan=true (single-shot generation preferred)");
+            } else if is_analytical_skill && !is_generative_skill {
                 has_skill_plan = true;
                 info!("🎯 Analytical skill matched, will inject plan=true for '{}'", skill_name);
             } else if is_generative_skill && is_high_complexity {
@@ -436,7 +572,7 @@ impl MessageProcessor {
             "metadata": message.metadata,
             "memory_context": memory_context,
         });
-        if let Some((skill_name, skill_desc, skill_prompt)) = skill_match {
+        if let Some((skill_id, skill_name, skill_desc, skill_prompt)) = skill_match {
             if let Some(obj) = task_input.as_object_mut() {
                 obj.insert("skill_hint".to_string(), serde_json::json!({
                     "name": skill_name,
@@ -445,6 +581,15 @@ impl MessageProcessor {
                 }));
                 if has_skill_plan {
                     obj.insert("plan".to_string(), serde_json::json!("true"));
+                }
+                // 🆕 FIX: For weather_assistant, fetch real-time weather data and inject into task_input
+                if skill_name.to_lowercase().contains("weather") {
+                    if let Some(city) = Self::extract_city_from_weather_query(&content) {
+                        if let Some(weather_data) = Self::fetch_weather_data(&city).await {
+                            obj.insert("weather_data".to_string(), serde_json::json!(weather_data));
+                            info!("🌤️ Injected weather data for '{}' into task input", city);
+                        }
+                    }
                 }
             }
         }
@@ -470,6 +615,8 @@ impl MessageProcessor {
             memory_system: self.memory_system.as_ref().map(Arc::clone),
             webchat_service: self.webchat_service.as_ref().map(Arc::clone),
             skill_registry: self.skill_registry.as_ref().map(Arc::clone),
+            workflow_registry: self.workflow_registry.as_ref().map(Arc::clone),
+            clawhub_client: self.clawhub_client.clone(),
         });
         let session_id = session.id.clone();
         let db_session_id_bg = db_session_id.clone();
@@ -679,9 +826,9 @@ impl MessageProcessor {
         })
     }
 
-    /// 🆕 FIX: 尝试匹配 Skill，返回最佳匹配的 skill hint (name, description, prompt_template)
+    /// 🆕 FIX: 尝试匹配 Skill，返回最佳匹配的 skill hint (skill_id, name, description, prompt_template)
     /// 支持 domain keyword 映射 + registry 语义搜索 + name 子串匹配
-    async fn try_match_skill(&self, content: &str) -> Option<(String, String, String)> {
+    async fn try_match_skill(&self, content: &str) -> Option<(String, String, String, String)> {
         // 查询太短不应触发 skill 匹配
         if content.chars().count() < 4 {
             return None;
@@ -720,6 +867,7 @@ impl MessageProcessor {
                     if skill.enabled {
                         info!("🎯 Skill domain matched: '{}' for query '{}'", skill_id, content.chars().take(40).collect::<String>());
                         return Some((
+                            skill_id.to_string(),
                             skill.skill.name.clone(),
                             skill.skill.manifest.description.clone(),
                             skill.skill.manifest.prompt_template.clone(),
@@ -732,6 +880,10 @@ impl MessageProcessor {
         // 2. Registry semantic search fallback
         let results = registry.search(content).await;
         if results.is_empty() {
+            // 🆕 FIX: When no local skill matches, try discovering from ClawHub marketplace
+            if let Some(hint) = self.try_install_from_clawhub(content).await {
+                return Some(hint);
+            }
             return None;
         }
         let best = &results[0];
@@ -742,6 +894,7 @@ impl MessageProcessor {
         if is_strong_match {
             info!("🎯 Skill matched: '{}' for query '{}'", best.skill.id, content.chars().take(40).collect::<String>());
             let hint = (
+                best.skill.id.clone(),
                 best.skill.name.clone(),
                 best.skill.manifest.description.clone(),
                 best.skill.manifest.prompt_template.clone(),
@@ -753,15 +906,443 @@ impl MessageProcessor {
         }
     }
 
+    /// 🆕 FIX: Try to discover and install a skill from ClawHub when no local match is found.
+    /// Downloads the skill package, extracts it, and registers it into the local SkillRegistry.
+    async fn try_install_from_clawhub(&self, query: &str) -> Option<(String, String, String, String)> {
+        let client = self.clawhub_client.as_ref()?;
+        let registry = self.skill_registry.as_ref()?;
+
+        // 1. Search ClawHub for relevant skills
+        info!("🔍 ClawHub: searching for skill matching '{}'", query.chars().take(40).collect::<String>());
+        let results = match client.search_skills(query).await {
+            Ok(r) if !r.is_empty() => r,
+            Ok(_) => {
+                info!("🔍 ClawHub: no skills found for '{}'", query.chars().take(40).collect::<String>());
+                return None;
+            }
+            Err(e) => {
+                warn!("🔍 ClawHub search failed: {}", e);
+                return None;
+            }
+        };
+
+        let best = &results[0];
+        info!("🔍 ClawHub: found skill '{}' ({})", best.name, best.id);
+
+        // 2. Download skill package
+        let pkg_bytes = match client.download_skill(&best.id, None).await {
+            Ok(bytes) => bytes,
+            Err(e) => {
+                warn!("🔍 ClawHub download failed for '{}': {}", best.id, e);
+                return None;
+            }
+        };
+        info!("🔍 ClawHub: downloaded {} bytes for '{}'", pkg_bytes.len(), best.id);
+
+        // 3. Save to skills/market/{id}/
+        let market_dir = std::path::PathBuf::from("skills/market").join(&best.id);
+        if let Err(e) = tokio::fs::create_dir_all(&market_dir).await {
+            warn!("🔍 ClawHub: failed to create dir '{}': {}", market_dir.display(), e);
+            return None;
+        }
+
+        // Try to parse as ZIP first, then fallback to raw markdown
+        let skill_md_content = if pkg_bytes.len() > 4 && pkg_bytes[0..4] == [0x50, 0x4B, 0x03, 0x04] {
+            // ZIP archive
+            match Self::extract_skill_md_from_zip(&pkg_bytes, &market_dir).await {
+                Ok(content) => content,
+                Err(e) => {
+                    warn!("🔍 ClawHub: ZIP extraction failed: {}, falling back to description", e);
+                    Self::build_fallback_skill_md(best)
+                }
+            }
+        } else if let Ok(text) = String::from_utf8(pkg_bytes.clone()) {
+            // Plain text / markdown
+            text
+        } else {
+            warn!("🔍 ClawHub: package is not text or ZIP, using fallback markdown");
+            Self::build_fallback_skill_md(best)
+        };
+
+        let md_path = market_dir.join("SKILL.md");
+        if let Err(e) = tokio::fs::write(&md_path, &skill_md_content).await {
+            warn!("🔍 ClawHub: failed to write '{}': {}", md_path.display(), e);
+            return None;
+        }
+
+        // 4. Parse markdown sections (same logic as builtin_loader)
+        let sections = Self::parse_markdown_sections(&skill_md_content);
+        let description = sections
+            .get("description")
+            .cloned()
+            .unwrap_or_else(|| best.description.clone());
+        let prompt_template = sections.get("prompt_template").cloned().unwrap_or_default();
+        let examples = sections.get("examples").cloned().unwrap_or_default();
+        let capabilities: Vec<String> = sections
+            .get("capabilities")
+            .map(|text| {
+                text.lines()
+                    .filter_map(|line| {
+                        let trimmed = line.trim();
+                        if trimmed.starts_with("- ") || trimmed.starts_with("* ") {
+                            Some(trimmed[2..].trim().to_string())
+                        } else if trimmed.starts_with("• ") {
+                            Some(trimmed[2..].trim().to_string())
+                        } else {
+                            None
+                        }
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        let version = match beebotos_agents::skills::registry::Version::parse(&best.version) {
+            Ok(v) => v,
+            Err(_) => beebotos_agents::skills::registry::Version::new(1, 0, 0),
+        };
+
+        let skill = beebotos_agents::skills::loader::LoadedSkill {
+            id: best.id.clone(),
+            name: best.name.clone(),
+            version,
+            wasm_path: std::path::PathBuf::new(),
+            source_path: md_path.clone(),
+            manifest: beebotos_agents::skills::loader::SkillManifest {
+                id: best.id.clone(),
+                name: best.name.clone(),
+                version: beebotos_agents::skills::registry::Version::new(1, 0, 0),
+                description: description.clone(),
+                author: best.author.clone(),
+                capabilities: if capabilities.is_empty() { vec!["llm:chat".to_string()] } else { capabilities },
+                permissions: vec!["llm:chat".to_string()],
+                entry_point: "run".to_string(),
+                license: best.license.clone(),
+                functions: vec![],
+                prompt_template: prompt_template.clone(),
+                examples,
+            },
+        };
+
+        // 5. Register into SkillRegistry
+        registry.register(skill, "market", best.capabilities.clone()).await;
+        info!("✅ ClawHub: skill '{}' installed and registered from marketplace", best.id);
+
+        Some((
+            best.id.clone(),
+            best.name.clone(),
+            description,
+            prompt_template,
+        ))
+    }
+
+    /// Build fallback markdown skill from metadata when download/extraction fails
+    fn build_fallback_skill_md(meta: &crate::clients::SkillMetadata) -> String {
+        format!(
+            "# {}\n\n## Description\n{}\n\n## Prompt Template\n\nYou are a helpful assistant specialized in {}. Answer user questions accurately and concisely.\n",
+            meta.name, meta.description, meta.name
+        )
+    }
+
+    /// Extract SKILL.md from a ZIP archive
+    async fn extract_skill_md_from_zip(data: &[u8], dest_dir: &std::path::Path) -> Result<String, String> {
+        use std::io::{Cursor, Read};
+        let cursor = Cursor::new(data);
+        let mut archive = zip::ZipArchive::new(cursor).map_err(|e| format!("ZIP error: {}", e))?;
+        
+        // Try to find SKILL.md or any .md file
+        let mut found = None;
+        for i in 0..archive.len() {
+            let file = archive.by_index(i).map_err(|e| format!("ZIP read error: {}", e))?;
+            let name = file.name().to_lowercase();
+            if name.ends_with("skill.md") || name.ends_with(".md") {
+                found = Some(i);
+                if name.ends_with("skill.md") {
+                    break;
+                }
+            }
+        }
+        
+        if let Some(idx) = found {
+            let mut file = archive.by_index(idx).map_err(|e| format!("ZIP read error: {}", e))?;
+            let mut content = String::new();
+            file.read_to_string(&mut content).map_err(|e| format!("ZIP text read error: {}", e))?;
+            Ok(content)
+        } else {
+            Err("No .md file found in ZIP".to_string())
+        }
+    }
+
+    /// Parse markdown sections (same logic as builtin_loader)
+    fn parse_markdown_sections(content: &str) -> std::collections::HashMap<String, String> {
+        let mut sections = std::collections::HashMap::new();
+        let mut current_section: Option<String> = None;
+        let mut current_lines: Vec<String> = Vec::new();
+
+        for line in content.lines() {
+            if line.starts_with("## ") {
+                if let Some(ref name) = current_section {
+                    let body = current_lines.join("\n").trim().to_string();
+                    if !body.is_empty() {
+                        sections.insert(name.clone(), body);
+                    }
+                }
+                current_section = Some(line[3..].trim().to_lowercase().replace(' ', "_"));
+                current_lines.clear();
+            } else if current_section.is_some() {
+                current_lines.push(line.to_string());
+            }
+        }
+
+        if let Some(ref name) = current_section {
+            let body = current_lines.join("\n").trim().to_string();
+            if !body.is_empty() {
+                sections.insert(name.clone(), body);
+            }
+        }
+
+        sections
+    }
+
+    /// 🟢 P1 FIX: Try to execute a workflow from chat command `/workflow <id>`
+    async fn try_execute_workflow_command(&self, content: &str) -> Option<Result<String, GatewayError>> {
+        let trimmed = content.trim();
+        if !trimmed.starts_with("/workflow") {
+            return None;
+        }
+
+        let parts: Vec<&str> = trimmed.split_whitespace().collect();
+        if parts.len() < 2 {
+            return Some(Err(GatewayError::bad_request("Usage: /workflow <workflow_id>")));
+        }
+
+        let workflow_id = parts[1];
+        info!("Chat workflow trigger: {}", workflow_id);
+
+        let registry = self.workflow_registry.as_ref()?;
+        let def = {
+            let reg = registry.read().await;
+            match reg.get(workflow_id) {
+                Some(d) => d.clone(),
+                None => return Some(Err(GatewayError::not_found("Workflow", workflow_id))),
+            }
+        };
+
+        // Build temporary agent for execution
+        let skill_registry = match self.skill_registry.as_ref() {
+            Some(r) => r.clone(),
+            None => return Some(Err(GatewayError::service_unavailable("SkillRegistry", "Not initialized"))),
+        };
+
+        let llm_interface: Arc<dyn beebotos_agents::communication::LLMCallInterface> =
+            Arc::new(crate::services::agent_runtime_manager::GatewayLLMInterface::new(self.llm_service.clone()));
+
+        let agent = beebotos_agents::AgentBuilder::new("workflow-runner")
+            .description("Temporary agent for workflow execution")
+            .build()
+            .with_skill_registry(skill_registry)
+            .with_llm_interface(llm_interface);
+
+        let engine = beebotos_agents::workflow::WorkflowEngine::new();
+        let trigger_context = serde_json::json!({
+            "trigger_type": "chat_command",
+            "command": trimmed,
+            "platform": "chat"
+        });
+
+        match engine.execute(&def, &agent, trigger_context, None).await {
+            Ok(instance) => {
+                let status = instance.status.to_string();
+                let mut result = format!("✅ Workflow '{}' completed with status: {}\n\n", workflow_id, status);
+
+                for (step_id, step_state) in &instance.step_states {
+                    result.push_str(&format!("- **{}**: {} ({}s)\n", step_id, step_state.status, step_state.duration_secs()));
+                    if let Some(ref err) = step_state.error {
+                        result.push_str(&format!("  - Error: {}\n", err));
+                    }
+                }
+
+                if !instance.error_log.is_empty() {
+                    result.push_str("\n**Errors:**\n");
+                    for err in &instance.error_log {
+                        result.push_str(&format!("- {}: {}\n", err.step_id.as_deref().unwrap_or("workflow"), err.message));
+                    }
+                }
+
+                Some(Ok(result))
+            }
+            Err(e) => Some(Err(GatewayError::Internal {
+                message: format!("Workflow execution failed: {}", e),
+                correlation_id: uuid::Uuid::new_v4().to_string(),
+            })),
+        }
+    }
+
+    /// 🟢 P1 FIX: Try to match and execute a workflow by natural language content
+    /// (e.g. user says "生成今日早报" matches workflow named "daily_news")
+    async fn try_match_workflow_by_content(&self, content: &str) -> Option<Result<String, GatewayError>> {
+        // Skip commands and very short inputs
+        let trimmed = content.trim();
+        if trimmed.starts_with('/') || trimmed.len() < 4 {
+            return None;
+        }
+
+        let lower_content = trimmed.to_lowercase();
+
+        // 🟢 P1 FIX: Negative word filtering — skip if user explicitly rejects or denies
+        let negative_words = [
+            "不要", "不想", "别", "停止", "取消", "不需要", "不用", "不",
+            "no ", "don't ", "stop ", "cancel ", "not ", "never ", "no need",
+            "don't want", "stop doing", "cancel the",
+        ];
+        for neg in &negative_words {
+            if lower_content.contains(neg) {
+                debug!("Workflow natural-language match skipped due to negative word '{}'", neg.trim());
+                return None;
+            }
+        }
+
+        let registry = self.workflow_registry.as_ref()?;
+        let reg = registry.read().await;
+
+        let mut best_match: Option<(&beebotos_agents::workflow::WorkflowDefinition, u32)> = None;
+        for def in reg.list_all() {
+            let mut score: u32 = 0;
+            let lower_name = def.name.to_lowercase();
+            let lower_id = def.id.to_lowercase();
+
+            // Exact ID match (highest priority)
+            if lower_content == lower_id {
+                score = 100;
+            }
+            // Content contains workflow name (with word-boundary check for ASCII)
+            else if Self::is_substring_match(&lower_content, &lower_name) {
+                score = 50 + lower_name.len() as u32;
+            }
+            // Content contains workflow ID (with word-boundary check for ASCII)
+            else if Self::is_substring_match(&lower_content, &lower_id) {
+                score = 30 + lower_id.len() as u32;
+            }
+            // Tag match
+            else {
+                for tag in &def.tags {
+                    if Self::is_substring_match(&lower_content, &tag.to_lowercase()) {
+                        score = score.max(20);
+                    }
+                }
+            }
+
+            // Only consider workflows with manual trigger for natural language matching
+            let has_manual = def.triggers.iter().any(|t| {
+                matches!(t.trigger_type, beebotos_agents::workflow::TriggerType::Manual { .. })
+            });
+            if !has_manual {
+                score = 0;
+            }
+
+            if score > 0 {
+                if best_match.as_ref().map_or(true, |(_, s)| score > *s) {
+                    best_match = Some((def, score));
+                }
+            }
+        }
+
+        // Threshold: require at least 20 score (name/id substring match)
+        let (def, score) = best_match?;
+        if score < 20 {
+            return None;
+        }
+
+        info!("Natural language workflow match: '{}' -> {} (score: {})", trimmed, def.id, score);
+
+        // Execute matched workflow
+        let skill_registry = match self.skill_registry.as_ref() {
+            Some(r) => r.clone(),
+            None => return Some(Err(GatewayError::service_unavailable("SkillRegistry", "Not initialized"))),
+        };
+
+        let llm_interface: Arc<dyn beebotos_agents::communication::LLMCallInterface> =
+            Arc::new(crate::services::agent_runtime_manager::GatewayLLMInterface::new(self.llm_service.clone()));
+
+        let agent = beebotos_agents::AgentBuilder::new("workflow-runner")
+            .description("Temporary agent for workflow execution")
+            .build()
+            .with_skill_registry(skill_registry)
+            .with_llm_interface(llm_interface);
+
+        let engine = beebotos_agents::workflow::WorkflowEngine::new();
+        let trigger_context = serde_json::json!({
+            "trigger_type": "natural_language",
+            "matched_text": trimmed,
+            "workflow_id": def.id,
+            "match_score": score
+        });
+
+        match engine.execute(def, &agent, trigger_context, None).await {
+            Ok(instance) => {
+                let status = instance.status.to_string();
+                let mut result = format!("✅ Workflow '{}' completed with status: {}\n\n", def.id, status);
+                for (step_id, step_state) in &instance.step_states {
+                    result.push_str(&format!("- **{}**: {} ({}s)\n", step_id, step_state.status, step_state.duration_secs()));
+                    if let Some(ref err) = step_state.error {
+                        result.push_str(&format!("  - Error: {}\n", err));
+                    }
+                }
+                if !instance.error_log.is_empty() {
+                    result.push_str("\n**Errors:**\n");
+                    for err in &instance.error_log {
+                        result.push_str(&format!("- {}: {}\n", err.step_id.as_deref().unwrap_or("workflow"), err.message));
+                    }
+                }
+                Some(Ok(result))
+            }
+            Err(e) => Some(Err(GatewayError::Internal {
+                message: format!("Workflow execution failed: {}", e),
+                correlation_id: uuid::Uuid::new_v4().to_string(),
+            })),
+        }
+    }
+
+    /// 🟢 P1 FIX: Check if pattern matches content with word-boundary awareness.
+    /// For ASCII text, uses regex word boundaries to avoid substring matches like
+    /// "news" matching inside "newspaper". For non-ASCII (e.g. Chinese), falls back
+    /// to simple contains.
+    fn is_substring_match(content: &str, pattern: &str) -> bool {
+        if pattern.is_empty() {
+            return false;
+        }
+        // Fast path: exact match
+        if content == pattern {
+            return true;
+        }
+        // For ASCII-only patterns, enforce word boundaries to reduce false positives
+        let is_ascii = pattern.chars().all(|c| c.is_ascii());
+        if is_ascii {
+            // Use regex \b for word boundaries; escape regex metacharacters in pattern
+            let escaped = regex::escape(pattern);
+            let re_str = format!(r"\b{}\b", escaped);
+            if let Ok(re) = regex::Regex::new(&re_str) {
+                return re.is_match(content);
+            }
+        }
+        // Fallback for non-ASCII or regex compilation failure
+        content.contains(pattern)
+    }
+
     /// P2 FIX: 提取共享的 Memory 搜索逻辑，消除双重搜索
     ///
     /// 🟢 P2 FIX: 返回 (memory_context, direct_answer)。如果 Memory 中有高置信度的精确匹配问答对，
     /// 直接提取答案返回，跳过 LLM 调用。
     ///
     /// 🆕 FIX (方案B): 固定档案与动态记忆分独立预算，简单查询可跳过冗余档案
-    async fn build_memory_context(&self, content: &str, skill_match: &Option<(String, String, String)>) -> (String, Option<String>) {
+    async fn build_memory_context(&self, content: &str, skill_match: &Option<(String, String, String, String)>) -> (String, Option<String>) {
         let mut memory_context = String::new();
         let mut direct_answer: Option<String> = None;
+
+        // 🆕 FIX: Detect skills that don't need heavy user profiles
+        let skip_profiles = skill_match.as_ref().map_or(false, |(_, name, _, _)| {
+            let n = name.to_lowercase();
+            (n.contains("travel") && n.contains("planner")) || n.contains("weather")
+        });
 
         // 🆕 FIX: 根据 query 复杂度动态调整参数
         let char_count = content.chars().count();
@@ -776,7 +1357,10 @@ impl MessageProcessor {
         // 简单查询：固定档案 300 chars + 动态记忆 400 chars
         // 普通查询：固定档案 600 chars + 动态记忆 800 chars
         // 复杂查询：固定档案 1000 chars + 动态记忆 1200 chars
-        let (system_budget, dynamic_budget): (usize, usize) = if is_simple {
+        // 🆕 FIX: travel_planner and weather_assistant skip user profiles to reduce prompt size and prevent LLM over-analysis
+        let (system_budget, dynamic_budget): (usize, usize) = if skip_profiles {
+            (0, 300) // Skip fixed profiles, minimal dynamic memory
+        } else if is_simple {
             (300, 400)
         } else if is_complex {
             (1000, 1200)
@@ -784,7 +1368,7 @@ impl MessageProcessor {
             (600, 800)
         };
         // 🆕 FIX: 当外部注入了大段 skill prompt 等额外 context 时，相应缩减 dynamic memory budget
-        let extra_context_len = skill_match.as_ref().map_or(0, |(name, _, prompt)| {
+        let extra_context_len = skill_match.as_ref().map_or(0, |(_, name, _, prompt)| {
             let wrapper_len = format!("\n\n[系统提示：你当前正在使用 {} 技能处理此请求。请遵循以下专业指引]\n", name).chars().count();
             prompt.chars().count() + wrapper_len
         });
@@ -798,67 +1382,15 @@ impl MessageProcessor {
 
         // 🆕 FIX: 预加载 USER.md 和 SOUL.md 作为固定系统上下文
         if let Some(ref memory) = self.memory_system {
-            let storage = memory.storage();
-            let mut system_context = String::new();
+            // Skip fixed profiles entirely when system_budget is 0 (e.g. travel_planner)
+            if system_budget > 0 {
+                let storage = memory.storage();
+                let mut system_context = String::new();
 
-            if is_simple {
-                // 🆕 FIX: 极简模式也加载核心用户档案（名字、语言偏好等关键字段）
-                // 先加载 USER.md 的前 2 条有效关键信息
-                if let Ok(entries) = storage.read_entries(beebotos_agents::memory::MemoryFileType::User, None).await {
-                    let mut user_parts = Vec::new();
-                    for entry in entries {
-                        let trimmed = entry.content.trim();
-                        let is_placeholder = trimmed.contains("*To be filled")
-                            || trimmed.starts_with("- Name:") && trimmed.len() < 12
-                            || trimmed.starts_with("- Preferred language:") && trimmed.len() < 25
-                            || trimmed.starts_with("- Timezone:") && trimmed.len() < 15
-                            || trimmed.starts_with("- Communication style:") && trimmed.len() < 26
-                            || trimmed.starts_with("- Notification preferences:") && trimmed.len() < 31
-                            || trimmed.starts_with("- Professional background:") && trimmed.len() < 30
-                            || trimmed.starts_with("- Technical skills:") && trimmed.len() < 23
-                            || trimmed.starts_with("- Hobbies:") && trimmed.len() < 14;
-                        if !trimmed.is_empty() && !is_placeholder {
-                            user_parts.push(trimmed.to_string());
-                            if user_parts.len() >= 1 { break; }  // 🆕 FIX: 简单模式只取1条最关键档案，给SOUL.md留空间
-                        }
-                    }
-                    if !user_parts.is_empty() {
-                        system_context.push_str("## 用户档案\n");
-                        for part in &user_parts {
-                            system_context.push_str(&part);
-                            system_context.push('\n');
-                        }
-                        info!("📄 Simple query mode: loaded USER.md core profile ({} entries)", user_parts.len());
-                    }
-                }
-
-                // 再加载 SOUL.md 的第一句核心人格描述
-                if let Ok(entries) = storage.read_entries(beebotos_agents::memory::MemoryFileType::Soul, None).await {
-                    for entry in entries {
-                        let trimmed = entry.content.trim();
-                        if !trimmed.is_empty() && !trimmed.starts_with('#') && !trimmed.starts_with("---") {
-                            let first_line = trimmed.lines().next().unwrap_or(trimmed);
-                            if first_line.len() > 10 {
-                                if !system_context.is_empty() {
-                                    system_context.push('\n');
-                                }
-                                system_context.push_str("## AI 人格设定\n");
-                                system_context.push_str(first_line);
-                                system_context.push('\n');
-                                break;
-                            }
-                        }
-                    }
-                }
-                if system_context.is_empty() {
-                    system_context = "你是 BeeBotOS 的个人 AI 助手，用中文友好地回答用户。\n".to_string();
-                }
-                info!("📄 Simple query mode: loaded minimal persona ({} chars)", system_context.chars().count());
-            } else {
-                // 标准模式：加载 USER.md + SOUL.md
-                // Read USER.md
-                match storage.read_entries(beebotos_agents::memory::MemoryFileType::User, None).await {
-                    Ok(entries) => {
+                if is_simple {
+                    // 🆕 FIX: 极简模式也加载核心用户档案（名字、语言偏好等关键字段）
+                    // 先加载 USER.md 的前 2 条有效关键信息
+                    if let Ok(entries) = storage.read_entries(beebotos_agents::memory::MemoryFileType::User, None).await {
                         let mut user_parts = Vec::new();
                         for entry in entries {
                             let trimmed = entry.content.trim();
@@ -873,6 +1405,7 @@ impl MessageProcessor {
                                 || trimmed.starts_with("- Hobbies:") && trimmed.len() < 14;
                             if !trimmed.is_empty() && !is_placeholder {
                                 user_parts.push(trimmed.to_string());
+                                if user_parts.len() >= 1 { break; }  // 🆕 FIX: 简单模式只取1条最关键档案，给SOUL.md留空间
                             }
                         }
                         if !user_parts.is_empty() {
@@ -881,86 +1414,140 @@ impl MessageProcessor {
                                 system_context.push_str(&part);
                                 system_context.push('\n');
                             }
-                            system_context.push('\n');
-                            info!("📄 Loaded USER.md profile ({} entries)", user_parts.len());
-                        } else {
-                            info!("📄 USER.md loaded but no valid entries after filtering");
+                            info!("📄 Simple query mode: loaded USER.md core profile ({} entries)", user_parts.len());
                         }
                     }
-                    Err(e) => {
-                        warn!("📄 Failed to load USER.md: {}", e);
-                    }
-                }
 
-                // Read SOUL.md
-                match storage.read_entries(beebotos_agents::memory::MemoryFileType::Soul, None).await {
-                    Ok(entries) => {
-                        let mut soul_parts = Vec::new();
+                    // 再加载 SOUL.md 的第一句核心人格描述
+                    if let Ok(entries) = storage.read_entries(beebotos_agents::memory::MemoryFileType::Soul, None).await {
                         for entry in entries {
                             let trimmed = entry.content.trim();
-                            let is_placeholder = trimmed.contains("Helpful and friendly")
-                                && trimmed.len() < 30
-                                || trimmed.starts_with("- Professional but approachable") && trimmed.len() < 35
-                                || trimmed.starts_with("- Detail-oriented") && trimmed.len() < 20
-                                || trimmed.starts_with("- Clear and concise") && trimmed.len() < 22
-                                || trimmed.starts_with("- Use examples when helpful") && trimmed.len() < 30
-                                || trimmed.starts_with("- Ask clarifying questions when needed") && trimmed.len() < 42
-                                || trimmed.starts_with("- Respect user privacy") && trimmed.len() < 25
-                                || trimmed.starts_with("- Decline harmful requests") && trimmed.len() < 30
-                                || trimmed.starts_with("- Be honest about limitations") && trimmed.len() < 32;
-                            if !trimmed.is_empty() && !is_placeholder {
-                                soul_parts.push(trimmed.to_string());
+                            if !trimmed.is_empty() && !trimmed.starts_with('#') && !trimmed.starts_with("---") {
+                                let first_line = trimmed.lines().next().unwrap_or(trimmed);
+                                if first_line.len() > 10 {
+                                    if !system_context.is_empty() {
+                                        system_context.push('\n');
+                                    }
+                                    system_context.push_str("## AI 人格设定\n");
+                                    system_context.push_str(first_line);
+                                    system_context.push('\n');
+                                    break;
+                                }
                             }
                         }
-                        if !soul_parts.is_empty() {
-                            system_context.push_str("## AI 人格设定\n");
-                            for part in &soul_parts {
-                                system_context.push_str(&part);
+                    }
+                    if system_context.is_empty() {
+                        system_context = "你是 BeeBotOS 的个人 AI 助手，用中文友好地回答用户。\n".to_string();
+                    }
+                    info!("📄 Simple query mode: loaded minimal persona ({} chars)", system_context.chars().count());
+                } else {
+                    // 标准模式：加载 USER.md + SOUL.md
+                    // Read USER.md
+                    match storage.read_entries(beebotos_agents::memory::MemoryFileType::User, None).await {
+                        Ok(entries) => {
+                            let mut user_parts = Vec::new();
+                            for entry in entries {
+                                let trimmed = entry.content.trim();
+                                let is_placeholder = trimmed.contains("*To be filled")
+                                    || trimmed.starts_with("- Name:") && trimmed.len() < 12
+                                    || trimmed.starts_with("- Preferred language:") && trimmed.len() < 25
+                                    || trimmed.starts_with("- Timezone:") && trimmed.len() < 15
+                                    || trimmed.starts_with("- Communication style:") && trimmed.len() < 26
+                                    || trimmed.starts_with("- Notification preferences:") && trimmed.len() < 31
+                                    || trimmed.starts_with("- Professional background:") && trimmed.len() < 30
+                                    || trimmed.starts_with("- Technical skills:") && trimmed.len() < 23
+                                    || trimmed.starts_with("- Hobbies:") && trimmed.len() < 14;
+                                if !trimmed.is_empty() && !is_placeholder {
+                                    user_parts.push(trimmed.to_string());
+                                }
+                            }
+                            if !user_parts.is_empty() {
+                                system_context.push_str("## 用户档案\n");
+                                for part in &user_parts {
+                                    system_context.push_str(&part);
+                                    system_context.push('\n');
+                                }
                                 system_context.push('\n');
+                                info!("📄 Loaded USER.md profile ({} entries)", user_parts.len());
+                            } else {
+                                info!("📄 USER.md loaded but no valid entries after filtering");
                             }
-                            system_context.push('\n');
-                            info!("📄 Loaded SOUL.md profile ({} entries)", soul_parts.len());
-                        } else {
-                            info!("📄 SOUL.md loaded but no valid entries after filtering");
+                        }
+                        Err(e) => {
+                            warn!("📄 Failed to load USER.md: {}", e);
                         }
                     }
-                    Err(e) => {
-                        warn!("📄 Failed to load SOUL.md: {}", e);
-                    }
-                }
-            }
 
-            // 🆕 FIX (方案B): 对固定档案做硬截断（统一字符计数，已预扣前缀长度）
-            if !system_context.is_empty() {
-                let system_chars = system_context.chars().count();
-                if system_chars > system_context_budget {
-                    let suffix = "\n...（档案已精简）\n";
-                    let suffix_len = suffix.chars().count();
-                    let truncate_limit = system_context_budget.saturating_sub(suffix_len);
-                    
-                    let mut truncated = String::new();
-                    let mut char_count = 0;
-                    for ch in system_context.chars() {
-                        if char_count >= truncate_limit {
-                            break;
+                    // Read SOUL.md
+                    match storage.read_entries(beebotos_agents::memory::MemoryFileType::Soul, None).await {
+                        Ok(entries) => {
+                            let mut soul_parts = Vec::new();
+                            for entry in entries {
+                                let trimmed = entry.content.trim();
+                                let is_placeholder = trimmed.contains("Helpful and friendly")
+                                    && trimmed.len() < 30
+                                    || trimmed.starts_with("- Professional but approachable") && trimmed.len() < 35
+                                    || trimmed.starts_with("- Detail-oriented") && trimmed.len() < 20
+                                    || trimmed.starts_with("- Clear and concise") && trimmed.len() < 22
+                                    || trimmed.starts_with("- Use examples when helpful") && trimmed.len() < 30
+                                    || trimmed.starts_with("- Ask clarifying questions when needed") && trimmed.len() < 42
+                                    || trimmed.starts_with("- Respect user privacy") && trimmed.len() < 25
+                                    || trimmed.starts_with("- Decline harmful requests") && trimmed.len() < 30
+                                    || trimmed.starts_with("- Be honest about limitations") && trimmed.len() < 32;
+                                if !trimmed.is_empty() && !is_placeholder {
+                                    soul_parts.push(trimmed.to_string());
+                                }
+                            }
+                            if !soul_parts.is_empty() {
+                                system_context.push_str("## AI 人格设定\n");
+                                for part in &soul_parts {
+                                    system_context.push_str(&part);
+                                    system_context.push('\n');
+                                }
+                                system_context.push('\n');
+                                info!("📄 Loaded SOUL.md profile ({} entries)", soul_parts.len());
+                            } else {
+                                info!("📄 SOUL.md loaded but no valid entries after filtering");
+                            }
                         }
-                        truncated.push(ch);
-                        char_count += 1;
+                        Err(e) => {
+                            warn!("📄 Failed to load SOUL.md: {}", e);
+                        }
                     }
-                    truncated.push_str(suffix);
-                    system_context = truncated;
-                    
-                    debug_assert!(
-                        system_context.chars().count() <= system_context_budget,
-                        "System context truncation failed: {} > {}",
-                        system_context.chars().count(),
-                        system_context_budget
-                    );
-                    info!("📄 System context truncated to {} chars (budget={})", system_context.chars().count(), system_budget);
                 }
-                memory_context.push_str(system_prefix);
-                memory_context.push_str(&system_context);
-            }
+
+                // 🆕 FIX (方案B): 对固定档案做硬截断（统一字符计数，已预扣前缀长度）
+                if !system_context.is_empty() {
+                    let system_chars = system_context.chars().count();
+                    if system_chars > system_context_budget {
+                        let suffix = "\n...（档案已精简）\n";
+                        let suffix_len = suffix.chars().count();
+                        let truncate_limit = system_context_budget.saturating_sub(suffix_len);
+                        
+                        let mut truncated = String::new();
+                        let mut char_count = 0;
+                        for ch in system_context.chars() {
+                            if char_count >= truncate_limit {
+                                break;
+                            }
+                            truncated.push(ch);
+                            char_count += 1;
+                        }
+                        truncated.push_str(suffix);
+                        system_context = truncated;
+                        
+                        debug_assert!(
+                            system_context.chars().count() <= system_context_budget,
+                            "System context truncation failed: {} > {}",
+                            system_context.chars().count(),
+                            system_context_budget
+                        );
+                        info!("📄 System context truncated to {} chars (budget={})", system_context.chars().count(), system_budget);
+                    }
+                    memory_context.push_str(system_prefix);
+                    memory_context.push_str(&system_context);
+                }
+            } // end if system_budget > 0
 
             match memory.search(content, search_limit).await {
                 Ok(results) if !results.is_empty() => {
@@ -1037,10 +1624,10 @@ impl MessageProcessor {
         }
         
         // 🆕 FIX: 统一注入 skill prompt（无论 memory_system 是否存在）
-        if let Some((ref skill_name, _, ref skill_prompt)) = skill_match {
+        if let Some((_, ref skill_name, _, ref skill_prompt)) = skill_match {
             if !skill_prompt.is_empty() {
                 let injection = format!(
-                    "\n\n[系统提示：你当前正在使用 {} 技能处理此请求。请遵循以下专业指引]\n{}",
+                    "\n\n[{}]\n{}",
                     skill_name, skill_prompt
                 );
                 memory_context.push_str(&injection);
@@ -1067,7 +1654,7 @@ impl MessageProcessor {
         &self,
         message: &Message,
         history: &[SessionMessage],
-        images: &[ProcessedImage],
+        _images: &[ProcessedImage],
         memory_context: &str,
     ) -> Result<String, GatewayError> {
         // 构建包含历史和记忆的提示
@@ -1304,6 +1891,56 @@ impl MessageProcessor {
             count += 1;
         }
         result
+    }
+
+    /// 🆕 FIX: Fetch real-time weather data from wttr.in (free, no API key required)
+    async fn fetch_weather_data(city: &str) -> Option<String> {
+        let url = format!("https://wttr.in/{}?format=%C|%t|%h|%w|%p", city);
+        match reqwest::get(&url).await {
+            Ok(resp) if resp.status().is_success() => {
+                match resp.text().await {
+                    Ok(text) => {
+                        let trimmed = text.trim();
+                        if !trimmed.is_empty() && !trimmed.contains("Unknown location") {
+                            info!("🌤️ Weather data fetched for {}: {}", city, trimmed);
+                            return Some(trimmed.to_string());
+                        }
+                    }
+                    Err(e) => warn!("Failed to read weather response: {}", e),
+                }
+            }
+            Ok(resp) => warn!("Weather API returned status: {}", resp.status()),
+            Err(e) => warn!("Weather API request failed: {}", e),
+        }
+        None
+    }
+
+    /// 🆕 FIX: Extract city name from a weather query (e.g. "深圳天气怎么样" -> "深圳")
+    fn extract_city_from_weather_query(query: &str) -> Option<String> {
+        // Match patterns like "XX市天气", "XX天气", "今天XX天气"
+        let re = Regex::new(r"今天?的?(.*?)(?:市)?(?:的)?天气").ok()?;
+        if let Some(cap) = re.captures(query) {
+            if let Some(city) = cap.get(1) {
+                let city = city.as_str().trim();
+                if !city.is_empty() {
+                    return Some(city.to_string());
+                }
+            }
+        }
+        // Fallback: try to find city names from a common list
+        let common_cities = [
+            "北京", "上海", "广州", "深圳", "杭州", "南京", "成都", "重庆", "武汉", "西安",
+            "天津", "苏州", "长沙", "郑州", "沈阳", "青岛", "宁波", "东莞", "无锡", "佛山",
+            "合肥", "大连", "福州", "厦门", "哈尔滨", "济南", "温州", "南宁", "长春", "泉州",
+            "石家庄", "贵阳", "南昌", "金华", "常州", "嘉兴", "珠海", "惠州", "中山", "江门",
+            "兰州", "海口", "三亚", "乌鲁木齐", "呼和浩特", "银川", "西宁", "拉萨", "昆明", "太原",
+        ];
+        for city in &common_cities {
+            if query.contains(city) {
+                return Some(city.to_string());
+            }
+        }
+        None
     }
 
     /// 🆕 FIX: 评估查询复杂度

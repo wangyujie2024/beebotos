@@ -22,6 +22,7 @@ use crate::task::{Artifact, Task, TaskResult, TaskType};
 use crate::{
     a2a, communication, events, mcp, queue, skills, state_manager, types, wallet, AgentConfig,
 };
+use crate::skills::composition::{InputMapping, PipelineStep, SkillPipeline};
 
 pub struct Agent {
     pub(crate) config: AgentConfig,
@@ -55,6 +56,10 @@ pub struct Agent {
     // 🆕 FIX: Hold the current plan's original user goal so skill matching can use
     // domain keywords (e.g. "旅游") even when step descriptions are generic English.
     pub(crate) current_plan_goal: Arc<RwLock<Option<String>>>,
+    // 🆕 FIX: Global skill catalog injected into LLM system prompt
+    pub(crate) skill_catalog: Option<String>,
+    // 🟢 P1 FIX: Workflow registry for workflow execution tasks
+    pub(crate) workflow_registry: Option<Arc<crate::workflow::WorkflowRegistry>>,
 }
 
 impl Agent {
@@ -85,7 +90,30 @@ impl Agent {
             llm_response_cache: Arc::new(RwLock::new(HashMap::new())),
             // 🆕 FIX: Initialize current plan goal
             current_plan_goal: Arc::new(RwLock::new(None)),
+            // 🆕 FIX: Initialize skill catalog
+            skill_catalog: None,
+            // 🟢 P1 FIX: Initialize workflow registry as None
+            workflow_registry: None,
         }
+    }
+
+    /// Spawn a sub-agent with shared infrastructure.
+    /// The sub-agent inherits kernel, LLM, skill registry, wallet, memory from the parent.
+    pub fn spawn_sub_agent(&self, mut config: AgentConfig) -> Result<Agent, AgentError> {
+        config.id = format!("{}-sub-{}", self.config.id, uuid::Uuid::new_v4());
+        let mut child = Agent::new(config);
+        // Share parent's infrastructure
+        child.kernel = self.kernel.clone();
+        child.llm_interface = self.llm_interface.clone();
+        child.skill_registry = self.skill_registry.clone();
+        child.wallet = self.wallet.clone();
+        child.memory_system = self.memory_system.clone();
+        child.event_bus = self.event_bus.clone();
+        child.outbound_router = self.outbound_router.clone();
+        child.queue_manager = self.queue_manager.clone();
+        child.workflow_registry = self.workflow_registry.clone();
+        info!("Spawned sub-agent {} from parent {}", child.config.id, self.config.id);
+        Ok(child)
     }
 
     pub fn with_a2a(mut self, client: a2a::A2AClient) -> Self {
@@ -254,6 +282,74 @@ impl Agent {
         self.has_planning_engine() && self.has_plan_executor()
     }
 
+    /// 🆕 P2 FIX: Auto-detect multi-step intent and build a SkillPipeline
+    ///
+    /// Scans the user message for sequencing keywords (先/再/然后/first/then)
+    /// and explicit skill references. If 2+ known skills are found in sequence,
+    /// returns a `SkillPipeline` that chains them with PassThrough mapping.
+    pub async fn try_build_auto_pipeline(&self, message: &str) -> Option<SkillPipeline> {
+        let registry = self.skill_registry.as_ref()?;
+        let skills = registry.list_enabled().await;
+        if skills.len() < 2 {
+            return None;
+        }
+
+        let lower_msg = message.to_lowercase();
+
+        // Sequencing keywords: Chinese and English
+        let has_sequence_indicator =
+            (lower_msg.contains("先") || lower_msg.contains("首先") || lower_msg.contains("first"))
+            && (lower_msg.contains("再") || lower_msg.contains("然后") || lower_msg.contains("接着") || lower_msg.contains("最后")
+            || lower_msg.contains("then") || lower_msg.contains("next") || lower_msg.contains("after"));
+
+        let has_pipeline_keywords = lower_msg.contains("pipeline")
+            || lower_msg.contains("chain")
+            || lower_msg.contains("流水线")
+            || lower_msg.contains("串联");
+
+        if !has_sequence_indicator && !has_pipeline_keywords {
+            return None;
+        }
+
+        // Find all skill references in the message, in order of appearance
+        let mut matched_skills: Vec<(usize, String)> = Vec::new();
+        for skill in &skills {
+            let skill_name_lower = skill.skill.name.to_lowercase();
+            let skill_id_lower = skill.skill.id.to_lowercase();
+
+            // Search for skill name or ID in message
+            if let Some(pos) = lower_msg.find(&skill_name_lower) {
+                matched_skills.push((pos, skill.skill.id.clone()));
+            } else if let Some(pos) = lower_msg.find(&skill_id_lower) {
+                matched_skills.push((pos, skill.skill.id.clone()));
+            }
+        }
+
+        // Deduplicate and sort by position in message
+        matched_skills.sort_by_key(|(pos, _id)| *pos);
+        matched_skills.dedup_by(|a, b| a.1 == b.1);
+
+        if matched_skills.len() < 2 {
+            return None;
+        }
+
+        let steps: Vec<PipelineStep> = matched_skills
+            .into_iter()
+            .map(|(_pos, skill_id)| PipelineStep {
+                skill_id,
+                input_mapping: InputMapping::PassThrough,
+                output_schema: None,
+            })
+            .collect();
+
+        info!(
+            "Auto-pipeline built with {} skills for message: {}",
+            steps.len(),
+            message.chars().take(60).collect::<String>()
+        );
+        Some(SkillPipeline::new(steps))
+    }
+
     // 🆕 DEVICE FIX: Device automation methods
 
     /// Set device for automation
@@ -288,6 +384,111 @@ impl Agent {
     /// 🟢 P1 FIX: Check if agent has memory system configured
     pub fn has_memory_system(&self) -> bool {
         self.memory_system.is_some()
+    }
+
+    /// 🆕 FIX: Set skill catalog for global LLM context injection
+    pub fn with_skill_catalog(mut self, catalog: impl Into<String>) -> Self {
+        self.skill_catalog = Some(catalog.into());
+        self
+    }
+
+    /// 🟢 P1 FIX: Attach a workflow registry for workflow execution tasks
+    pub fn with_workflow_registry(mut self, registry: Arc<crate::workflow::WorkflowRegistry>) -> Self {
+        self.workflow_registry = Some(registry);
+        self
+    }
+
+    /// 🆕 FIX: Inject skill catalog into message list if configured.
+    /// Avoids duplicate injection if the first message already looks like a catalog.
+    fn inject_skill_catalog(&self, messages: Vec<communication::Message>) -> Vec<communication::Message> {
+        if let Some(ref catalog) = self.skill_catalog {
+            // Check if catalog is already present (first message contains the catalog header)
+            if messages.first().map(|m| m.content.contains("You have access to the following skills")).unwrap_or(false) {
+                return messages;
+            }
+            let mut result = vec![communication::Message::new(
+                uuid::Uuid::new_v4(),
+                communication::PlatformType::Custom,
+                format!(
+                    "[System Context] You have access to the following skills. \
+RULES: (1) If a skill matches the user request, reply ONLY with SKILL:<skill_id> and nothing else. \
+(2) If NO skill matches, answer directly from general knowledge. \
+(3) NEVER analyze, list, or mention available skills in your reply. \
+(4) NEVER start with '用户问的是', '查看可用的skills', '这是一个关于', '但是' or similar meta-commentary.\n\n{}",
+                    catalog
+                ),
+            )];
+            result.extend(messages);
+            result
+        } else {
+            messages
+        }
+    }
+
+    /// Clean up LLM responses that contain thinking/process analysis instead of direct answers.
+    fn cleanup_thinking_process(response: &str) -> String {
+        let response = response.trim();
+        if response.is_empty() {
+            return response.to_string();
+        }
+        // If response starts with known thinking prefixes, try to extract actual answer
+        let thinking_prefixes = [
+            "用户问的是",
+            "用户询问的是",
+            "用户想知道",
+            "用户的问题是",
+            "查看可用的skills",
+            "让我看看可用的",
+            "看看可用的技能",
+            "查看可用技能",
+            "这是一个关于",
+            "这是关于",
+            "但是，",
+            "但是 ",
+            "不过，",
+            "系统提示我",
+            "我需要",
+            "我来分析",
+            "让我分析一下",
+            "首先，",
+            "第一步",
+            "根据系统提示",
+            "根据要求",
+            "根据可用技能",
+        ];
+        let thinking_keywords = [
+            "用户问的是", "用户询问的是", "用户想知道", "查看可用的skills",
+            "让我看看可用的", "看看可用的技能", "查看可用技能", "可用的技能列表",
+            "skill 列表", "技能列表", "不属于需要调用专门skill",
+        ];
+        // Detect if response is mostly analysis: starts with thinking prefix OR contains multiple thinking keywords
+        let starts_with_thinking = thinking_prefixes.iter().any(|p| response.starts_with(p));
+        let thinking_keyword_count = thinking_keywords.iter().filter(|k| response.contains(**k)).count();
+        let is_pure_analysis = starts_with_thinking
+            || thinking_keyword_count >= 2
+            || (response.contains("用户") && response.contains("skill") && response.len() > 200);
+        if is_pure_analysis {
+            // Try to find any sentence that looks like an actual answer (not starting with thinking prefixes)
+            for line in response.lines() {
+                let trimmed = line.trim();
+                if trimmed.len() > 10
+                    && !thinking_prefixes.iter().any(|p| trimmed.starts_with(p))
+                    && !trimmed.starts_with("-")
+                    && !trimmed.starts_with("•")
+                    && !trimmed.starts_with("【")
+                    && !trimmed.starts_with("[")
+                {
+                    // Verify this line doesn't contain heavy thinking keywords
+                    let has_thinking = thinking_keywords.iter().any(|k| trimmed.contains(*k));
+                    if !has_thinking {
+                        return trimmed.to_string();
+                    }
+                }
+            }
+            // Fallback: return a generic message encouraging rephrasing
+            return "抱歉，我暂时无法准确回答这个问题。您可以换个方式描述您的需求，我会尽力帮助您。".to_string();
+        }
+        response.to_string()
     }
 
     /// Connect to device (if configured)
@@ -395,6 +596,8 @@ impl Agent {
             // 🆕 DEVICE FIX: Handle device automation task types
             TaskType::DeviceAutomation => self.handle_device_automation_task(&task).await,
             TaskType::AppLifecycle => self.handle_app_lifecycle_task(&task).await,
+            // 🟢 P1 FIX: Handle workflow execution tasks
+            TaskType::WorkflowExecution => self.handle_workflow_task(&task).await,
             TaskType::Custom(type_name) => {
                 // 🆕 PLANNING FIX: Check if complex task needs planning
                 if self.is_planning_ready() && self.should_use_planning(&task).await {
@@ -497,13 +700,31 @@ impl Agent {
             return self.execute_with_planning(task.clone()).await;
         }
 
+        // 🆕 P2 FIX: Auto-pipeline detection for multi-step skill chaining
+        if let Some(pipeline) = self.try_build_auto_pipeline(&message_text).await {
+            info!("🔄 Auto-pipeline detected for task {}, executing {} steps", task.id, pipeline.steps.len());
+            match pipeline.execute(&message_text, self).await {
+                Ok(result) => {
+                    return Ok((result.clone(), vec![Artifact {
+                        id: task.id.clone(),
+                        artifact_type: "pipeline_result".to_string(),
+                        content: result.as_bytes().to_vec(),
+                        mime_type: "text/plain".to_string(),
+                    }]));
+                }
+                Err(e) => {
+                    warn!("Auto-pipeline execution failed for task {}: {}, falling back to LLM", task.id, e);
+                }
+            }
+        }
+
         let llm = self
             .llm_interface
             .as_ref()
             .ok_or_else(|| AgentError::InvalidConfig("LLM interface not configured".into()))?;
 
         // Parse structured input JSON to extract current message and context metadata
-        let (input_text, mut extra_params, image_urls, history, gateway_memory_context) = if let Ok(json) = serde_json::from_str::<serde_json::Value>(&task.input) {
+        let (input_text, mut extra_params, image_urls, history, gateway_memory_context, weather_data) = if let Ok(json) = serde_json::from_str::<serde_json::Value>(&task.input) {
             let message = json.get("message")
                 .and_then(|m| m.as_str())
                 .unwrap_or(&task.input)
@@ -540,9 +761,12 @@ impl Agent {
             let memory_context = json.get("memory_context")
                 .and_then(|m| m.as_str())
                 .map(|s| s.to_string());
-            (message, params, images, history, memory_context)
+            let weather_data = json.get("weather_data")
+                .and_then(|m| m.as_str())
+                .map(|s| s.to_string());
+            (message, params, images, history, memory_context, weather_data)
         } else {
-            (task.input.clone(), task.parameters.clone(), Vec::new(), Vec::new(), None)
+            (task.input.clone(), task.parameters.clone(), Vec::new(), Vec::new(), None, None)
         };
 
         let mut metadata = std::collections::HashMap::new();
@@ -581,6 +805,26 @@ impl Agent {
                 self.config.description
             )
         };
+
+        // 🆕 FIX: Append skill-catalog trigger instruction to persona so the LLM
+        // knows to emit SKILL:<id> when the user request matches a registered skill.
+        // Only add this instruction when NO skill has been matched yet (skill_hint is None).
+        // If skill_hint already exists, the gateway has already matched a skill; the agent
+        // should execute it directly without asking the LLM to emit SKILL:<id>.
+        let is_generative_skill = skill_hint.as_ref().map_or(false, |hint| {
+            let name = hint.get("name").and_then(|v| v.as_str()).unwrap_or("").to_lowercase();
+            name.contains("travel") && name.contains("planner")
+        });
+        let persona = if self.skill_catalog.is_some() && skill_hint.is_none() && !is_generative_skill {
+            format!(
+                "{}\n\n[系统指令] 当用户请求与某个 skill 匹配时，请只回复 SKILL:<skill_id>，不要提供其他解释。",
+                persona
+            )
+        } else {
+            persona
+        };
+        // 🆕 FIX: Force direct answer — Kimi k2.6 tends to explain system instructions
+        let persona = format!("{}\n\n[强制规则] 直接回答用户问题，不要解释你收到了什么数据、什么技能指引或系统指令。禁止以\"用户问的是...\"、\"系统提示我...\"、\"我需要...\"开头。", persona);
         messages.push(communication::Message::new(
             uuid::Uuid::new_v4(),
             communication::PlatformType::Custom,
@@ -597,7 +841,9 @@ impl Agent {
                     format!("[系统提示：以下是该用户的历史记忆，回答时必须结合这些信息]\n{}", gateway_memory),
                 ));
             }
-        } else if let Some(ref memory) = self.memory_system {
+        }
+        // Weather data will be appended to the user message below instead of a separate system message
+        if let Some(ref memory) = self.memory_system {
             // Fallback: local search using ONLY input_text (never concatenate history — prevents self-referential duplication)
             let query = input_text.clone();
 
@@ -671,16 +917,29 @@ impl Agent {
             ));
         }
 
-        // Add current user message
+        // Add current user message (with weather data appended if available)
+        let user_message = if let Some(ref weather) = weather_data {
+            if !weather.is_empty() {
+                format!("用户: {}\n\n[参考数据] 实时天气：{}\n请基于以上数据回答。", input_text, weather)
+            } else {
+                format!("用户: {}", input_text)
+            }
+        } else {
+            format!("用户: {}", input_text)
+        };
         messages.push(communication::Message::with_metadata(
             uuid::Uuid::new_v4(),
             communication::PlatformType::Custom,
-            format!("用户: {}", input_text),
+            user_message,
             metadata,
         ));
 
-        // 🟢 P2 FIX: Dynamic max_tokens based on message complexity
-        let dynamic_max_tokens = if input_text.chars().count() < 30 {
+        // 🟢 P2 FIX: Dynamic max_tokens based on message complexity and skill type
+        // Generative skills (travel_planner, etc.) need more tokens for rich output,
+        // but we cap at 1200 to keep response times under ~60s.
+        let dynamic_max_tokens = if is_generative_skill {
+            "1200".to_string()
+        } else if input_text.chars().count() < 30 {
             "300".to_string()
         } else if input_text.chars().count() < 100 {
             "600".to_string()
@@ -708,10 +967,54 @@ impl Agent {
             drop(cache);
         }
 
+        let messages = self.inject_skill_catalog(messages);
+        info!("handle_llm_task: messages count after inject = {}, skill_catalog set = {}", messages.len(), self.skill_catalog.is_some());
+
         let response = llm
             .call_llm(messages, Some(extra_params))
             .await
             .map_err(|e| AgentError::Execution(format!("LLM call failed: {}", e)))?;
+
+        info!("handle_llm_task: LLM raw response (first 200 chars) = {}", &response.chars().take(200).collect::<String>());
+
+        // 🆕 FIX: Guard against empty LLM responses to avoid corrupting conversation history
+        if response.trim().is_empty() {
+            warn!("LLM returned empty response; skipping cache/history storage");
+            return Ok(("抱歉，AI 暂时无法生成回复，请稍后再试。".to_string(), vec![]));
+        }
+
+        // 🆕 FIX: If the LLM response is a skill trigger (e.g. "SKILL:hello_world"),
+        // look up the skill in the registry and execute it instead of returning raw text.
+        if let Some(skill_id) = response.trim().strip_prefix("SKILL:") {
+            // 🛡️ FIX: Parse only the skill ID before any parameters (| or whitespace)
+            let skill_id = skill_id.trim().split(|c: char| c == '|' || c.is_whitespace()).next().unwrap_or("").trim();
+            if skill_id.is_empty() {
+                warn!("LLM returned empty skill ID after parsing: {}", response.trim());
+            } else {
+                info!("LLM requested skill execution: {}", skill_id);
+                if let Some(ref registry) = self.skill_registry {
+                    if let Some(registered) = registry.get(skill_id).await {
+                        let skill_result = self.execute_registered_skill(&registered, &input_text, None).await;
+                        match skill_result {
+                            Ok(result) => {
+                                let _ = registry.record_usage(skill_id).await;
+                                return Ok((result.output, vec![]));
+                            }
+                            Err(e) => {
+                                warn!("Skill execution for '{}' failed: {}", skill_id, e);
+                                return Ok((format!("执行 skill '{}' 时出错: {}", skill_id, e), vec![]));
+                            }
+                        }
+                    } else {
+                        warn!("LLM requested unknown skill: {}", skill_id);
+                        return Ok((format!("抱歉，找不到 skill '{}'。", skill_id), vec![]));
+                    }
+                }
+            }
+        }
+
+        // 🆕 FIX: Clean up thinking process from LLM response
+        let response = Self::cleanup_thinking_process(&response);
 
         // 🟢 P2 FIX: Store response in cache
         if let Some(ref key) = cache_key {
@@ -733,6 +1036,82 @@ impl Agent {
         Ok((response, vec![]))
     }
 
+    /// Check whether a skill directory contains executable scripts
+    async fn has_scripts_in_dir(&self, dir: &std::path::Path) -> bool {
+        let mut entries = match tokio::fs::read_dir(dir).await {
+            Ok(e) => e,
+            Err(_) => return false,
+        };
+        while let Ok(Some(entry)) = entries.next_entry().await {
+            if let Some(ext) = entry.path().extension().and_then(|e| e.to_str()) {
+                if matches!(ext, "py" | "js" | "sh" | "ts") {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    /// 🟢 P1 FIX: Public API to execute a skill by ID (used by composition, SkillCallTool, and external callers)
+    pub async fn execute_skill_by_id(
+        &self,
+        skill_id: &str,
+        input: &str,
+        parameters: Option<HashMap<String, String>>,
+    ) -> Result<skills::executor::SkillExecutionResult, AgentError> {
+        let registry = self
+            .skill_registry
+            .as_ref()
+            .ok_or_else(|| AgentError::InvalidConfig("Skill registry not configured".into()))?;
+
+        let registered_skill = registry
+            .get(skill_id).await
+            .ok_or_else(|| AgentError::SkillNotFound(skill_id.to_string()))?;
+
+        let result = self.execute_registered_skill(&registered_skill, input, parameters).await?;
+        let _ = registry.record_usage(skill_id).await;
+        Ok(result)
+    }
+
+    /// 🟢 P1 FIX: Internal helper for composition modules to call LLM with a simple prompt
+    pub(crate) async fn call_llm_prompt(
+        &self,
+        prompt: impl Into<String>,
+        system: Option<impl Into<String>>,
+    ) -> Result<String, AgentError> {
+        let llm = self.llm_interface.as_ref()
+            .ok_or_else(|| AgentError::InvalidConfig("LLM interface not configured".into()))?;
+        let mut messages: Vec<communication::Message> = Vec::new();
+        if let Some(sys) = system {
+            messages.push(communication::Message::new(
+                uuid::Uuid::new_v4(),
+                communication::PlatformType::Custom,
+                sys.into(),
+            ));
+        }
+        messages.push(communication::Message::new(
+            uuid::Uuid::new_v4(),
+            communication::PlatformType::Custom,
+            prompt.into(),
+        ));
+        llm.call_llm(self.inject_skill_catalog(messages), None).await
+            .map_err(|e| AgentError::Execution(format!("LLM call failed: {}", e)))
+    }
+
+    /// 🟢 P2 FIX: Judge a condition using LLM (used by LlmJudge in conditional/loop)
+    pub(crate) async fn judge_condition(&self, prompt: &str, output: &str) -> Result<bool, AgentError> {
+        let full_prompt = format!(
+            "请根据以下条件判断给定的输出是否满足要求。\n\n条件: {}\n输出: {}\n\n如果满足条件，只回答 'true'；如果不满足，只回答 'false'。不要解释。",
+            prompt, output
+        );
+        let result = self.call_llm_prompt(
+            full_prompt,
+            Some::<String>("你是一个严谨的条件判断助手。只输出 true 或 false。".into())
+        ).await?;
+        let trimmed = result.trim().to_lowercase();
+        Ok(trimmed.contains("true") || trimmed.starts_with("是") || trimmed.starts_with("yes"))
+    }
+
     /// 🟢 P2 FIX: Helper to execute a registered skill (shared by handle_skill_task and planning)
     async fn execute_registered_skill(
         &self,
@@ -748,11 +1127,10 @@ impl Agent {
         let start_time = std::time::Instant::now();
         
         // 🆕 FIX: Skip WASM attempt for markdown-based builtin skills that have no WASM binary.
-        // This avoids pointless fs::read calls and confusing "WASM unavailable" logs.
         let wasm_path_empty = registered_skill.skill.wasm_path.as_os_str().is_empty();
         
-        // 🆕 FIX: Try WASM execution if kernel and wasm_engine are available
-        let _wasm_attempted = if !wasm_path_empty {
+        // 1. Try WASM execution if kernel and wasm_engine are available
+        if !wasm_path_empty {
             if let Some(kernel) = self.kernel.as_ref() {
                 if let Some(engine) = kernel.wasm_engine() {
                     let wasm_bytes = tokio::fs::read(&registered_skill.skill.wasm_path).await;
@@ -794,23 +1172,54 @@ impl Agent {
                         }
                     }
                 }
-                true
-            } else {
-                false
             }
-        } else {
-            false
-        };
-        
-        // 🆕 FIX: If WASM execution is unavailable or fails, fall back to LLM with skill description as system prompt
-        if !wasm_path_empty {
             info!("Skill '{}' WASM unavailable or failed, falling back to LLM execution", registered_skill.skill.name);
-        } else {
-            info!("Skill '{}' has no WASM binary, using LLM fallback", registered_skill.skill.name);
         }
         
+        // 2. Knowledge / Code skill execution via ReAct executor
+        // 🆕 FIX: Generative skills (e.g. travel_planner) do not need ReAct tools;
+        // direct LLM generation is faster and sufficient.
+        let is_generative_skill = registered_skill.skill.name.to_lowercase().contains("travel")
+            && registered_skill.skill.name.to_lowercase().contains("planner");
+
+        let source = &registered_skill.skill.source_path;
+        if !is_generative_skill && !source.as_os_str().is_empty() {
+            if let Some(llm) = &self.llm_interface {
+                let has_scripts = if source.is_dir() {
+                    self.has_scripts_in_dir(source).await
+                } else {
+                    false
+                };
+
+                let result = if has_scripts {
+                    info!("Executing code skill '{}' via ReAct with tools", registered_skill.skill.name);
+                    let executor = skills::CodeSkillExecutor::new(llm.clone());
+                    executor.execute(source, input).await
+                } else {
+                    info!("Executing knowledge skill '{}' via ReAct with tools", registered_skill.skill.name);
+                    let executor = skills::KnowledgeSkillExecutor::new(llm.clone());
+                    executor.execute(source, input).await
+                };
+
+                return match result {
+                    Ok(output) => Ok(skills::executor::SkillExecutionResult {
+                        task_id: registered_skill.skill.id.clone(),
+                        success: true,
+                        output,
+                        structured_output: None,
+                        execution_time_ms: start_time.elapsed().as_millis() as u64,
+                    }),
+                    Err(e) => {
+                        warn!("ReAct execution for skill '{}' failed: {}", registered_skill.skill.name, e);
+                        Err(e)
+                    }
+                };
+            }
+        }
+        
+        // 3. Legacy LLM fallback (source_path empty or no llm_interface)
+        info!("Skill '{}' using legacy LLM fallback", registered_skill.skill.name);
         if let Some(llm) = &self.llm_interface {
-            // 🆕 FIX: Use skill's custom prompt_template if available, otherwise fall back to generic template
             let manifest = &registered_skill.skill.manifest;
             let system_prompt = if !manifest.prompt_template.is_empty() {
                 let mut prompt = manifest.prompt_template.clone();
@@ -842,7 +1251,7 @@ impl Agent {
                 ),
             ];
             
-            match llm.call_llm(messages, None).await {
+            match llm.call_llm(self.inject_skill_catalog(messages), None).await {
                 Ok(response) => {
                     return Ok(skills::executor::SkillExecutionResult {
                         task_id: registered_skill.skill.id.clone(),
@@ -978,7 +1387,7 @@ impl Agent {
                 prompt,
             )];
 
-            llm.call_llm(messages, None)
+            llm.call_llm(self.inject_skill_catalog(messages), None)
                 .await
                 .map_err(|e| AgentError::Execution(format!("LLM processing failed: {}", e)))?
         };
@@ -1683,7 +2092,7 @@ impl Agent {
                 step.description.clone(),
             ));
 
-            match llm.call_llm(messages, None).await {
+            match llm.call_llm(self.inject_skill_catalog(messages), None).await {
                 Ok(response) => Ok(ExecutionResult {
                     success: true,
                     data: Some(serde_json::json!({ "output": response })),
@@ -2090,6 +2499,69 @@ impl Agent {
         };
 
         Ok((result, vec![]))
+    }
+
+    /// 🟢 P1 FIX: Handle workflow execution tasks
+    pub async fn handle_workflow_task(&self, task: &Task) -> Result<(String, Vec<Artifact>), AgentError> {
+        let workflow_id = task
+            .parameters
+            .get("workflow_id")
+            .ok_or_else(|| AgentError::InvalidConfig("Missing 'workflow_id' parameter".into()))?;
+
+        let registry = self
+            .workflow_registry
+            .as_ref()
+            .ok_or_else(|| AgentError::InvalidConfig("Workflow registry not configured".into()))?;
+
+        let definition = registry
+            .get(workflow_id)
+            .ok_or_else(|| AgentError::SkillNotFound(format!("Workflow '{}' not found", workflow_id)))?
+            .clone();
+
+        let engine = crate::workflow::WorkflowEngine::new();
+        let instance = engine.execute(&definition, self, serde_json::Value::Null, None).await?;
+
+        let mut notification = String::new();
+        if definition.config.notify_on_complete {
+            let notify_prompt = format!(
+                "请生成一条简洁的工作流完成通知：工作流 '{}' 已执行完毕，状态：{}，共 {} 个步骤，完成度 {}%，耗时 {} 秒。",
+                workflow_id,
+                instance.status,
+                instance.step_states.len(),
+                instance.completion_pct(),
+                instance.duration_secs()
+            );
+            match self.call_llm_prompt(notify_prompt, Some::<String>(
+                "你是一个工作流通知助手，只生成简洁的完成通知消息，不超过两句话。".into()
+            )).await {
+                Ok(notify_text) => {
+                    info!("Workflow {} notification generated: {}", workflow_id, notify_text);
+                    notification = format!("\n\n📢 通知: {}", notify_text);
+                }
+                Err(e) => {
+                    warn!("Failed to generate notification for workflow {}: {}", workflow_id, e);
+                }
+            }
+        }
+
+        let result = format!(
+            "Workflow '{}' executed with status: {} ({} steps, {}% complete, {}s){}",
+            workflow_id,
+            instance.status,
+            instance.step_states.len(),
+            instance.completion_pct(),
+            instance.duration_secs(),
+            notification
+        );
+
+        let artifacts = vec![Artifact {
+            id: instance.id.clone(),
+            artifact_type: "workflow_instance".to_string(),
+            content: serde_json::to_vec_pretty(&instance).unwrap_or_default(),
+            mime_type: "application/json".to_string(),
+        }];
+
+        Ok((result, artifacts))
     }
 }
 

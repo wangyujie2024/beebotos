@@ -47,6 +47,9 @@ pub enum TaskType {
     /// 🆕 DEVICE FIX: App lifecycle management task
     #[serde(rename = "app_lifecycle")]
     AppLifecycle,
+    /// 🟢 P1 FIX: Workflow execution task
+    #[serde(rename = "workflow_execution")]
+    WorkflowExecution,
     /// Custom task type (fallback for extensibility)
     #[serde(rename = "custom")]
     Custom(String),
@@ -67,6 +70,7 @@ impl TaskType {
             TaskType::PlanAdaptation => "plan_adaptation",
             TaskType::DeviceAutomation => "device_automation",
             TaskType::AppLifecycle => "app_lifecycle",
+            TaskType::WorkflowExecution => "workflow_execution",
             TaskType::Custom(s) => s.as_str(),
         }
     }
@@ -85,6 +89,7 @@ impl TaskType {
             "plan_adaptation" => TaskType::PlanAdaptation,
             "device_automation" => TaskType::DeviceAutomation,
             "app_lifecycle" => TaskType::AppLifecycle,
+            "workflow_execution" => TaskType::WorkflowExecution,
             other => TaskType::Custom(other.to_string()),
         }
     }
@@ -110,6 +115,9 @@ impl std::str::FromStr for TaskType {
             "plan_creation" => TaskType::PlanCreation,
             "plan_execution" => TaskType::PlanExecution,
             "plan_adaptation" => TaskType::PlanAdaptation,
+            "device_automation" => TaskType::DeviceAutomation,
+            "app_lifecycle" => TaskType::AppLifecycle,
+            "workflow_execution" => TaskType::WorkflowExecution,
             other => TaskType::Custom(other.to_string()),
         })
     }

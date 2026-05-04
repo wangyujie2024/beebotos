@@ -51,12 +51,7 @@ pub async fn get_treasury(
 ) -> Result<Json<TreasuryResponse>, GatewayError> {
     require_any_role(&user, &["user", "admin"])?;
 
-    let wallet_service = state
-        .wallet_service
-        .as_ref()
-        .ok_or_else(|| GatewayError::service_unavailable("wallet", "Wallet service not initialized"))?;
-
-    let info = wallet_service
+    let info = state.wallet()?
         .get_wallet_info()
         .await
         .map_err(|e| GatewayError::agent(format!("Failed to get wallet info: {}", e)))?;
@@ -113,10 +108,7 @@ pub async fn transfer(
 ) -> Result<impl IntoResponse, GatewayError> {
     require_any_role(&user, &["admin"])?;
 
-    let wallet_service = state
-        .wallet_service
-        .as_ref()
-        .ok_or_else(|| GatewayError::service_unavailable("wallet", "Wallet service not initialized"))?;
+    let wallet_service = state.wallet()?;
 
     let to_address = parse_address(&req.to)?;
     let amount = req.amount.parse::<u128>()

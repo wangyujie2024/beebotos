@@ -82,6 +82,7 @@ mod tests {
             name: id.to_string(),
             version: Version::new(1, 0, 0),
             wasm_path: PathBuf::from("/dev/null/skill.wasm"),
+            source_path: PathBuf::from("/dev/null"),
             manifest: SkillManifest {
                 id: id.to_string(),
                 name: id.to_string(),
@@ -93,6 +94,8 @@ mod tests {
                 entry_point: "skill.wasm".to_string(),
                 license: "MIT".to_string(),
                 functions: vec![],
+                prompt_template: String::new(),
+                examples: String::new(),
             },
         }
     }

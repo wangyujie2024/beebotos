@@ -310,6 +310,39 @@ impl LLMClient {
         Ok(assistant_text)
     }
 
+    /// 🟢 P1 OPTIMIZE: One-shot chat that does NOT modify conversation context.
+    ///
+    /// Use this for stateless requests (e.g. skill command generation) to avoid
+    /// carrying heavy conversation history and inflating latency/token usage.
+    pub async fn chat_one_shot(&self, message: impl Into<String>) -> LLMResult<String> {
+        self.check_rate_limit()?;
+
+        let request = LLMRequest {
+            messages: vec![Message::user(message)],
+            config: self.config.clone(),
+        };
+
+        let start = std::time::Instant::now();
+        let response = self.provider.complete(request).await?;
+        let latency = start.elapsed();
+
+        {
+            let mut metrics = self.metrics.write().await;
+            metrics.total_requests += 1;
+            metrics.successful_requests += 1;
+            if let Some(usage) = &response.usage {
+                metrics.total_tokens += usage.total_tokens as u64;
+            }
+            metrics.total_latency_ms += latency.as_millis() as u64;
+        }
+
+        if let Some(choice) = response.choices.first() {
+            return Ok(choice.message.text_content());
+        }
+
+        Err(LLMError::Provider("Empty response".to_string()))
+    }
+
     /// Execute with current context
     ///
     /// ARCHITECTURE FIX: Enforces rate limiting before making request.
@@ -381,6 +414,75 @@ impl LLMClient {
         }
 
         Ok(results.join("\n"))
+    }
+
+    /// Chat with tool support in a multi-turn ReAct loop.
+    ///
+    /// Registers temporary tools for this conversation, sends the user message,
+    /// and automatically handles tool calls until the model returns a final answer
+    /// or max_rounds is reached.
+    pub async fn chat_with_tools_react(
+        &self,
+        user_message: impl Into<String>,
+        tool_handlers: Vec<Box<dyn ToolHandler>>,
+        max_rounds: usize,
+    ) -> LLMResult<String> {
+        let user_message: String = user_message.into();
+        let mut messages = self.context.read().await.clone();
+        messages.push(Message::user(user_message.clone()));
+
+        for _round in 0..max_rounds {
+            let mut request = LLMRequest {
+                messages: messages.clone(),
+                config: self.config.clone(),
+            };
+            request.config.tools = Some(
+                tool_handlers.iter().map(|t| t.definition()).collect()
+            );
+
+            let response = self.provider.complete(request).await?;
+
+            if let Some(choice) = response.choices.first() {
+                if let Some(tool_calls) = &choice.message.tool_calls {
+                    // Add assistant message with tool_calls to context
+                    messages.push(choice.message.clone());
+
+                    // Execute each tool call
+                    for tc in tool_calls {
+                        let result = if let Some(handler) = tool_handlers.iter().find(|h| {
+                            h.definition().function.name == tc.function.name
+                        }) {
+                            match handler.execute(&tc.function.arguments).await {
+                                Ok(r) => r,
+                                Err(e) => format!("Error: {}", e),
+                            }
+                        } else {
+                            format!("Error: Tool '{}' not found", tc.function.name)
+                        };
+
+                        messages.push(Message {
+                            role: Role::Tool,
+                            content: vec![Content::Text { text: result }],
+                            name: None,
+                            tool_calls: None,
+                            tool_call_id: Some(tc.id.clone()),
+                            reasoning_content: None,
+                        });
+                    }
+                    continue;
+                }
+
+                let text = choice.message.text_content();
+                {
+                    let mut ctx = self.context.write().await;
+                    ctx.push(Message::user(user_message.clone()));
+                    ctx.push(Message::assistant(&text));
+                }
+                return Ok(text);
+            }
+        }
+
+        Err(LLMError::Timeout)
     }
 
     /// Stream chat response

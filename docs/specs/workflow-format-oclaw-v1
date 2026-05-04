@@ -1,0 +1,173 @@
+
+OpenClaw 工作流是 声明式自动化任务的核心载体，通过结构化配置文件定义任务触发条件、执行逻辑与异常处理规则。其定义规则基于 JSON/YAML 语法，需严格遵循 OpenClaw 的 Schema 规范。以下为官方文档级别的核心规则说明（基于 2026 年 4 月最新版 OpenClaw 2.3+）：
+
+一、工作流基础结构
+所有工作流必须包含 4 个强制字段 和 2 个推荐字段：
+{
+  "name": "唯一标识符",
+  "description": "功能说明",
+  "triggers": [],       // 必填：触发条件
+  "steps": [],          // 必填：执行步骤
+  "version": "1.0.0",   // 推荐：语义化版本
+  "error_handler": {}   // 推荐：全局异常处理
+}
+
+关键约束
+name 字段：  
+  必须 全局唯一，仅允许小写字母、数字和中横线（a-z0-9-），禁止空格/中文/特殊符号。
+triggers 和 steps：  
+  至少定义一个触发器和一个步骤，否则工作流无法激活。
+
+二、触发器（Triggers）规则
+定义工作流何时启动，支持 3 类触发方式：
+
+定时触发（Cron）
+triggers:
+  type: "cron"
+    schedule: "0 8 * * *"  # 每天 8:00 触发（UTC+8）
+    timezone: "Asia/Shanghai"  # 必须显式指定时区
+
+语法要求：  
+  Cron 表达式必须符合 5 段式标准（分 时 日 月 周），不支持秒级精度。
+  时区必须使用 IANA 时区数据库名称（如 Asia/Shanghai），不可用 GMT+8。
+
+事件触发（Event）
+triggers:
+  type: "event"
+    channel: "feishu"       # 监听渠道
+    event_type: "message"   # 事件类型
+    filter: 
+      mentions: ["@bot"]    # 过滤条件（可选）
+
+关键限制：  
+  channel 必须是已配置的接入渠道（如 feishu/dingtalk/slack）。
+  filter 支持 正则匹配，但 禁止跨渠道事件关联（如飞书消息触发 Telegram 操作）。
+
+手动触发（Manual）
+triggers:
+  type: "manual"
+    allowed_users: ["admin"]  # 仅限指定用户
+
+安全规则：  
+  若未声明 allowed_users，默认仅限工作流创建者触发。
+  禁止设置 allowed_users: ["*"]（需通过 API 显式授权）。
+
+三、执行步骤（Steps）规则
+每个步骤代表一个原子操作，需严格定义 ID、技能、输入参数：
+
+基础结构
+{
+  "id": "fetch_data",
+  "skill": "web-scraper",
+  "input": {
+    "url": "https://example.com",
+    "selector": ".news-item"
+  },
+  "dependencies": ["previous_step_id"]  // 可选：依赖的前置步骤
+}
+
+关键规则
+（1）ID 命名规范
+必须全局唯一，且 仅允许小写字母、数字、下划线（a-z0-9_）。
+禁止使用保留字：input、output、error。
+
+（2）数据传递语法
+跨步骤引用：  
+  使用 {{ steps..output. }} 语法（必须严格匹配 Skill 输出字段）。  
+  示例："url": "{{ steps.get_url.output.target }}"。
+系统变量：  
+  {{ now }}：当前时间戳（ISO 8601 格式）。
+  {{ env.VAR_NAME }}：读取环境变量（需提前在 secrets.yaml 声明）。
+
+（3）条件执行
+steps:
+  id: "generate_report"
+    skill: "pdf-generator"
+    input: { ... }
+    condition: "{{ steps.validate_data.output.is_valid == true }}"
+
+条件表达式：  
+  必须返回布尔值，仅支持比较运算符（==, >, in），禁止逻辑运算符（&&, ||）。
+
+四、异常处理规则
+步骤级异常处理
+{
+  "id": "send_email",
+  "skill": "email-notify",
+  "input": { ... },
+  "on_error": {
+    "action": "retry",
+    "max_retries": 3,
+    "delay_seconds": 10,
+    "fallback": {
+      "skill": "slack-notify",
+      "input": { "text": "邮件发送失败: {{ error.message }}" }
+    }
+  }
+}
+
+action 可选值：  
+  retry（重试）、skip（跳过）、fail（终止流程）。
+fallback 限制：  
+  仅能调用 通知类 Skill（如 slack-notify），禁止执行数据修改操作。
+
+全局异常处理（error_handler）
+"error_handler": {
+  "step": "any",  // 可选: any | specific_step_id
+  "action": "fail",
+  "fallback": {
+    "skill": "log-error",
+    "input": { "message": "全局错误: {{ error.code }}" }
+  }
+}
+
+step: "any"：捕获 所有步骤的异常（默认行为）。
+step: ""：仅捕获指定步骤的异常。
+
+五、安全与校验规则
+强制校验项
+输入参数类型：  
+  Skill 的 input 字段必须与 Skill 定义的 parameters 类型匹配（如字符串/数字）。
+敏感操作限制：  
+  执行 rm、curl | bash 等命令时，必须显式声明 dangerous: true，否则会被安全沙箱拦截。
+
+工作流验证命令
+语法校验（不执行）
+openclaw workflow validate ./your_workflow.json
+
+模拟执行（仅输出步骤顺序）
+openclaw workflow dry-run ./your_workflow.json --simulate
+
+验证失败时：  
+  会明确提示 错误位置（如 steps.input.url: 未匹配正则表达式 ^https://）。
+
+六、高级特性规则
+循环执行
+steps:
+  id: "process_items"
+    skill: "data-processor"
+    input:
+      items: "{{ steps.fetch_data.output.list }}"
+    loop:
+      variable: "item"  # 当前迭代项
+      max_iterations: 50
+
+loop 限制：  
+  max_iterations 必须 ≤ 100（防无限循环）。
+  禁止嵌套循环（需拆分为多个工作流）。
+
+动态技能调用
+{
+  "id": "dynamic_call",
+  "skill": "{{ env.DYNAMIC_SKILL_NAME }}",
+  "input": { ... }
+}
+
+动态技能名：  
+  必须来自 环境变量或前置步骤输出，禁止硬编码变量名。
+
+七、官方文档参考
+完整 Schema 规范：  
+   OpenClaw 核心仓库的 workflow.schema.json（定义所有字段类型与约束）。
+
+

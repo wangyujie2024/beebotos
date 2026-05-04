@@ -28,10 +28,7 @@ pub async fn get_wallet_info(
     require_any_role(&user, &["user", "admin"])?;
 
     // 🟢 P1 FIX: Use WalletService instead of ChainService
-    let wallet_service = state
-        .wallet_service
-        .as_ref()
-        .ok_or_else(|| GatewayError::service_unavailable("wallet", "Wallet service not initialized"))?;
+    let wallet_service = state.wallet()?;
 
     let info = wallet_service
         .get_wallet_info()
@@ -60,10 +57,7 @@ pub async fn transfer(
 ) -> Result<impl IntoResponse, GatewayError> {
     require_any_role(&user, &["admin"])?;
 
-    let wallet_service = state
-        .wallet_service
-        .as_ref()
-        .ok_or_else(|| GatewayError::service_unavailable("wallet", "Wallet service not initialized"))?;
+    let wallet_service = state.wallet()?;
 
     // Parse address
     let to_address = parse_address(&req.to)?;
@@ -102,10 +96,7 @@ pub async fn register_agent_identity(
     require_any_role(&user, &["user", "admin"])?;
 
     // 🟢 P1 FIX: Use IdentityService instead of ChainService
-    let identity_service = state
-        .identity_service
-        .as_ref()
-        .ok_or_else(|| GatewayError::service_unavailable("identity", "Identity service not initialized"))?;
+    let identity_service = state.identity()?;
 
     // Parse public key
     let public_key = parse_hex_32(&req.public_key)?;
@@ -142,12 +133,7 @@ pub async fn get_agent_identity(
     _user: AuthUser,
     Path(agent_id): Path<String>,
 ) -> Result<Json<serde_json::Value>, GatewayError> {
-    let identity_service = state
-        .identity_service
-        .as_ref()
-        .ok_or_else(|| GatewayError::service_unavailable("identity", "Identity service not initialized"))?;
-
-    let info = identity_service
+    let info = state.identity()?
         .get_identity(&agent_id)
         .await
         .map_err(|e| match e {
@@ -170,12 +156,7 @@ pub async fn has_agent_identity(
     _user: AuthUser,
     Path(agent_id): Path<String>,
 ) -> Result<Json<serde_json::Value>, GatewayError> {
-    let identity_service = state
-        .identity_service
-        .as_ref()
-        .ok_or_else(|| GatewayError::service_unavailable("identity", "Identity service not initialized"))?;
-
-    let has_identity = identity_service
+    let has_identity = state.identity()?
         .has_identity(&agent_id)
         .await
         .map_err(|e| GatewayError::agent(format!("Failed to check identity: {}", e)))?;
@@ -205,10 +186,7 @@ pub async fn create_dao_proposal(
     require_any_role(&user, &["user", "admin"])?;
 
     // 🟢 P1 FIX: Use DaoService instead of ChainService
-    let dao_service = state
-        .dao_service
-        .as_ref()
-        .ok_or_else(|| GatewayError::service_unavailable("dao", "DAO service not initialized"))?;
+    let dao_service = state.dao()?;
 
     let proposal_type = match req.proposal_type.as_str() {
         "emergency" => beebotos_chain::dao::ProposalType::Emergency,
@@ -258,10 +236,7 @@ pub async fn cast_vote(
 ) -> Result<impl IntoResponse, GatewayError> {
     require_any_role(&user, &["user", "admin"])?;
 
-    let dao_service = state
-        .dao_service
-        .as_ref()
-        .ok_or_else(|| GatewayError::service_unavailable("dao", "DAO service not initialized"))?;
+    let dao_service = state.dao()?;
 
     let proposal_id = req.proposal_id.parse::<u64>()
         .map_err(|_| GatewayError::bad_request("Invalid proposal ID"))?;
@@ -299,16 +274,10 @@ pub async fn get_proposal(
     _user: AuthUser,
     Path(id): Path<String>,
 ) -> Result<Json<serde_json::Value>, GatewayError> {
-    let dao_service = state
-        .dao_service
-        .as_ref()
-        .ok_or_else(|| GatewayError::service_unavailable("dao", "DAO service not initialized"))?;
-
     let proposal_id = id.parse::<u64>()
         .map_err(|_| GatewayError::bad_request("Invalid proposal ID"))?;
 
-    let info = dao_service
-        .get_proposal(proposal_id)
+    let info = state.dao()?.get_proposal(proposal_id)
         .await
         .map_err(|e| match e {
             crate::error::AppError::NotFound(_) => GatewayError::not_found("proposal", &id),
@@ -330,12 +299,7 @@ pub async fn list_proposals(
     State(state): State<Arc<AppState>>,
     _user: AuthUser,
 ) -> Result<Json<serde_json::Value>, GatewayError> {
-    let dao_service = state
-        .dao_service
-        .as_ref()
-        .ok_or_else(|| GatewayError::service_unavailable("dao", "DAO service not initialized"))?;
-
-    let proposals = dao_service
+    let proposals = state.dao()?
         .list_active_proposals()
         .await
         .map_err(|e| GatewayError::agent(format!("Failed to list proposals: {}", e)))?;

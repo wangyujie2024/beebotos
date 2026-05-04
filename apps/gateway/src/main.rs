@@ -162,6 +162,20 @@ pub struct AppState {
     pub skill_executor: Option<Arc<beebotos_agents::skills::SkillExecutor>>,
     /// Skill instance manager for instance-based execution model
     pub skill_instance_manager: Option<Arc<beebotos_agents::skills::InstanceManager>>,
+    /// Composition registry for skill composition management
+    pub composition_registry: Option<Arc<tokio::sync::RwLock<beebotos_agents::skills::composition::CompositionRegistry>>>,
+    /// Workflow registry for declarative workflow management
+    pub workflow_registry: Option<Arc<tokio::sync::RwLock<beebotos_agents::workflow::WorkflowRegistry>>>,
+    /// Active workflow instances (runtime state)
+    pub workflow_instances: Option<Arc<tokio::sync::RwLock<std::collections::HashMap<String, beebotos_agents::workflow::WorkflowInstance>>>>,
+    /// Workflow trigger engine for cron/event/webhook triggers
+    pub workflow_trigger_engine: Option<Arc<tokio::sync::RwLock<beebotos_agents::workflow::TriggerEngine>>>,
+    /// Cron job scheduler for workflow triggers (tokio-cron-scheduler)
+    pub workflow_cron_scheduler: Option<Arc<tokio_cron_scheduler::JobScheduler>>,
+    /// Cron job UUIDs tracked per workflow for dynamic removal
+    pub workflow_cron_job_uuids: Arc<tokio::sync::RwLock<std::collections::HashMap<String, Vec<uuid::Uuid>>>>,
+    /// Cancellation signals for actively-running workflow instances
+    pub workflow_cancel_signals: Arc<tokio::sync::RwLock<std::collections::HashMap<String, std::sync::Arc<std::sync::atomic::AtomicBool>>>>,
     /// Message processor for channel events
     pub message_processor: Option<Arc<MessageProcessor>>,
     /// Agent resolver for mapping channels/users to agents
@@ -176,9 +190,58 @@ pub struct AppState {
     pub auth_service: Option<Arc<crate::services::AuthService>>,
     /// Config manager for hot-reload
     pub config_manager: Option<Arc<crate::config_center_integration::GatewayConfigManager>>,
+    /// Agent event bus for system-wide pub/sub (used by TriggerEngine event listener)
+    pub agent_event_bus: Option<beebotos_agents::events::AgentEventBus>,
 }
 
 impl AppState {
+    // ── Convenience accessors for optional services (reduces handler boilerplate) ──
+
+    pub fn wallet(&self) -> Result<&Arc<crate::services::WalletService>, gateway::error::GatewayError> {
+        self.wallet_service.as_ref()
+            .ok_or_else(|| gateway::error::GatewayError::service_unavailable("wallet", "Wallet service not initialized"))
+    }
+
+    pub fn identity(&self) -> Result<&Arc<crate::services::IdentityService>, gateway::error::GatewayError> {
+        self.identity_service.as_ref()
+            .ok_or_else(|| gateway::error::GatewayError::service_unavailable("identity", "Identity service not initialized"))
+    }
+
+    pub fn dao(&self) -> Result<&Arc<crate::services::DaoService>, gateway::error::GatewayError> {
+        self.dao_service.as_ref()
+            .ok_or_else(|| gateway::error::GatewayError::service_unavailable("dao", "DAO service not initialized"))
+    }
+
+    pub fn chain(&self) -> Result<&Arc<crate::services::ChainService>, gateway::error::GatewayError> {
+        self.chain_service.as_ref()
+            .ok_or_else(|| gateway::error::GatewayError::service_unavailable("chain", "Chain service not available"))
+    }
+
+    pub fn composition_registry(&self) -> Result<&Arc<tokio::sync::RwLock<beebotos_agents::skills::composition::CompositionRegistry>>, gateway::error::GatewayError> {
+        self.composition_registry.as_ref()
+            .ok_or_else(|| gateway::error::GatewayError::service_unavailable("CompositionRegistry", "Not initialized"))
+    }
+
+    pub fn workflow_registry(&self) -> Result<&Arc<tokio::sync::RwLock<beebotos_agents::workflow::WorkflowRegistry>>, gateway::error::GatewayError> {
+        self.workflow_registry.as_ref()
+            .ok_or_else(|| gateway::error::GatewayError::service_unavailable("WorkflowRegistry", "Not initialized"))
+    }
+
+    pub fn workflow_instances(&self) -> Result<&Arc<tokio::sync::RwLock<std::collections::HashMap<String, beebotos_agents::workflow::WorkflowInstance>>>, gateway::error::GatewayError> {
+        self.workflow_instances.as_ref()
+            .ok_or_else(|| gateway::error::GatewayError::service_unavailable("WorkflowInstances", "Not initialized"))
+    }
+
+    pub fn workflow_trigger_engine(&self) -> Result<&Arc<tokio::sync::RwLock<beebotos_agents::workflow::TriggerEngine>>, gateway::error::GatewayError> {
+        self.workflow_trigger_engine.as_ref()
+            .ok_or_else(|| gateway::error::GatewayError::service_unavailable("TriggerEngine", "Not initialized"))
+    }
+
+    pub fn skill_registry(&self) -> Result<&Arc<beebotos_agents::skills::SkillRegistry>, gateway::error::GatewayError> {
+        self.skill_registry.as_ref()
+            .ok_or_else(|| gateway::error::GatewayError::service_unavailable("SkillRegistry", "Not initialized"))
+    }
+
     /// Create new application state
     ///
     /// 🟢 P1 FIX: Now initializes StateStore (CQRS) and AgentRuntime trait.
@@ -433,6 +496,76 @@ impl AppState {
         let skill_instance_manager = Arc::new(beebotos_agents::skills::InstanceManager::new());
         info!("✅ SkillInstanceManager initialized");
 
+        // Initialize CompositionRegistry
+        let composition_registry = Arc::new(tokio::sync::RwLock::new(
+            beebotos_agents::skills::composition::CompositionRegistry::with_dir("data/compositions")
+        ));
+        {
+            let mut registry = composition_registry.write().await;
+            let composition_dir = std::path::Path::new("data/compositions");
+            if let Err(e) = registry.load_from_dir(composition_dir).await {
+                warn!("⚠️ Failed to load compositions from disk: {}", e);
+            } else {
+                let count = registry.list_all().len();
+                info!("✅ CompositionRegistry initialized with {} compositions", count);
+            }
+        }
+
+        // Initialize WorkflowRegistry
+        let workflow_registry = Arc::new(tokio::sync::RwLock::new(
+            beebotos_agents::workflow::WorkflowRegistry::new()
+        ));
+        {
+            let mut registry = workflow_registry.write().await;
+            let workflow_dir = std::path::Path::new("data/workflows");
+            if let Err(e) = registry.load_from_dir(workflow_dir).await {
+                warn!("⚠️ Failed to load workflows from disk: {}", e);
+            } else {
+                let count = registry.list_all().len();
+                info!("✅ WorkflowRegistry initialized with {} workflows", count);
+            }
+        }
+
+        // Initialize workflow instances tracking
+        let workflow_instances: Arc<tokio::sync::RwLock<std::collections::HashMap<String, beebotos_agents::workflow::WorkflowInstance>>> =
+            Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new()));
+
+        // Load persisted workflow instances from database
+        {
+            use handlers::http::workflows::load_workflow_instances;
+            match load_workflow_instances(&db).await {
+                Ok(instances) => {
+                    let mut inst_map = workflow_instances.write().await;
+                    for instance in instances {
+                        inst_map.insert(instance.id.clone(), instance);
+                    }
+                    info!("✅ Loaded {} workflow instances from database", inst_map.len());
+                }
+                Err(e) => {
+                    warn!("⚠️ Failed to load workflow instances from database: {}", e);
+                }
+            }
+        }
+
+        // Initialize workflow trigger engine from loaded workflows
+        let mut trigger_engine = beebotos_agents::workflow::TriggerEngine::new();
+        {
+            let registry = workflow_registry.read().await;
+            let mut cron_count = 0;
+            let mut webhook_count = 0;
+            for def in registry.list_all() {
+                for trigger in &def.triggers {
+                    match &trigger.trigger_type {
+                        beebotos_agents::workflow::TriggerType::Cron { .. } => cron_count += 1,
+                        beebotos_agents::workflow::TriggerType::Webhook { .. } => webhook_count += 1,
+                        _ => {}
+                    }
+                }
+                trigger_engine.register(def);
+            }
+            info!("✅ TriggerEngine initialized with {} cron, {} webhook triggers", cron_count, webhook_count);
+        }
+
         // Initialize channel binding store (LEGACY — deprecated)
         // P2 OPTIMIZE: This is the old single-binding system. New code should use
         // UserChannelService + AgentChannelService. Run migrate-bindings API to migrate.
@@ -448,6 +581,7 @@ impl AppState {
                 config.channels.default_agent_id.clone(),
                 state_store.clone(),
                 agent_runtime.clone(),
+                config.clone(),
             )
             .with_channel_binding_store(channel_binding_store.clone()),
         );
@@ -481,6 +615,13 @@ impl AppState {
             skill_registry: Some(skill_registry),
             skill_executor,
             skill_instance_manager: Some(skill_instance_manager),
+            composition_registry: Some(composition_registry),
+            workflow_registry: Some(workflow_registry),
+            workflow_instances: Some(workflow_instances),
+            workflow_trigger_engine: Some(Arc::new(tokio::sync::RwLock::new(trigger_engine))),
+            workflow_cron_scheduler: None,
+            workflow_cron_job_uuids: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
+            workflow_cancel_signals: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
             message_processor: None,
             agent_resolver: Some(agent_resolver),
             channel_binding_store: Some(channel_binding_store),
@@ -488,6 +629,7 @@ impl AppState {
             memory_system,
             auth_service,
             config_manager,
+            agent_event_bus: Some(beebotos_agents::events::AgentEventBus::new()),
         })
     }
 }
@@ -663,6 +805,7 @@ async fn main() -> anyhow::Result<()> {
                 app_state.config.channels.default_agent_id.clone(),
                 app_state.state_store.clone(),
                 app_state.agent_runtime.clone(),
+                app_state.config.clone(),
             )
             .with_channel_binding_store(
                 app_state.channel_binding_store.as_ref().unwrap().clone(),
@@ -683,15 +826,120 @@ async fn main() -> anyhow::Result<()> {
 
     // Initialize MessageProcessor now that channel_registry is available
     if let Some(ref registry) = channel_registry {
+        let clawhub_client = crate::clients::ClawHubClient::new().ok();
+        if clawhub_client.is_some() {
+            info!("🔍 ClawHub client initialized for skill marketplace integration");
+        }
         app_state.message_processor = Some(Arc::new(MessageProcessor::new(
             app_state.llm_service.clone(),
             registry.clone(),
             app_state.memory_system.clone(),
             app_state.webchat_service.clone(),
             app_state.skill_registry.clone(),
+            app_state.workflow_registry.clone(),
+            clawhub_client,
         )));
     }
-    let app_state = Arc::new(app_state);
+    let mut app_state = Arc::new(app_state);
+
+    // 🟢 P1 FIX: Initialize tokio-cron-scheduler for workflow cron triggers
+    let cron_scheduler = tokio_cron_scheduler::JobScheduler::new()
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to create cron scheduler: {}", e))?;
+    let mut boot_cron_uuids: std::collections::HashMap<String, Vec<uuid::Uuid>> = std::collections::HashMap::new();
+    if let Some(ref registry) = app_state.workflow_registry {
+        let reg = registry.read().await;
+        for def in reg.list_all() {
+            for trigger in &def.triggers {
+                if let beebotos_agents::workflow::TriggerType::Cron { schedule, timezone } = &trigger.trigger_type {
+                    let state_clone = app_state.clone();
+                    let workflow_id = def.id.clone();
+                    let sched_str = schedule.clone();
+                    let tz_str = timezone.clone().unwrap_or_else(|| "UTC".to_string());
+                    let sched_for_job = sched_str.clone();
+                    let tz_for_job = tz_str.clone();
+                    let wf_id_for_job = workflow_id.clone();
+                    let job = tokio_cron_scheduler::Job::new_async(&sched_str, move |_uuid, _l| {
+                        let state = state_clone.clone();
+                        let wf_id = wf_id_for_job.clone();
+                        let sched = sched_for_job.clone();
+                        let tz = tz_for_job.clone();
+                        let fired_at = chrono::Utc::now().to_rfc3339();
+                        Box::pin(async move {
+                            let trigger_context = serde_json::json!({
+                                "trigger_type": "cron",
+                                "schedule": sched,
+                                "timezone": tz,
+                                "fired_at": fired_at
+                            });
+                            match handlers::http::workflows::execute_workflow_internal(&state, &wf_id, trigger_context).await {
+                                Ok(instance) => {
+                                    info!("✅ Cron workflow {} completed with status: {}", wf_id, instance.status);
+                                }
+                                Err(e) => {
+                                    warn!("❌ Cron workflow {} failed: {}", wf_id, e);
+                                }
+                            }
+                        })
+                    });
+                    match job {
+                        Ok(j) => {
+                            let job_uuid = j.guid();
+                            if let Err(e) = cron_scheduler.add(j).await {
+                                warn!("Failed to add cron job for workflow {}: {}", workflow_id, e);
+                            } else {
+                                info!("⏰ Registered cron job for workflow {}: {} ({})", workflow_id, sched_str, tz_str);
+                                boot_cron_uuids.entry(workflow_id.clone()).or_default().push(job_uuid);
+                            }
+                        }
+                        Err(e) => {
+                            warn!("Invalid cron schedule for workflow {}: {}", workflow_id, e);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    cron_scheduler.start()
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to start cron scheduler: {}", e))?;
+    info!("✅ Cron scheduler started with tokio-cron-scheduler");
+
+    // Store scheduler and UUID mappings in AppState for runtime introspection and lifecycle management
+    if let Some(state_mut) = Arc::get_mut(&mut app_state) {
+        state_mut.workflow_cron_scheduler = Some(Arc::new(cron_scheduler));
+        state_mut.workflow_cron_job_uuids = Arc::new(tokio::sync::RwLock::new(boot_cron_uuids));
+    }
+
+    // 🟢 P2 FIX: Start TriggerEngine event listener for event-based workflow triggers
+    if let (Some(ref trigger_engine), Some(ref event_bus)) = (
+        app_state.workflow_trigger_engine.clone(),
+        app_state.agent_event_bus.clone()
+    ) {
+        let te = trigger_engine.clone();
+        let event_bus_clone = event_bus.clone();
+        let state_clone = app_state.clone();
+        tokio::spawn(async move {
+            let engine = te.read().await;
+            let mut rx = engine.listen_events(event_bus_clone).await;
+            drop(engine); // release read lock
+            info!("🎧 TriggerEngine event listener started");
+            while let Some(matches) = rx.recv().await {
+                for m in matches {
+                    info!("⚡ Event trigger matched workflow: {}", m.workflow_id);
+                    let ctx = m.trigger_context.clone();
+                    match handlers::http::workflows::execute_workflow_internal(&state_clone, &m.workflow_id, ctx).await {
+                        Ok(instance) => {
+                            info!("✅ Event-triggered workflow {} completed: {}", m.workflow_id, instance.status);
+                        }
+                        Err(e) => {
+                            warn!("❌ Event-triggered workflow {} failed: {}", m.workflow_id, e);
+                        }
+                    }
+                }
+            }
+        });
+    }
 
     // Start event processing loop using app_state
     if app_state.channel_registry.is_some() {
@@ -837,6 +1085,17 @@ async fn main() -> anyhow::Result<()> {
             .await
         {
             error!("❌ gRPC server error: {}", e);
+        }
+    });
+
+    // 🟢 P1 FIX: Start workflow instance TTL cleanup background loop
+    let cleanup_app_state = app_state.clone();
+    tokio::spawn(async move {
+        info!("🧹 Starting workflow instance TTL cleanup loop");
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(3600));
+        loop {
+            interval.tick().await;
+            cleanup_workflow_instances(&cleanup_app_state).await;
         }
     });
 
@@ -1172,7 +1431,7 @@ async fn liveness_handler() -> axum::Json<serde_json::Value> {
 }
 
 /// Create API router combining gateway-lib middleware with business handlers
-fn create_router(app_state: Arc<AppState>, gateway_state: Arc<GatewayState>) -> Router {
+pub fn create_router(app_state: Arc<AppState>, gateway_state: Arc<GatewayState>) -> Router {
     // Public routes (no auth required)
     let public_routes = Router::new()
         .route("/health", get(health_handler))
@@ -1307,6 +1566,7 @@ fn create_router(app_state: Arc<AppState>, gateway_state: Arc<GatewayState>) -> 
         // LLM Metrics API
         .route("/api/v1/llm/metrics", get(handlers::http::llm_metrics::get_llm_metrics))
         .route("/api/v1/llm/config", get(handlers::http::llm_config::get_llm_global_config))
+        .route("/api/v1/llm/config", put(handlers::http::llm_config::update_llm_global_config))
         .route("/api/v1/llm/health", get(handlers::http::llm_metrics::get_llm_health))
         // Skills API
         .route("/api/v1/skills", get(handlers::http::skills::list_skills))
@@ -1315,6 +1575,34 @@ fn create_router(app_state: Arc<AppState>, gateway_state: Arc<GatewayState>) -> 
         .route("/api/v1/skills/:id/uninstall", delete(handlers::http::skills::uninstall_skill))
         .route("/api/v1/skills/:id/execute", post(handlers::http::skills::execute_skill))
         .route("/api/v1/skills/hub/health", get(handlers::http::skills::hub_health))
+        // Workflow orchestration API
+        .route("/api/v1/workflows", get(handlers::http::workflows::list_workflows))
+        .route("/api/v1/workflows", post(handlers::http::workflows::create_workflow))
+        .route("/api/v1/workflows/install", post(handlers::http::workflows::install_workflow))
+        .route("/api/v1/workflows/:id", get(handlers::http::workflows::get_workflow))
+        .route("/api/v1/workflows/:id/source", get(handlers::http::workflows::get_workflow_source))
+        .route("/api/v1/workflows/:id", put(handlers::http::workflows::update_workflow))
+        .route("/api/v1/workflows/:id", delete(handlers::http::workflows::delete_workflow))
+        .route("/api/v1/workflows/:id/uninstall", post(handlers::http::workflows::uninstall_workflow))
+        .route("/api/v1/workflows/:id/execute", post(handlers::http::workflows::execute_workflow))
+        .route("/api/v1/workflows/:id/status", get(handlers::http::workflows::get_workflow_status))
+        // Skill composition API
+        .route("/api/v1/compositions", get(handlers::http::compositions::list_compositions))
+        .route("/api/v1/compositions", post(handlers::http::compositions::create_composition))
+        .route("/api/v1/compositions/:id", get(handlers::http::compositions::get_composition))
+        .route("/api/v1/compositions/:id", delete(handlers::http::compositions::delete_composition))
+        .route("/api/v1/compositions/:id/execute", post(handlers::http::compositions::execute_composition))
+        // Workflow instance APIs
+        .route("/api/v1/workflow-instances", get(handlers::http::workflows::list_workflow_instances))
+        .route("/api/v1/workflow-instances/:id", get(handlers::http::workflows::get_workflow_instance))
+        .route("/api/v1/workflow-instances/:id/cancel", post(handlers::http::workflows::cancel_workflow))
+        .route("/api/v1/workflow-instances/:id", delete(handlers::http::workflows::delete_workflow_instance))
+        // Workflow webhook triggers (catch-all for registered webhook paths)
+        .route("/api/v1/workflows/webhook/*path", post(handlers::http::workflows::workflow_webhook_trigger))
+        // Workflow dashboard APIs
+        .route("/api/v1/workflows/dashboard/stats", get(handlers::http::workflows::dashboard_stats))
+        .route("/api/v1/workflows/dashboard/recent-instances", get(handlers::http::workflows::recent_instances))
+        .route("/api/v1/workflows/:id/stats", get(handlers::http::workflows::workflow_stats))
         // Instance-based skill execution
         .route("/api/v1/instances", post(handlers::http::skills::create_instance))
         .route("/api/v1/instances", get(handlers::http::skills::list_instances))
@@ -1359,7 +1647,7 @@ fn create_router(app_state: Arc<AppState>, gateway_state: Arc<GatewayState>) -> 
         .route("/api/v2/user-channels/:id/connect", post(handlers::http::user_channels::connect_user_channel))
         .route("/api/v2/user-channels/:id/disconnect", post(handlers::http::user_channels::disconnect_user_channel))
         // P2 FIX: Admin migration API
-        .route("/api/v1/admin/migrate-bindings", post(handlers::http::agents_v2::migrate_legacy_bindings))
+        .route("/api/v2/admin/migrate-bindings", post(handlers::http::agents_v2::migrate_legacy_bindings))
         // WebSocket broadcast (admin only)
         .route(
             "/api/v1/ws/broadcast",
@@ -1422,6 +1710,39 @@ async fn system_status_handler(
         "websocket": state.ws_manager.is_some(),
         "timestamp": health.timestamp
     })))
+}
+
+/// Cleanup old workflow instances from memory to prevent unbounded growth
+async fn cleanup_workflow_instances(state: &Arc<AppState>) {
+    let instances = match state.workflow_instances.as_ref() {
+        Some(i) => i,
+        None => return,
+    };
+
+    let max_age_hours = 24;
+    let now = chrono::Utc::now();
+    let mut removed = 0;
+
+    {
+        let mut inst_map = instances.write().await;
+        let to_remove: Vec<String> = inst_map
+            .iter()
+            .filter(|(_, inst)| {
+                inst.status.is_terminal()
+                    && inst.completed_at.map(|t| (now - t).num_hours() >= max_age_hours).unwrap_or(false)
+            })
+            .map(|(id, _)| id.clone())
+            .collect();
+
+        for id in to_remove {
+            inst_map.remove(&id);
+            removed += 1;
+        }
+    }
+
+    if removed > 0 {
+        info!("🧹 Cleaned up {} old workflow instances (older than {}h)", removed, max_age_hours);
+    }
 }
 
 /// Start HTTP server
@@ -1828,5 +2149,344 @@ entry_point: handle
 
         assert_eq!(loaded.id, skill_id);
         assert_eq!(loaded.manifest.version.to_string(), "1.0.0");
+    }
+
+    // ------------------------------------------------------------------
+    // Workflow HTTP endpoint tests
+    // ------------------------------------------------------------------
+
+    /// Helper to create a test router for workflow HTTP tests
+    async fn setup_workflow_test_router() -> Router {
+        let config = create_test_config();
+        let gateway_config = config.to_gateway_config().unwrap();
+
+        let db = SqlitePoolOptions::new()
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+
+        // Run migrations so workflow tables exist
+        sqlx::migrate!("../../migrations_sqlite")
+            .run(&db)
+            .await
+            .ok();
+
+        let rate_limiter = Arc::new(RateLimitManager::new(Arc::new(
+            gateway::rate_limit::token_bucket::TokenBucketRateLimiter::new(100.0, 200),
+        )));
+
+        let kernel = Arc::new(
+            beebotos_kernel::KernelBuilder::new()
+                .with_max_agents(100)
+                .build()
+                .unwrap(),
+        );
+
+        let app_state = Arc::new(
+            AppState::new(config, db, None, rate_limiter.clone(), kernel)
+                .await
+                .unwrap(),
+        );
+
+        let gateway_state = Arc::new(GatewayState::new(gateway_config, rate_limiter));
+        create_router(app_state, gateway_state)
+    }
+
+    /// Build an Authorization header with the demo token
+    fn demo_auth_header() -> (String, String) {
+        ("Authorization".to_string(), "Bearer demo-token".to_string())
+    }
+
+    #[tokio::test]
+    async fn test_workflow_create_and_list() {
+        use tower::ServiceExt;
+
+        let app = setup_workflow_test_router().await;
+        let (auth_key, auth_val) = demo_auth_header();
+
+        // 1. Create a workflow
+        let workflow_yaml = r#"
+id: test_create_workflow
+name: "Test Create"
+description: "A workflow for testing creation"
+version: "1.0.0"
+triggers:
+  - type: manual
+config:
+  timeout_sec: 60
+  continue_on_failure: false
+steps:
+  - id: step1
+    name: "Step One"
+    skill: echo
+    params:
+      input: "hello"
+"#;
+
+        let create_response = app
+            .clone()
+            .oneshot(
+                axum::http::Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/workflows")
+                    .header("Content-Type", "application/yaml")
+                    .header(&auth_key, &auth_val)
+                    .body(workflow_yaml.to_string())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(create_response.status(), 200);
+        let body = axum::body::to_bytes(create_response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["id"], "test_create_workflow");
+        assert_eq!(json["name"], "Test Create");
+
+        // 2. List workflows
+        let list_response = app
+            .oneshot(
+                axum::http::Request::builder()
+                    .method("GET")
+                    .uri("/api/v1/workflows")
+                    .header(&auth_key, &auth_val)
+                    .body(String::new())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(list_response.status(), 200);
+        let list_body = axum::body::to_bytes(list_response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let list_json: Vec<serde_json::Value> = serde_json::from_slice(&list_body).unwrap();
+        assert!(!list_json.is_empty());
+        assert!(list_json.iter().any(|w| w["id"] == "test_create_workflow"));
+    }
+
+    #[tokio::test]
+    async fn test_workflow_get_and_delete() {
+        use tower::ServiceExt;
+
+        let app = setup_workflow_test_router().await;
+        let (auth_key, auth_val) = demo_auth_header();
+
+        // Create a workflow first
+        let workflow_yaml = r#"
+id: test_get_delete
+name: "Test Get Delete"
+description: "For get/delete testing"
+version: "1.0.0"
+triggers:
+  - type: manual
+steps:
+  - id: s1
+    name: "S1"
+    skill: echo
+    params:
+      input: "x"
+"#;
+
+        let _ = app
+            .clone()
+            .oneshot(
+                axum::http::Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/workflows")
+                    .header("Content-Type", "application/yaml")
+                    .header(&auth_key, &auth_val)
+                    .body(workflow_yaml.to_string())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        // Get the workflow
+        let get_response = app
+            .clone()
+            .oneshot(
+                axum::http::Request::builder()
+                    .method("GET")
+                    .uri("/api/v1/workflows/test_get_delete")
+                    .header(&auth_key, &auth_val)
+                    .body(String::new())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(get_response.status(), 200);
+        let body = axum::body::to_bytes(get_response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["id"], "test_get_delete");
+
+        // Delete the workflow
+        let delete_response = app
+            .clone()
+            .oneshot(
+                axum::http::Request::builder()
+                    .method("DELETE")
+                    .uri("/api/v1/workflows/test_get_delete")
+                    .header(&auth_key, &auth_val)
+                    .body(String::new())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(delete_response.status(), 200);
+
+        // Verify it's gone
+        let get_after = app
+            .oneshot(
+                axum::http::Request::builder()
+                    .method("GET")
+                    .uri("/api/v1/workflows/test_get_delete")
+                    .header(&auth_key, &auth_val)
+                    .body(String::new())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(get_after.status(), 404);
+    }
+
+    #[tokio::test]
+    async fn test_workflow_webhook_trigger() {
+        use tower::ServiceExt;
+
+        let app = setup_workflow_test_router().await;
+        let (auth_key, auth_val) = demo_auth_header();
+
+        // Create a workflow with a webhook trigger
+        let workflow_yaml = r#"
+id: test_webhook_wf
+name: "Test Webhook Workflow"
+description: "Triggered by webhook"
+version: "1.0.0"
+triggers:
+  - type: webhook
+    path: "/test-webhook"
+    method: "POST"
+config:
+  timeout_sec: 30
+  continue_on_failure: false
+steps:
+  - id: step1
+    name: "Process"
+    skill: echo
+    params:
+      input: "webhook received"
+"#;
+
+        let create_resp = app
+            .clone()
+            .oneshot(
+                axum::http::Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/workflows")
+                    .header("Content-Type", "application/yaml")
+                    .header(&auth_key, &auth_val)
+                    .body(workflow_yaml.to_string())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(create_resp.status(), 200);
+
+        // Trigger via webhook endpoint
+        let webhook_payload = serde_json::json!({"event": "test", "data": 42});
+        let trigger_resp = app
+            .oneshot(
+                axum::http::Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/workflows/webhook/test-webhook")
+                    .header("Content-Type", "application/json")
+                    .header(&auth_key, &auth_val)
+                    .body(webhook_payload.to_string())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(trigger_resp.status(), 200);
+        let body = axum::body::to_bytes(trigger_resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["workflow_id"], "test_webhook_wf");
+        assert!(json["instance_id"].as_str().is_some());
+        assert!(json["status"].as_str().is_some());
+    }
+
+    #[tokio::test]
+    async fn test_workflow_execute_manual() {
+        use tower::ServiceExt;
+
+        let app = setup_workflow_test_router().await;
+        let (auth_key, auth_val) = demo_auth_header();
+
+        // Create a simple workflow
+        let workflow_yaml = r#"
+id: test_execute_manual
+name: "Test Execute"
+description: "For manual execution testing"
+version: "1.0.0"
+triggers:
+  - type: manual
+config:
+  timeout_sec: 30
+  continue_on_failure: false
+steps:
+  - id: step1
+    name: "Echo"
+    skill: echo
+    params:
+      input: "hello"
+"#;
+
+        let _ = app
+            .clone()
+            .oneshot(
+                axum::http::Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/workflows")
+                    .header("Content-Type", "application/yaml")
+                    .header(&auth_key, &auth_val)
+                    .body(workflow_yaml.to_string())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        // Execute it
+        let exec_resp = app
+            .clone()
+            .oneshot(
+                axum::http::Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/workflows/test_execute_manual/execute")
+                    .header("Content-Type", "application/json")
+                    .header(&auth_key, &auth_val)
+                    .body(r#"{"trigger_context": {"source": "test"}}"#.to_string())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(exec_resp.status(), 200);
+        let body = axum::body::to_bytes(exec_resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["workflow_id"], "test_execute_manual");
+        assert!(json["instance_id"].as_str().is_some());
     }
 }

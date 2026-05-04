@@ -211,6 +211,14 @@ pub trait WebhookHandlerRegistry: Send + Sync {
     async fn unregister_webhook(&self, path: &str) -> Result<()>;
 }
 
+/// Tool definition for LLM native function calling
+#[derive(Debug, Clone)]
+pub struct ToolDefinition {
+    pub name: String,
+    pub description: String,
+    pub parameters: serde_json::Value,
+}
+
 /// LLM call interface for communication manager
 #[async_trait]
 pub trait LLMCallInterface: Send + Sync {
@@ -241,6 +249,22 @@ pub trait LLMCallInterface: Send + Sync {
         messages: Vec<Message>,
         context: Option<HashMap<String, String>>,
     ) -> Result<tokio::sync::mpsc::Receiver<String>>;
+
+    /// Whether this provider supports native function/tool calling
+    fn supports_native_tools(&self) -> bool {
+        false
+    }
+
+    /// Call LLM with native tool support (multi-turn ReAct loop).
+    /// Default implementation falls back to plain text call_llm.
+    async fn call_llm_with_tools(
+        &self,
+        messages: Vec<Message>,
+        _tools: Vec<ToolDefinition>,
+        context: Option<HashMap<String, String>>,
+    ) -> Result<String> {
+        self.call_llm(messages, context).await
+    }
 }
 
 /// Communication manager

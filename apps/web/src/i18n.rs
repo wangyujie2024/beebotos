@@ -71,6 +71,8 @@ pub fn init_i18n() -> I18nContext {
     zh.insert("nav-treasury", "金库");
     zh.insert("nav-skills", "技能市场");
     zh.insert("nav-skill-instances", "实例管理");
+    zh.insert("nav-workflows", "工作流");
+    zh.insert("nav-llm-settings", "大模型");
     zh.insert("nav-channels", "频道管理");
     zh.insert("nav-settings", "设置");
     zh.insert("nav-chat", "聊天");
@@ -260,6 +262,8 @@ pub fn init_i18n() -> I18nContext {
     en.insert("nav-treasury", "Treasury");
     en.insert("nav-skills", "Skills");
     en.insert("nav-skill-instances", "Instances");
+    en.insert("nav-workflows", "Workflows");
+    en.insert("nav-llm-settings", "LLM Model");
     en.insert("nav-channels", "Channels");
     en.insert("nav-settings", "Settings");
     en.insert("nav-chat", "Chat");

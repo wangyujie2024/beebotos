@@ -10,7 +10,7 @@ use axum::response::IntoResponse;
 use axum::Json;
 use gateway::{
     error::GatewayError,
-    middleware::{require_any_role, AuthUser},
+    middleware::AuthUser,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;

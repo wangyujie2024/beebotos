@@ -29,8 +29,9 @@ pub struct GatewayConfig {
 impl Default for GatewayConfig {
     fn default() -> Self {
         Self {
-            api_base_url: "http://localhost:8080/api/v1".to_string(),
-            websocket_url: "ws://localhost:8080/ws".to_string(),
+            // Gateway API runs on port 8000 per project docs
+            api_base_url: "http://localhost:8000/api/v1".to_string(),
+            websocket_url: "ws://localhost:8000/ws".to_string(),
             auth: GatewayAuthConfig::default(),
             connection: ConnectionConfig::default(),
         }

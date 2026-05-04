@@ -82,6 +82,8 @@ impl TaskCapabilityRequirements {
             // 🆕 DEVICE FIX: Device automation task types
             TaskType::DeviceAutomation => CapabilityLevel::L2FileWrite,
             TaskType::AppLifecycle => CapabilityLevel::L2FileWrite,
+            // 🟢 P1 FIX: Workflow execution tasks
+            TaskType::WorkflowExecution => CapabilityLevel::L2FileWrite,
             TaskType::Custom(_) => CapabilityLevel::L3NetworkOut,
         }
     }
@@ -102,6 +104,8 @@ impl TaskCapabilityRequirements {
             // 🆕 DEVICE FIX: Device automation task types
             TaskType::DeviceAutomation => vec!["device:control", "ui:interact"],
             TaskType::AppLifecycle => vec!["app:manage", "device:control"],
+            // 🟢 P1 FIX: Workflow execution tasks
+            TaskType::WorkflowExecution => vec!["workflow:execute", "skill:call"],
             TaskType::Custom(_) => vec!["custom:execute"],
         }
     }
@@ -460,6 +464,7 @@ pub struct KernelAgentBuilder {
     with_planning_engine: Option<Arc<crate::planning::PlanningEngine>>,
     with_plan_executor: Option<Arc<crate::planning::PlanExecutor>>,
     with_replanner: Option<Arc<dyn crate::planning::RePlanner>>,
+    with_skill_catalog: Option<String>,
 }
 
 impl KernelAgentBuilder {
@@ -478,6 +483,7 @@ impl KernelAgentBuilder {
             with_planning_engine: None,
             with_plan_executor: None,
             with_replanner: None,
+            with_skill_catalog: None,
         }
     }
 
@@ -562,6 +568,12 @@ impl KernelAgentBuilder {
         self
     }
 
+    /// 🆕 FIX: Set global skill catalog for LLM context injection
+    pub fn with_skill_catalog(mut self, catalog: impl Into<String>) -> Self {
+        self.with_skill_catalog = Some(catalog.into());
+        self
+    }
+
     /// Build and spawn the agent in kernel sandbox
     pub async fn spawn(self) -> Result<(TaskId, mpsc::UnboundedSender<KernelTaskRequest>)> {
         let kernel = self.kernel.ok_or_else(|| {
@@ -603,6 +615,10 @@ impl KernelAgentBuilder {
         }
         if let Some(replanner) = self.with_replanner {
             agent = agent.with_replanner(replanner);
+        }
+
+        if let Some(catalog) = self.with_skill_catalog {
+            agent = agent.with_skill_catalog(catalog);
         }
 
         // Attach kernel for WASM execution

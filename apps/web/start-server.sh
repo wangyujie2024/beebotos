@@ -40,7 +40,7 @@ echo ""
 
 # 切换到脚本所在目录并启动 Rust 服务器
 cd "$SCRIPT_DIR"
-exec cargo run --bin web-server -- \
+exec cargo run --bin web-server --features server -- \
     --host $HOST \
     --port $PORT \
     --static-path "$STATIC_PATH" \

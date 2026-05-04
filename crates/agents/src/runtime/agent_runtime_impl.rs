@@ -52,6 +52,8 @@ pub struct GatewayAgentRuntime {
     llm_interface: Option<Arc<dyn crate::communication::LLMCallInterface>>,
     /// 🟢 P2 FIX: Skill registry for WASM skill execution
     skill_registry: Option<Arc<crate::skills::SkillRegistry>>,
+    /// 🟢 P2 OPTIMIZE: Cached skill catalog to avoid repeated filesystem scans
+    skill_catalog: RwLock<Option<String>>,
 }
 
 /// Handle to an agent's task
@@ -134,6 +136,7 @@ impl GatewayAgentRuntime {
             replanner: Some(replanner.clone()),
             llm_interface: llm_interface.clone(),
             skill_registry: Some(skill_registry.clone()),
+            skill_catalog: RwLock::new(None),
         };
 
         // 🔒 P0 FIX: Recover agents from persistent state
@@ -300,6 +303,43 @@ impl GatewayAgentRuntime {
         }
         if let Some(ref llm) = self.llm_interface {
             builder = builder.with_llm_interface(llm.clone());
+        }
+
+        // 🆕 FIX: Rebuild skill catalog for recovered agent so it can discover and use skills
+        // 🟢 P2 OPTIMIZE: Use cached catalog if available to avoid repeated filesystem scans
+        let skill_catalog = {
+            let cached = self.skill_catalog.read().await.clone();
+            if let Some(catalog) = cached {
+                info!("Using cached skill catalog for recovered agent {}", agent_id);
+                Some(catalog)
+            } else {
+                let mut discovery = crate::skills::SkillDiscovery::new();
+                discovery.add_path("skills");
+                let metas = discovery.scan().await;
+                info!("SkillDiscovery scanned {} skills for recovered agent {}", metas.len(), agent_id);
+                for m in &metas {
+                    info!("  - skill: {} (id={}, kind={:?})", m.name, m.id, m.kind);
+                }
+                let catalog = if metas.is_empty() {
+                    None
+                } else {
+                    let lines: Vec<String> = metas
+                        .iter()
+                        .map(|m| format!("- {} ({}): {}", m.id, m.category, m.description))
+                        .collect();
+                    Some(lines.join("\n"))
+                };
+                *self.skill_catalog.write().await = catalog.clone();
+                catalog
+            }
+        };
+        if let Some(catalog) = skill_catalog {
+            builder = builder.with_skill_catalog(catalog);
+        }
+
+        // 🟢 P2 FIX: Attach skill registry to recovered agent
+        if let Some(ref registry) = self.skill_registry {
+            builder = builder.with_skill_registry(registry.clone());
         }
 
         let (task_id, task_sender) = builder
@@ -489,6 +529,7 @@ impl GatewayAgentRuntime {
             replanner: Some(replanner),
             llm_interface,
             skill_registry: Some(skill_registry),
+            skill_catalog: RwLock::new(None),
         }
     }
 
@@ -660,11 +701,44 @@ impl AgentRuntime for GatewayAgentRuntime {
                 .with_permission("planning:execute")
                 .with_permission("skill:call");
 
+            // 🆕 FIX: Build skill catalog from SkillDiscovery for global LLM context injection
+            // 🟢 P2 OPTIMIZE: Use cached catalog if available to avoid repeated filesystem scans
+            let skill_catalog = {
+                let cached = self.skill_catalog.read().await.clone();
+                if let Some(catalog) = cached {
+                    info!("Using cached skill catalog for agent {}", agent_id);
+                    Some(catalog)
+                } else {
+                    let mut discovery = crate::skills::SkillDiscovery::new();
+                    discovery.add_path("skills");
+                    let metas = discovery.scan().await;
+                    info!("SkillDiscovery scanned {} skills for agent {}", metas.len(), agent_id);
+                    for m in &metas {
+                        info!("  - skill: {} (id={}, kind={:?})", m.name, m.id, m.kind);
+                    }
+                    let catalog = if metas.is_empty() {
+                        None
+                    } else {
+                        let lines: Vec<String> = metas
+                            .iter()
+                            .map(|m| format!("- {} ({}): {}", m.id, m.category, m.description))
+                            .collect();
+                        Some(lines.join("\n"))
+                    };
+                    *self.skill_catalog.write().await = catalog.clone();
+                    catalog
+                }
+            };
+
             let mut builder = KernelAgentBuilder::new()
                 .with_config(agent_config.clone())
                 .with_kernel(kernel.clone())
                 .with_state_manager(self.state_manager.clone())
                 .with_capabilities(capabilities);
+
+            if let Some(catalog) = skill_catalog {
+                builder = builder.with_skill_catalog(catalog);
+            }
 
             if let Some(ref memory) = self.memory_system {
                 builder = builder.with_memory_system(memory.clone());

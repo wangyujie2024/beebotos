@@ -191,3 +191,117 @@ input:focus, textarea:focus {
     grid-template-columns: 1fr;
   }
 }
+
+/* ─────────────────────────────────────────────────────────────────────────── */
+/* Workflow DAG Visualization Styles                                           */
+/* ─────────────────────────────────────────────────────────────────────────── */
+
+.workflow-detail .page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 1.5rem;
+}
+
+.workflow-detail .page-header h1 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+}
+
+.dag-container {
+    background: #fff;
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    overflow-x: auto;
+}
+
+.dag-meta {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+}
+
+.dag-badge {
+    display: inline-block;
+    padding: 0.25rem 0.6rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    background: #e2e8f0;
+    color: #475569;
+}
+
+.dag-svg {
+    display: block;
+    margin: 0 auto;
+}
+
+.dag-node rect {
+    fill: #f8fafc;
+    stroke: #cbd5e1;
+    stroke-width: 1.5;
+    transition: all 0.2s ease;
+}
+
+.dag-node:hover rect {
+    fill: #f1f5f9;
+    stroke: #94a3b8;
+    stroke-width: 2;
+}
+
+.dag-node-conditional rect {
+    stroke: #3b82f6;
+    stroke-width: 2;
+}
+
+.dag-node-label {
+    font-size: 12px;
+    font-weight: 600;
+    fill: #1e293b;
+    pointer-events: none;
+}
+
+.dag-node-sublabel {
+    font-size: 10px;
+    fill: #64748b;
+    pointer-events: none;
+}
+
+.dag-node-condition {
+    font-size: 9px;
+    fill: #3b82f6;
+    pointer-events: none;
+}
+
+.workflow-actions {
+    margin-top: 0.75rem;
+}
+
+.btn-sm {
+    padding: 0.35rem 0.75rem;
+    font-size: 0.8rem;
+}
+
+.dag-skeleton {
+    padding: 1rem;
+}
+
+.skeleton-line,
+.skeleton-box {
+    background: linear-gradient(90deg, #e2e8f0 25%, #f1f5f9 50%, #e2e8f0 75%);
+    background-size: 200% 100%;
+    animation: skeleton-shimmer 1.5s infinite;
+    border-radius: 4px;
+}
+
+.skeleton-box {
+    border-radius: 8px;
+}
+
+@keyframes skeleton-shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
