@@ -12,6 +12,44 @@ use tracing::{info, warn};
 use crate::error::GatewayError;
 use crate::services::agent_runtime_manager::GatewayLLMInterface;
 use crate::AppState;
+use gateway::middleware::{require_any_role, AuthUser};
+
+// ---------------------------------------------------------------------------
+// Security helpers
+// ---------------------------------------------------------------------------
+
+/// Validate that a workflow ID is safe to use as a filesystem name.
+/// Rejects empty IDs, path traversal sequences, and path separators.
+fn validate_workflow_id(id: &str) -> Result<(), GatewayError> {
+    if id.is_empty() {
+        return Err(GatewayError::bad_request("Workflow ID cannot be empty"));
+    }
+    if id.contains("..") || id.contains('/') || id.contains('\\') {
+        return Err(GatewayError::bad_request(
+            "Workflow ID contains invalid characters",
+        ));
+    }
+    Ok(())
+}
+
+/// Validate that a source file path is safe to read from.
+/// Rejects path traversal and requires the path to exist.
+fn validate_source_path(path: &std::path::Path) -> Result<(), GatewayError> {
+    if !path.exists() {
+        return Err(GatewayError::bad_request(format!(
+            "Source file not found: {}",
+            path.display()
+        )));
+    }
+    // Reject paths containing traversal sequences
+    let path_str = path.to_string_lossy();
+    if path_str.contains("..") {
+        return Err(GatewayError::bad_request(
+            "Source path contains invalid traversal sequences",
+        ));
+    }
+    Ok(())
+}
 
 /// Create workflow request (YAML or JSON)
 #[derive(Debug, Deserialize)]
@@ -370,8 +408,10 @@ pub async fn remove_cron_jobs_for_workflow(
 /// Create or register a workflow from YAML
 pub async fn create_workflow(
     State(state): State<Arc<AppState>>,
+    user: AuthUser,
     Json(req): Json<CreateWorkflowRequest>,
 ) -> Result<Json<WorkflowResponse>, GatewayError> {
+    require_any_role(&user, &["admin"])?;
     info!("Creating workflow from YAML");
 
     let mut def: beebotos_agents::workflow::WorkflowDefinition =
@@ -384,7 +424,33 @@ pub async fn create_workflow(
     if def.id.is_empty() {
         return Err(GatewayError::bad_request("Workflow ID is required"));
     }
+    validate_workflow_id(&def.id)?;
 
+    // Check if a workflow with the same ID already exists — clean up old cron jobs first
+    let exists = {
+        let registry = state.workflow_registry()?;
+        let reg = registry.read().await;
+        reg.get(&def.id).is_some()
+    };
+    if exists {
+        info!("Workflow {} already exists, removing old cron jobs before overwrite", def.id);
+        remove_cron_jobs_for_workflow(&state, &def.id).await;
+    }
+
+    // Persist to disk BEFORE updating in-memory state
+    let workflow_dir = std::path::PathBuf::from("data/workflows");
+    if let Err(e) = tokio::fs::create_dir_all(&workflow_dir).await {
+        warn!("Failed to create workflow directory: {}", e);
+    }
+    let path = workflow_dir.join(format!("{}.yaml", def.id));
+    if let Err(e) = tokio::fs::write(&path, &req.yaml).await {
+        return Err(GatewayError::Internal {
+            message: format!("Failed to persist workflow {}: {}", def.id, e),
+            correlation_id: uuid::Uuid::new_v4().to_string(),
+        });
+    }
+
+    // Update registry
     {
         let registry = state.workflow_registry()?;
         let mut reg = registry.write().await;
@@ -402,16 +468,6 @@ pub async fn create_workflow(
     let cron_uuids = add_cron_jobs_for_workflow(&state, &def.id, &def).await;
     if !cron_uuids.is_empty() {
         info!("Dynamically registered {} cron job(s) for workflow {}", cron_uuids.len(), def.id);
-    }
-
-    // Persist to disk
-    let workflow_dir = std::path::PathBuf::from("data/workflows");
-    if let Err(e) = tokio::fs::create_dir_all(&workflow_dir).await {
-        warn!("Failed to create workflow directory: {}", e);
-    }
-    let path = workflow_dir.join(format!("{}.yaml", def.id));
-    if let Err(e) = tokio::fs::write(&path, &req.yaml).await {
-        warn!("Failed to persist workflow {}: {}", def.id, e);
     }
 
     info!("Workflow created: {} ({})", def.name, def.id);
@@ -434,6 +490,8 @@ pub async fn get_workflow(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> Result<Json<WorkflowResponse>, GatewayError> {
+    validate_workflow_id(&id)?;
+
     let registry = state.workflow_registry()?;
     let reg = registry.read().await;
     let def = reg
@@ -448,6 +506,8 @@ pub async fn get_workflow_source(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> Result<Json<WorkflowSourceResponse>, GatewayError> {
+    validate_workflow_id(&id)?;
+
     // Try root data/workflows/ first
     let root_yaml = std::path::PathBuf::from("data/workflows").join(format!("{}.yaml", &id));
     let root_yml = std::path::PathBuf::from("data/workflows").join(format!("{}.yml", &id));
@@ -455,7 +515,7 @@ pub async fn get_workflow_source(
 
     let paths = vec![root_yaml, root_yml, root_json];
     for path in &paths {
-        if path.exists() {
+        if let Ok(true) = tokio::fs::try_exists(path).await {
             let content = tokio::fs::read_to_string(path).await
                 .map_err(|e| GatewayError::Internal {
                     message: format!("Failed to read workflow source: {}", e),
@@ -467,22 +527,24 @@ pub async fn get_workflow_source(
 
     // Try data/workflows/local/
     let local_dir = std::path::PathBuf::from("data/workflows/local");
-    if local_dir.exists() {
-        let mut entries = tokio::fs::read_dir(&local_dir).await
-            .map_err(|e| GatewayError::Internal {
-                message: format!("Failed to read local directory: {}", e),
-                correlation_id: uuid::Uuid::new_v4().to_string(),
-            })?;
-        while let Ok(Some(entry)) = entries.next_entry().await {
-            let path = entry.path();
-            if let Some(stem) = path.file_stem() {
-                if stem.to_string_lossy() == id {
-                    let content = tokio::fs::read_to_string(&path).await
-                        .map_err(|e| GatewayError::Internal {
-                            message: format!("Failed to read workflow source: {}", e),
-                            correlation_id: uuid::Uuid::new_v4().to_string(),
-                        })?;
-                    return Ok(Json(WorkflowSourceResponse { yaml: content }));
+    if let Ok(true) = tokio::fs::try_exists(&local_dir).await {
+        if let Ok(mut entries) = tokio::fs::read_dir(&local_dir).await {
+            while let Ok(Some(entry)) = entries.next_entry().await {
+                let path = entry.path();
+                // Only consider yaml/yml/json files
+                let ext = path.extension().and_then(|e| e.to_str());
+                if !matches!(ext, Some("yaml") | Some("yml") | Some("json")) {
+                    continue;
+                }
+                if let Some(stem) = path.file_stem() {
+                    if stem.to_string_lossy() == id {
+                        let content = tokio::fs::read_to_string(&path).await
+                            .map_err(|e| GatewayError::Internal {
+                                message: format!("Failed to read workflow source: {}", e),
+                                correlation_id: uuid::Uuid::new_v4().to_string(),
+                            })?;
+                        return Ok(Json(WorkflowSourceResponse { yaml: content }));
+                    }
                 }
             }
         }
@@ -494,14 +556,18 @@ pub async fn get_workflow_source(
 /// Update an existing workflow (replace YAML definition)
 pub async fn update_workflow(
     State(state): State<Arc<AppState>>,
+    user: AuthUser,
     Path(id): Path<String>,
     Json(req): Json<UpdateWorkflowRequest>,
 ) -> Result<Json<WorkflowResponse>, GatewayError> {
+    require_any_role(&user, &["admin"])?;
     info!("Updating workflow: {}", id);
+    validate_workflow_id(&id)?;
 
     let mut def: beebotos_agents::workflow::WorkflowDefinition =
         serde_yaml::from_str(&req.yaml).map_err(|e| GatewayError::bad_request(format!("Invalid YAML: {}", e)))?;
 
+    // Force the ID to match the URL path to prevent accidental identity changes
     def.id = id.clone();
 
     // Remove old cron jobs before updating
@@ -545,12 +611,20 @@ pub async fn update_workflow(
 /// Delete a workflow
 pub async fn delete_workflow(
     State(state): State<Arc<AppState>>,
+    user: AuthUser,
     Path(id): Path<String>,
 ) -> Result<Json<serde_json::Value>, GatewayError> {
-    {
+    require_any_role(&user, &["admin"])?;
+    validate_workflow_id(&id)?;
+
+    // Verify the workflow exists before attempting deletion
+    let existed = {
         let registry = state.workflow_registry()?;
-        let mut reg = registry.write().await;
-        reg.remove(&id);
+        let reg = registry.read().await;
+        reg.get(&id).is_some()
+    };
+    if !existed {
+        return Err(GatewayError::not_found("Workflow", &id));
     }
 
     // 🟢 CRON FIX: Remove cron jobs before unregistering triggers
@@ -563,10 +637,43 @@ pub async fn delete_workflow(
         info!("Unregistered triggers for workflow {}", id);
     }
 
-    // Remove from disk
-    let path = std::path::PathBuf::from("data/workflows").join(format!("{}.yaml", &id));
-    if path.exists() {
-        let _ = tokio::fs::remove_file(&path).await;
+    // Remove from registry
+    {
+        let registry = state.workflow_registry()?;
+        let mut reg = registry.write().await;
+        reg.remove(&id);
+    }
+
+    // Remove from disk (root dir)
+    let root_yaml = std::path::PathBuf::from("data/workflows").join(format!("{}.yaml", &id));
+    if let Ok(true) = tokio::fs::try_exists(&root_yaml).await {
+        if let Err(e) = tokio::fs::remove_file(&root_yaml).await {
+            warn!("Failed to remove workflow file {:?}: {}", root_yaml, e);
+        }
+    }
+    let root_json = std::path::PathBuf::from("data/workflows").join(format!("{}.json", &id));
+    if let Ok(true) = tokio::fs::try_exists(&root_json).await {
+        if let Err(e) = tokio::fs::remove_file(&root_json).await {
+            warn!("Failed to remove workflow file {:?}: {}", root_json, e);
+        }
+    }
+
+    // Remove from local dir
+    let local_dir = std::path::PathBuf::from("data/workflows/local");
+    if let Ok(true) = tokio::fs::try_exists(&local_dir).await {
+        if let Ok(mut entries) = tokio::fs::read_dir(&local_dir).await {
+            while let Ok(Some(entry)) = entries.next_entry().await {
+                let path = entry.path();
+                if let Some(stem) = path.file_stem() {
+                    if stem.to_string_lossy() == id {
+                        if let Err(e) = tokio::fs::remove_file(&path).await {
+                            warn!("Failed to remove local workflow file {:?}: {}", path, e);
+                        }
+                        break;
+                    }
+                }
+            }
+        }
     }
 
     info!("Workflow deleted: {}", id);
@@ -579,14 +686,14 @@ pub async fn delete_workflow(
 /// Install a workflow from a local file path
 pub async fn install_workflow(
     State(state): State<Arc<AppState>>,
+    user: AuthUser,
     Json(req): Json<InstallWorkflowRequest>,
 ) -> Result<Json<InstallWorkflowResponse>, GatewayError> {
+    require_any_role(&user, &["admin"])?;
     info!("Installing workflow from: {}", req.source_path);
 
     let source_path = std::path::PathBuf::from(&req.source_path);
-    if !source_path.exists() {
-        return Err(GatewayError::bad_request(format!("Source file not found: {}", req.source_path)));
-    }
+    validate_source_path(&source_path)?;
 
     // Read source file content
     let content = tokio::fs::read_to_string(&source_path).await
@@ -617,6 +724,23 @@ pub async fn install_workflow(
         def.name = def.id.clone();
     }
 
+    validate_workflow_id(&def.id)?;
+
+    // Check for existing workflow — clean up old resources first
+    let exists = {
+        let registry = state.workflow_registry()?;
+        let reg = registry.read().await;
+        reg.get(&def.id).is_some()
+    };
+    if exists {
+        info!("Workflow {} already exists, cleaning up old resources before overwrite", def.id);
+        remove_cron_jobs_for_workflow(&state, &def.id).await;
+        if let Some(ref trigger_engine) = state.workflow_trigger_engine {
+            let mut engine = trigger_engine.write().await;
+            engine.unregister(&def.id);
+        }
+    }
+
     // Ensure local directory exists
     let local_dir = std::path::PathBuf::from("data/workflows/local");
     if let Err(e) = tokio::fs::create_dir_all(&local_dir).await {
@@ -633,7 +757,7 @@ pub async fn install_workflow(
         });
     }
 
-    // Register in workflow registry
+    // Update registry
     {
         let registry = state.workflow_registry()?;
         let mut reg = registry.write().await;
@@ -666,15 +790,22 @@ pub async fn install_workflow(
 /// Uninstall a workflow (remove from registry and delete from local/ root dirs)
 pub async fn uninstall_workflow(
     State(state): State<Arc<AppState>>,
+    user: AuthUser,
     Path(id): Path<String>,
 ) -> Result<Json<serde_json::Value>, GatewayError> {
+    require_any_role(&user, &["admin"])?;
+    validate_workflow_id(&id)?;
+
     info!("Uninstalling workflow: {}", id);
 
-    // Remove from registry
-    {
+    // Verify existence
+    let existed = {
         let registry = state.workflow_registry()?;
-        let mut reg = registry.write().await;
-        reg.remove(&id);
+        let reg = registry.read().await;
+        reg.get(&id).is_some()
+    };
+    if !existed {
+        return Err(GatewayError::not_found("Workflow", &id));
     }
 
     // Remove cron jobs
@@ -687,29 +818,40 @@ pub async fn uninstall_workflow(
         info!("Unregistered triggers for workflow {}", id);
     }
 
-    // Try delete from root data/workflows/
-    let root_path = std::path::PathBuf::from("data/workflows").join(format!("{}.yaml", &id));
-    if root_path.exists() {
-        let _ = tokio::fs::remove_file(&root_path).await;
-    }
-    let root_path_json = std::path::PathBuf::from("data/workflows").join(format!("{}.json", &id));
-    if root_path_json.exists() {
-        let _ = tokio::fs::remove_file(&root_path_json).await;
+    // Remove from registry
+    {
+        let registry = state.workflow_registry()?;
+        let mut reg = registry.write().await;
+        reg.remove(&id);
     }
 
-    // Try delete from data/workflows/local/
+    // Delete from root data/workflows/
+    let root_yaml = std::path::PathBuf::from("data/workflows").join(format!("{}.yaml", &id));
+    if let Ok(true) = tokio::fs::try_exists(&root_yaml).await {
+        if let Err(e) = tokio::fs::remove_file(&root_yaml).await {
+            warn!("Failed to remove workflow file {:?}: {}", root_yaml, e);
+        }
+    }
+    let root_json = std::path::PathBuf::from("data/workflows").join(format!("{}.json", &id));
+    if let Ok(true) = tokio::fs::try_exists(&root_json).await {
+        if let Err(e) = tokio::fs::remove_file(&root_json).await {
+            warn!("Failed to remove workflow file {:?}: {}", root_json, e);
+        }
+    }
+
+    // Delete from data/workflows/local/
     let local_dir = std::path::PathBuf::from("data/workflows/local");
-    if local_dir.exists() {
-        let mut entries = tokio::fs::read_dir(&local_dir).await
-            .map_err(|e| GatewayError::Internal {
-                message: format!("Failed to read local directory: {}", e),
-                correlation_id: uuid::Uuid::new_v4().to_string(),
-            })?;
-        while let Ok(Some(entry)) = entries.next_entry().await {
-            let path = entry.path();
-            if let Some(stem) = path.file_stem() {
-                if stem.to_string_lossy() == id {
-                    let _ = tokio::fs::remove_file(&path).await;
+    if let Ok(true) = tokio::fs::try_exists(&local_dir).await {
+        if let Ok(mut entries) = tokio::fs::read_dir(&local_dir).await {
+            while let Ok(Some(entry)) = entries.next_entry().await {
+                let path = entry.path();
+                if let Some(stem) = path.file_stem() {
+                    if stem.to_string_lossy() == id {
+                        if let Err(e) = tokio::fs::remove_file(&path).await {
+                            warn!("Failed to remove local workflow file {:?}: {}", path, e);
+                        }
+                        break;
+                    }
                 }
             }
         }
@@ -775,28 +917,37 @@ pub async fn execute_workflow_internal(
         .with_skill_registry(skill_registry)
         .with_llm_interface(llm_interface);
 
-    // Setup cancellation signal
+    // Setup cancellation signal with a pre-generated instance ID so that
+    // the cancel endpoint can find the signal using the same instance ID.
     let cancel_signal = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
-    let instance_id_pre = uuid::Uuid::new_v4().to_string();
+    let instance_id = uuid::Uuid::new_v4().to_string();
     {
         let mut signals = state.workflow_cancel_signals.write().await;
-        signals.insert(instance_id_pre.clone(), cancel_signal.clone());
+        signals.insert(instance_id.clone(), cancel_signal.clone());
     }
 
     // Execute workflow with DB progress reporting and cancellation support
     let engine = beebotos_agents::workflow::WorkflowEngine::new();
     let reporter = DbProgressReporter::new(state.db.clone());
-    let instance = engine.execute_with_cancel(&def, &agent, trigger_context, Some(&reporter), Some(cancel_signal.clone())).await
-        .map_err(|e| GatewayError::Internal {
-            message: format!("Workflow execution failed: {}", e),
-            correlation_id: uuid::Uuid::new_v4().to_string(),
-        })?;
+    let instance = engine.execute_with_cancel_and_id(
+        &def,
+        &agent,
+        trigger_context,
+        Some(&reporter),
+        Some(cancel_signal.clone()),
+        Some(instance_id.clone()),
+    ).await;
 
-    // Clean up cancellation signal
+    // Clean up cancellation signal regardless of success or failure
     {
         let mut signals = state.workflow_cancel_signals.write().await;
-        signals.remove(&instance.id);
+        signals.remove(&instance_id);
     }
+
+    let instance = instance.map_err(|e| GatewayError::Internal {
+        message: format!("Workflow execution failed: {}", e),
+        correlation_id: uuid::Uuid::new_v4().to_string(),
+    })?;
 
     let instance_id = instance.id.clone();
     let status = instance.status.to_string();
@@ -827,9 +978,12 @@ pub async fn execute_workflow_internal(
 /// Execute a workflow manually
 pub async fn execute_workflow(
     State(state): State<Arc<AppState>>,
+    user: AuthUser,
     Path(id): Path<String>,
     Json(req): Json<ExecuteWorkflowRequest>,
 ) -> Result<Json<WorkflowExecutionResponse>, GatewayError> {
+    require_any_role(&user, &["user", "admin"])?;
+    validate_workflow_id(&id)?;
     info!("Executing workflow: {} with context: {:?}", id, req.context);
 
     let instance = execute_workflow_internal(&state, &id, req.context).await?;
@@ -914,6 +1068,7 @@ pub async fn get_workflow_status(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> Result<Json<WorkflowInstanceResponse>, GatewayError> {
+    validate_workflow_id(&id)?;
     let instances = state.workflow_instances()?;
     let inst_map = instances.read().await;
     let instance = inst_map
@@ -1051,15 +1206,39 @@ pub async fn get_workflow_instance(
 /// Cancel a running workflow instance
 pub async fn cancel_workflow(
     State(state): State<Arc<AppState>>,
+    user: AuthUser,
     Path(id): Path<String>,
 ) -> Result<Json<serde_json::Value>, GatewayError> {
+    require_any_role(&user, &["user", "admin"])?;
+    if id.is_empty() {
+        return Err(GatewayError::bad_request("Instance ID is required"));
+    }
+
     // Signal cancellation to the running workflow engine
-    {
+    let signal_found = {
         let signals = state.workflow_cancel_signals.read().await;
         if let Some(signal) = signals.get(&id) {
             signal.store(true, std::sync::atomic::Ordering::Relaxed);
             info!("Cancellation signal sent to workflow instance {}", id);
+            true
+        } else {
+            false
         }
+    };
+
+    if !signal_found {
+        // The instance may have already completed; check if it exists in memory
+        let instances = state.workflow_instances()?;
+        let inst_map = instances.read().await;
+        if let Some(instance) = inst_map.get(&id) {
+            if instance.status.is_terminal() {
+                return Ok(Json(serde_json::json!({
+                    "success": false,
+                    "message": format!("Workflow instance {} is already in terminal state: {}", id, instance.status)
+                })));
+            }
+        }
+        return Err(GatewayError::not_found("WorkflowInstance", &id));
     }
 
     let instances = state.workflow_instances()?;

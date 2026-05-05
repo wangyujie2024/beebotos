@@ -520,10 +520,16 @@ impl AppState {
             let workflow_dir = std::path::Path::new("data/workflows");
             if let Err(e) = registry.load_from_dir(workflow_dir).await {
                 warn!("⚠️ Failed to load workflows from disk: {}", e);
-            } else {
-                let count = registry.list_all().len();
-                info!("✅ WorkflowRegistry initialized with {} workflows", count);
             }
+            // Also load workflows from the local subdirectory
+            let local_dir = workflow_dir.join("local");
+            if local_dir.exists() {
+                if let Err(e) = registry.load_from_dir(&local_dir).await {
+                    warn!("⚠️ Failed to load local workflows from disk: {}", e);
+                }
+            }
+            let count = registry.list_all().len();
+            info!("✅ WorkflowRegistry initialized with {} workflows", count);
         }
 
         // Initialize workflow instances tracking

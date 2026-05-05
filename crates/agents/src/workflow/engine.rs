@@ -118,7 +118,28 @@ impl WorkflowEngine {
         progress_reporter: Option<&dyn StepProgressReporter>,
         cancel_signal: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
     ) -> Result<WorkflowInstance, AgentError> {
-        let mut instance = WorkflowInstance::new(definition.id.clone(), trigger_context.clone());
+        self.execute_with_cancel_and_id(definition, executor, trigger_context, progress_reporter, cancel_signal, None).await
+    }
+
+    /// Execute a workflow with optional cancellation signal and a pre-generated instance ID.
+    ///
+    /// This variant allows the caller to specify the instance ID upfront, which is required
+    /// when external systems (e.g., HTTP cancel endpoints) need to reference the instance
+    /// before execution completes.
+    pub async fn execute_with_cancel_and_id(
+        &self,
+        definition: &WorkflowDefinition,
+        executor: &dyn StepExecutor,
+        trigger_context: serde_json::Value,
+        progress_reporter: Option<&dyn StepProgressReporter>,
+        cancel_signal: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
+        instance_id: Option<String>,
+    ) -> Result<WorkflowInstance, AgentError> {
+        let mut instance = if let Some(id) = instance_id {
+            WorkflowInstance::new_with_id(id, definition.id.clone(), trigger_context.clone())
+        } else {
+            WorkflowInstance::new(definition.id.clone(), trigger_context.clone())
+        };
         instance.mark_running();
 
         info!(

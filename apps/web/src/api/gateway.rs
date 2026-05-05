@@ -192,7 +192,7 @@ impl ApiEndpoints {
     pub const WORKFLOW_EXECUTE: &'static str = "/workflows/{id}/execute";
     pub const WORKFLOW_INSTALL: &'static str = "/workflows/install";
     pub const WORKFLOW_UNINSTALL: &'static str = "/workflows/{id}/uninstall";
-    pub const WORKFLOW_SOURCE: &'static str = "/workflows/"; // + id + /source
+    pub const WORKFLOW_SOURCE: &'static str = "/workflows/{id}/source";
     pub const WORKFLOW_DASHBOARD_STATS: &'static str = "/workflows/dashboard/stats";
     pub const WORKFLOW_DASHBOARD_RECENT: &'static str = "/workflows/dashboard/recent-instances";
     pub const WORKFLOW_STATS: &'static str = "/workflows/"; // + id + /stats

@@ -349,7 +349,7 @@ impl WorkflowService {
     }
 
     pub async fn execute(&self, id: &str, req: &ExecuteWorkflowRequest) -> Result<WorkflowExecutionResponse, ApiError> {
-        self.client.post(&format!("{}{}", ApiEndpoints::WORKFLOW_EXECUTE, js_sys::encode_uri_component(id)), req).await
+        self.client.post(&ApiEndpoints::WORKFLOW_EXECUTE.replace("{id}", id), req).await
     }
 
     pub async fn dashboard_stats(&self) -> Result<DashboardStats, ApiError> {
@@ -361,11 +361,11 @@ impl WorkflowService {
     }
 
     pub async fn workflow_stats(&self, id: &str) -> Result<serde_json::Value, ApiError> {
-        self.client.get(&format!("{}{}", ApiEndpoints::WORKFLOW_STATS, js_sys::encode_uri_component(id))).await
+        self.client.get(&format!("{}/stats", ApiEndpoints::WORKFLOW_STATS.replace("{id}", id))).await
     }
 
-    pub async fn get_source(&self, id: &str) -> Result<serde_json::Value, ApiError> {
-        self.client.get(&format!("{}{}source", ApiEndpoints::WORKFLOW_SOURCE, js_sys::encode_uri_component(id))).await
+    pub async fn get_source(&self, id: &str) -> Result<WorkflowSourceResponse, ApiError> {
+        self.client.get(&ApiEndpoints::WORKFLOW_SOURCE.replace("{id}", id)).await
     }
 
     pub async fn delete(&self, id: &str) -> Result<(), ApiError> {

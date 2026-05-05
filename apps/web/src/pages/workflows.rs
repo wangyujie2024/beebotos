@@ -494,12 +494,32 @@ fn WorkflowCard(
                                 Ok(instances) => {
                                     if let Some(inst) = instances.iter().find(|i| i.workflow_id == wf_id && i.status == "running") {
                                         let client = app_state.api_client();
-                                        let _resp: Result<serde_json::Value, _> = client.post(&format!("/workflow-instances/{}/cancel", inst.instance_id), &serde_json::json!({})).await;
-                                        app_state.notify(
-                                            crate::state::notification::NotificationType::Success,
-                                            "Workflow Stopped",
-                                            format!("Instance {} cancelled", inst.instance_id),
-                                        );
+                                        match client.post::<serde_json::Value, _>(&format!("/workflow-instances/{}/cancel", inst.instance_id), &serde_json::json!({})).await {
+                                            Ok(resp) => {
+                                                let success = resp.get("success").and_then(|v| v.as_bool()).unwrap_or(false);
+                                                if success {
+                                                    app_state.notify(
+                                                        crate::state::notification::NotificationType::Success,
+                                                        "Workflow Stopped",
+                                                        format!("Instance {} cancelled", inst.instance_id),
+                                                    );
+                                                } else {
+                                                    let msg = resp.get("message").and_then(|v| v.as_str()).unwrap_or("Unknown error");
+                                                    app_state.notify(
+                                                        crate::state::notification::NotificationType::Error,
+                                                        "Stop Failed",
+                                                        msg.to_string(),
+                                                    );
+                                                }
+                                            }
+                                            Err(e) => {
+                                                app_state.notify(
+                                                    crate::state::notification::NotificationType::Error,
+                                                    "Stop Failed",
+                                                    format!("Failed to cancel instance: {}", e),
+                                                );
+                                            }
+                                        }
                                     } else {
                                         app_state.notify(
                                             crate::state::notification::NotificationType::Warning,
@@ -736,34 +756,6 @@ fn ExecuteWorkflowModal(
 // Schedule Workflow Modal
 // ============================================================================
 
-/// Helper structs for safe YAML serialization when scheduling workflows
-#[derive(serde::Serialize)]
-struct ScheduleWorkflowYaml {
-    id: String,
-    name: String,
-    description: String,
-    version: String,
-    author: String,
-    tags: Vec<String>,
-    triggers: Vec<ScheduleTriggerYaml>,
-    config: ScheduleConfigYaml,
-    steps: Vec<serde_json::Value>,
-}
-
-#[derive(serde::Serialize)]
-struct ScheduleTriggerYaml {
-    #[serde(rename = "type")]
-    trigger_type: String,
-    schedule: String,
-    timezone: String,
-}
-
-#[derive(serde::Serialize)]
-struct ScheduleConfigYaml {
-    timeout_sec: u64,
-    continue_on_failure: bool,
-}
-
 #[component]
 fn ScheduleWorkflowModal(
     workflow_id: String,
@@ -813,29 +805,34 @@ fn ScheduleWorkflowModal(
                             leptos::task::spawn_local(async move {
                                 let app_state = use_app_state();
                                 let service = app_state.workflow_service();
-                                match service.get(&workflow_id).await {
-                                    Ok(wf) => {
+                                match service.get_source(&workflow_id).await {
+                                    Ok(source_resp) => {
                                         let schedule_clone = schedule.clone();
                                         let tz_clone = tz.clone();
-                                        let yaml_def = ScheduleWorkflowYaml {
-                                            id: wf.id,
-                                            name: wf.name,
-                                            description: wf.description,
-                                            version: wf.version,
-                                            author: wf.author.unwrap_or_default(),
-                                            tags: wf.tags,
-                                            triggers: vec![ScheduleTriggerYaml {
-                                                trigger_type: "cron".to_string(),
-                                                schedule,
-                                                timezone: tz,
-                                            }],
-                                            config: ScheduleConfigYaml {
-                                                timeout_sec: 600,
-                                                continue_on_failure: false,
-                                            },
-                                            steps: vec![],
+                                        // Parse existing YAML and only update triggers to preserve all other fields
+                                        let mut yaml_value: serde_yaml::Value = match serde_yaml::from_str(&source_resp.yaml) {
+                                            Ok(v) => v,
+                                            Err(e) => {
+                                                app_state.notify(
+                                                    crate::state::notification::NotificationType::Error,
+                                                    "Parse Failed",
+                                                    format!("Failed to parse workflow YAML: {}", e),
+                                                );
+                                                is_saving.set(false);
+                                                return;
+                                            }
                                         };
-                                        let yaml = serde_yaml::to_string(&yaml_def).unwrap_or_default();
+                                        if let serde_yaml::Value::Mapping(ref mut map) = yaml_value {
+                                            let trigger = serde_yaml::Value::Mapping({
+                                                let mut m = serde_yaml::Mapping::new();
+                                                m.insert(serde_yaml::Value::String("type".to_string()), serde_yaml::Value::String("cron".to_string()));
+                                                m.insert(serde_yaml::Value::String("schedule".to_string()), serde_yaml::Value::String(schedule));
+                                                m.insert(serde_yaml::Value::String("timezone".to_string()), serde_yaml::Value::String(tz));
+                                                m
+                                            });
+                                            map.insert(serde_yaml::Value::String("triggers".to_string()), serde_yaml::Value::Sequence(vec![trigger]));
+                                        }
+                                        let yaml = serde_yaml::to_string(&yaml_value).unwrap_or_default();
                                         match service.update(&workflow_id, &yaml).await {
                                             Ok(_) => {
                                                 app_state.notify(
@@ -976,9 +973,7 @@ fn ConfigWorkflowModal(
             let service = app_state.workflow_service();
             match service.get_source(&workflow_id).await {
                 Ok(resp) => {
-                    if let Some(yaml) = resp.get("yaml").and_then(|v| v.as_str()) {
-                        yaml_content.set(yaml.to_string());
-                    }
+                    yaml_content.set(resp.yaml);
                 }
                 Err(e) => {
                     app_state.notify(

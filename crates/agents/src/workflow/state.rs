@@ -118,8 +118,15 @@ pub struct WorkflowInstance {
 impl WorkflowInstance {
     /// Create a new workflow execution instance
     pub fn new(workflow_id: String, trigger_context: serde_json::Value) -> Self {
+        Self::new_with_id(uuid::Uuid::new_v4().to_string(), workflow_id, trigger_context)
+    }
+
+    /// Create a new workflow execution instance with a pre-generated ID.
+    /// This is useful when the caller needs to know the instance ID before execution starts
+    /// (e.g., for cancellation signal mapping).
+    pub fn new_with_id(id: String, workflow_id: String, trigger_context: serde_json::Value) -> Self {
         Self {
-            id: uuid::Uuid::new_v4().to_string(),
+            id,
             workflow_id,
             status: WorkflowStatus::Pending,
             step_states: HashMap::new(),
